@@ -41,6 +41,7 @@ export class ServerStack extends cdk.Stack {
     const storage = new S3Construct(this, 'Storage', {
       bucketName: env.mediaBucketName,
       clientOrigins: env.clientOrigins,
+      publicReadPrefixes: env.mediaPublicReadPrefixes,
     })
 
     new ImageProcessorConstruct(this, 'ImageProcessor', {
@@ -138,7 +139,7 @@ export class ServerStack extends cdk.Stack {
     })
 
     new cdk.CfnOutput(this, 'ApiGatewayUrl', {
-      value: api.api.apiEndpoint,
+      value: api.apiBaseUrl,
     })
 
     new cdk.CfnOutput(this, 'PlaceOrderQueueUrl', {
@@ -162,7 +163,7 @@ export class ServerStack extends cdk.Stack {
     })
 
     new cdk.CfnOutput(this, 'MediaPublicBaseUrl', {
-      value: `https://${storage.mediaDistribution.distributionDomainName}`,
+      value: storage.mediaPublicBaseUrl,
     })
   }
 }

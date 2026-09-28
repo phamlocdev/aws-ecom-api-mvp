@@ -17,6 +17,7 @@ async function main(): Promise<void> {
 
   const nextEnv = {
     NEXT_PUBLIC_API_GATEWAY_BASE_URL: outputs.ApiGatewayUrl ?? '',
+    NEXT_PUBLIC_MEDIA_PUBLIC_BASE_URL: mediaPublicBaseUrl,
     NEXT_PUBLIC_COGNITO_REGION: runtimeEnv.AWS_REGION,
     NEXT_PUBLIC_COGNITO_USER_POOL_ID: outputs.CognitoUserPoolId ?? '',
     NEXT_PUBLIC_COGNITO_CLIENT_ID: outputs.CognitoClientId ?? '',
@@ -33,6 +34,9 @@ async function main(): Promise<void> {
   const fileContents = [
     '# API',
     `NEXT_PUBLIC_API_GATEWAY_BASE_URL=${nextEnv.NEXT_PUBLIC_API_GATEWAY_BASE_URL}`,
+    '',
+    '# Media',
+    `NEXT_PUBLIC_MEDIA_PUBLIC_BASE_URL=${nextEnv.NEXT_PUBLIC_MEDIA_PUBLIC_BASE_URL}`,
     '',
     '# Cognito',
     `NEXT_PUBLIC_COGNITO_REGION=${nextEnv.NEXT_PUBLIC_COGNITO_REGION}`,

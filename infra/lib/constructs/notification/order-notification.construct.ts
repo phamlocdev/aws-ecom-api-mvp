@@ -203,7 +203,7 @@ export class OrderNotificationConstruct extends Construct {
     })
 
     const queue = new sqs.Queue(this, `${idPrefix}Queue`, {
-      visibilityTimeout: cdk.Duration.seconds(5), // Set visibility timeout to 5 seconds to allow for quick retries
+      visibilityTimeout: cdk.Duration.seconds(30),
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       deadLetterQueue: {
         queue: dlq,

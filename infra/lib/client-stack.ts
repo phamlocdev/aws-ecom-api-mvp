@@ -1,5 +1,4 @@
 import * as path from 'path'
-import * as fs from 'fs'
 import * as cdk from 'aws-cdk-lib'
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
@@ -9,11 +8,14 @@ import * as eventTargets from 'aws-cdk-lib/aws-events-targets'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as route53 from 'aws-cdk-lib/aws-route53'
+import * as targets from 'aws-cdk-lib/aws-route53-targets'
 import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment'
-import { transformSync } from 'esbuild'
 import { Construct } from 'constructs'
 import { getAwsInfraEnv } from './config/env'
+import { buildCloudFrontFunctionCode } from './shared/cloudfront-function-code'
+import { createCloudFrontCustomDomainConfig } from './shared/custom-domain'
 import {
   createNodejsBundling,
   removeGeneratedSourceArtifacts,
@@ -55,8 +57,17 @@ export class ClientStack extends cdk.Stack {
     })
 
     const origin = origins.S3BucketOrigin.withOriginAccessControl(siteBucket)
+    const customDomain = createCloudFrontCustomDomainConfig(
+      this,
+      'Client',
+      env.clientDomainName,
+      env.clientHostedZoneName,
+    )
     const distribution = new cloudfront.Distribution(this, 'ClientDistribution', {
       defaultRootObject: 'index.html',
+      certificate: customDomain?.certificate,
+      domainNames: customDomain ? [customDomain.domainName] : undefined,
+      webAclId: env.clientWafWebAclArn,
       defaultBehavior: {
         origin,
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -85,6 +96,21 @@ export class ClientStack extends cdk.Stack {
         },
       ],
     })
+    const clientBaseUrl = customDomain
+      ? `https://${customDomain.domainName}`
+      : `https://${distribution.distributionDomainName}`
+
+    if (customDomain) {
+      new route53.ARecord(this, 'ClientAliasRecord', {
+        zone: customDomain.hostedZone,
+        target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution)),
+      })
+
+      new route53.AaaaRecord(this, 'ClientIpv6AliasRecord', {
+        zone: customDomain.hostedZone,
+        target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution)),
+      })
+    }
 
     const productSeoGenerator = new nodejs.NodejsFunction(this, 'ProductSeoGenerator', {
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -99,7 +125,7 @@ export class ClientStack extends cdk.Stack {
         PRODUCTS_TABLE: env.productsTableName,
         CLIENT_SITE_BUCKET: siteBucket.bucketName,
         CLIENT_DISTRIBUTION_ID: distribution.distributionId,
-        CLIENT_BASE_URL: `https://${distribution.distributionDomainName}`,
+        CLIENT_BASE_URL: clientBaseUrl,
         MEDIA_PUBLIC_BASE_URL: mediaPublicBaseUrl,
         PRODUCT_TEMPLATE_KEY: 'products/__template/index.html',
       },
@@ -133,7 +159,7 @@ export class ClientStack extends cdk.Stack {
       destinationBucket: siteBucket,
       distribution,
       distributionPaths: ['/*'],
-      prune: true,
+      prune: false, // Do not delete files in the bucket that are not part of the deployment
     })
 
     new cdk.CfnOutput(this, 'ClientBucketName', {
@@ -149,20 +175,9 @@ export class ClientStack extends cdk.Stack {
     })
 
     new cdk.CfnOutput(this, 'ClientUrl', {
-      value: `https://${distribution.distributionDomainName}`,
+      value: clientBaseUrl,
     })
   }
-}
-
-function buildCloudFrontFunctionCode(entryPath: string): string {
-  const source = fs.readFileSync(entryPath, 'utf8')
-  const result = transformSync(source, {
-    loader: 'ts',
-    target: 'es2020',
-    minify: true,
-  })
-
-  return result.code
 }
 
 function requireEnvValue(value: string | undefined, name: string): string {

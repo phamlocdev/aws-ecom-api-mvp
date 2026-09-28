@@ -40,7 +40,7 @@ function handler(event: CloudFrontFunctionEvent): CloudFrontFunctionEvent['reque
     } else {
       // Tất cả những dynamic routes có chứa UUID trong URI như: /admin/orders/[id], /admin/products/[id]/edit, /admin/users/[id]/access,...
       // => replace chuỗi UUID bằng chuỗi "__fallback" để CloudFront get đúng pre-rendered HTML từ S3
-      // => Không cần nhiều câu lệnh if else để handle từng dynamic route riêng lẻ, chỉ cần check UUID pattern và replace là đủ
+      // => Không cần nhiều câu lệnh if else để rewrite từng dynamic route riêng lẻ, chỉ cần check UUID pattern và replace là đủ
       const rewritten = normalized
         .split('/')
         .map((segment) => (uuidPattern.test(segment) ? '__fallback' : segment))

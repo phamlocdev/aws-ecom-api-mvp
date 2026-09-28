@@ -3,8 +3,14 @@ import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import * as authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers'
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
+import * as route53 from 'aws-cdk-lib/aws-route53'
+import * as targets from 'aws-cdk-lib/aws-route53-targets'
 import { Construct } from 'constructs'
 import { getAwsInfraEnv } from '../../config/env'
+import {
+  createRegionalCustomDomainConfig,
+  toHostedZoneRecordName,
+} from '../../shared/custom-domain'
 import { registerApiRoutes } from './api-routes'
 
 export interface HttpApiConstructProps {
@@ -16,6 +22,7 @@ export interface HttpApiConstructProps {
 
 export class HttpApiConstruct extends Construct {
   readonly api: apigatewayv2.HttpApi
+  readonly apiBaseUrl: string
   readonly jwtIssuer: string
   readonly authorizer?: authorizers.HttpJwtAuthorizer
 
@@ -57,5 +64,45 @@ export class HttpApiConstruct extends Construct {
     })
 
     registerApiRoutes(this.api, integration, this.authorizer)
+
+    const customDomain = createRegionalCustomDomainConfig(
+      this,
+      'Api',
+      infraEnv.apiDomainName,
+      infraEnv.apiHostedZoneName,
+    )
+    this.apiBaseUrl = customDomain ? `https://${customDomain.domainName}` : this.api.apiEndpoint
+
+    if (customDomain) {
+      const domainName = new apigatewayv2.DomainName(this, 'ApiDomainName', {
+        domainName: customDomain.domainName,
+        certificate: customDomain.certificate,
+        ipAddressType: apigatewayv2.IpAddressType.DUAL_STACK,
+      })
+
+      new apigatewayv2.ApiMapping(this, 'ApiDomainMapping', {
+        api: this.api,
+        domainName,
+      })
+
+      const aliasTarget = route53.RecordTarget.fromAlias(
+        new targets.ApiGatewayv2DomainProperties(
+          domainName.regionalDomainName,
+          domainName.regionalHostedZoneId,
+        ),
+      )
+
+      new route53.ARecord(this, 'ApiAliasRecord', {
+        zone: customDomain.hostedZone,
+        recordName: toHostedZoneRecordName(customDomain.domainName, customDomain.hostedZone),
+        target: aliasTarget,
+      })
+
+      new route53.AaaaRecord(this, 'ApiIpv6AliasRecord', {
+        zone: customDomain.hostedZone,
+        recordName: toHostedZoneRecordName(customDomain.domainName, customDomain.hostedZone),
+        target: aliasTarget,
+      })
+    }
   }
 }
