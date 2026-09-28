@@ -123,7 +123,7 @@ export class OrderNotificationConstruct extends Construct {
 
     const eventTargetDlq = new sqs.Queue(this, 'OrderNotificationEventTargetDlq', {
       retentionPeriod: cdk.Duration.days(14),
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
     const orderShippedNotificationQueue = this.createWorkerQueue('OrderShippedNotification')
@@ -199,12 +199,12 @@ export class OrderNotificationConstruct extends Construct {
   private createWorkerQueue(idPrefix: string): { queue: sqs.Queue; dlq: sqs.Queue } {
     const dlq = new sqs.Queue(this, `${idPrefix}Dlq`, {
       retentionPeriod: cdk.Duration.days(14),
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
     const queue = new sqs.Queue(this, `${idPrefix}Queue`, {
       visibilityTimeout: cdk.Duration.seconds(30),
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
       deadLetterQueue: {
         queue: dlq,
         maxReceiveCount: 3,
