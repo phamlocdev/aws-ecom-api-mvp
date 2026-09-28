@@ -23,7 +23,7 @@ export class SqsConstruct extends Construct {
       contentBasedDeduplication: false,
       retentionPeriod: cdk.Duration.days(14),
       visibilityTimeout,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
     this.placeOrderQueue = new sqs.Queue(this, 'PlaceOrderQueue', {
@@ -32,7 +32,7 @@ export class SqsConstruct extends Construct {
       contentBasedDeduplication: false,
       receiveMessageWaitTime: cdk.Duration.seconds(20),
       visibilityTimeout,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
       deadLetterQueue: {
         queue: this.placeOrderDlq,
         maxReceiveCount: 3,

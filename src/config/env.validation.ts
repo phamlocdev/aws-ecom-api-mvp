@@ -59,6 +59,20 @@ function splitCsvEmails(value: string | undefined): string[] {
   return splitCsv(value, []).map((email) => emailString.parse(email))
 }
 
+function getEmailDomain(email: string): string {
+  return email.split('@')[1]
+}
+
+function getSesFromEmail(environment: {
+  SES_FROM_EMAIL?: string
+  CLIENT_DOMAIN_NAME?: string
+}): string | undefined {
+  return (
+    environment.SES_FROM_EMAIL ??
+    (environment.CLIENT_DOMAIN_NAME ? `no-reply@${environment.CLIENT_DOMAIN_NAME}` : undefined)
+  )
+}
+
 const csvEmailArrayFromEnv = z.preprocess((value) => {
   if (Array.isArray(value)) {
     return value
@@ -136,6 +150,7 @@ const runtimeEnvSchema = z.object({
   VNPAY_API_IP_ADDR: ipv4AddressString.default('127.0.0.1'),
   SES_ENABLED: booleanFromEnv.default(false),
   SES_FROM_EMAIL: optionalEmailString,
+  SES_CREATE_DOMAIN_IDENTITY: booleanFromEnv.default(false),
   SES_VERIFIED_RECIPIENTS: csvEmailArrayFromEnv,
   SES_CONFIGURATION_SET_NAME: trimmedString.default('ecommerce-email-events'),
 })
@@ -144,6 +159,16 @@ const awsInfraEnvSchema = runtimeEnvSchema.transform((environment) => {
   if (!environment.CDK_DEFAULT_ACCOUNT || !/^\d{12}$/.test(environment.CDK_DEFAULT_ACCOUNT)) {
     throw new Error('CDK_DEFAULT_ACCOUNT must be your 12-digit AWS account ID.')
   }
+
+  const sesFromEmail = getSesFromEmail(environment)
+  const sesFromDomainName = sesFromEmail ? getEmailDomain(sesFromEmail) : undefined
+  const sesVerifiedDomainName =
+    sesFromDomainName && sesFromDomainName === environment.CLIENT_DOMAIN_NAME
+      ? sesFromDomainName
+      : undefined
+  const sesHostedZoneName = sesVerifiedDomainName
+    ? (environment.CLIENT_HOSTED_ZONE_NAME ?? sesVerifiedDomainName)
+    : undefined
 
   return {
     account: environment.CDK_DEFAULT_ACCOUNT,
@@ -200,7 +225,10 @@ const awsInfraEnvSchema = runtimeEnvSchema.transform((environment) => {
     vnpayOrderType: environment.VNPAY_ORDER_TYPE,
     vnpayApiIpAddr: environment.VNPAY_API_IP_ADDR,
     sesEnabled: environment.SES_ENABLED,
-    sesFromEmail: environment.SES_FROM_EMAIL,
+    sesFromEmail,
+    sesVerifiedDomainName,
+    sesHostedZoneName,
+    sesCreateDomainIdentity: environment.SES_CREATE_DOMAIN_IDENTITY,
     sesVerifiedRecipients: environment.SES_VERIFIED_RECIPIENTS,
     sesConfigurationSetName: environment.SES_CONFIGURATION_SET_NAME,
   }
@@ -210,7 +238,12 @@ export type RuntimeEnv = z.infer<typeof runtimeEnvSchema>
 export type AwsInfraEnv = z.infer<typeof awsInfraEnvSchema>
 
 export function validateRuntimeEnv(environment: Record<string, unknown>): RuntimeEnv {
-  return runtimeEnvSchema.parse(environment)
+  const runtimeEnv = runtimeEnvSchema.parse(environment)
+
+  return {
+    ...runtimeEnv,
+    SES_FROM_EMAIL: getSesFromEmail(runtimeEnv),
+  }
 }
 
 export function validateAwsInfraEnv(environment: Record<string, unknown>): AwsInfraEnv {

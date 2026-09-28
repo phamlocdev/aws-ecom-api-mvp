@@ -49,7 +49,7 @@ export function getScriptContext(): ScriptContext {
     ? path.resolve(process.env.RUNTIME_ENV_FILE)
     : defaultEnvFilePath
 
-  dotenv.config({ path: envFilePath, override: false, quiet: true })
+  dotenv.config({ path: envFilePath, override: true, quiet: true })
 
   const runtimeEnv = validateRuntimeEnv(process.env as Record<string, unknown>)
   const region = runtimeEnv.AWS_REGION ?? runtimeEnv.AWS_DEFAULT_REGION

@@ -43,9 +43,16 @@ export class CognitoConstruct extends Construct {
   constructor(scope: Construct, id: string, props: CognitoConstructProps) {
     super(scope, id)
     const infraEnv = getAwsInfraEnv()
-    if (!infraEnv.sesFromEmail) {
+    if (infraEnv.sesEnabled && !infraEnv.sesFromEmail) {
       throw new Error('SES_FROM_EMAIL is required for Cognito default emails sent through SES.')
     }
+    const userPoolEmail = infraEnv.sesEnabled
+      ? cognito.UserPoolEmail.withSES({
+          fromEmail: infraEnv.sesFromEmail!,
+          sesVerifiedDomain: infraEnv.sesVerifiedDomainName,
+          configurationSetName: infraEnv.sesConfigurationSetName,
+        })
+      : cognito.UserPoolEmail.withCognito()
 
     // Uncomment when re-enabling CUSTOM_EMAIL_SENDER.
     // const customSenderKmsKey = new kms.Key(this, 'CustomSenderKmsKey', {
@@ -65,13 +72,10 @@ export class CognitoConstruct extends Construct {
       selfSignUpEnabled: true,
       signInAliases: { email: true, username: true },
       autoVerify: { email: true },
-      email: cognito.UserPoolEmail.withSES({
-        fromEmail: infraEnv.sesFromEmail,
-        configurationSetName: infraEnv.sesConfigurationSetName,
-      }),
+      email: userPoolEmail,
       // Uncomment when re-enabling CUSTOM_EMAIL_SENDER.
       // customSenderKmsKey,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       passwordPolicy: {
         minLength: 8,

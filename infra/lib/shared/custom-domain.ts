@@ -65,7 +65,11 @@ export function toHostedZoneRecordName(
     : domainName.replace(new RegExp(`\\.${escapeRegex(zoneName)}$`), '')
 }
 
-function lookupHostedZone(scope: Construct, id: string, domainName: string): route53.IHostedZone {
+export function lookupHostedZone(
+  scope: Construct,
+  id: string,
+  domainName: string,
+): route53.IHostedZone {
   return route53.HostedZone.fromLookup(scope, id, {
     domainName,
   })

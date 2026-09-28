@@ -46,7 +46,8 @@ export class ClientStack extends cdk.Stack {
     const siteBucket = new s3.Bucket(this, 'ClientSiteBucket', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       publicReadAccess: false,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
     })

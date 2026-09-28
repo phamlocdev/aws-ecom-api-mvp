@@ -27,6 +27,10 @@ export class ServerStack extends cdk.Stack {
       eventBusName: env.orderEventsBusName,
     })
 
+    const notification = new SesConstruct(this, 'Notification', {
+      emailTrackingTable: data.emailTrackingTable,
+    })
+
     const auth = new CognitoConstruct(this, 'Auth', {
       callbackUrls: env.callbackUrls,
       logoutUrls: env.logoutUrls,
@@ -37,6 +41,9 @@ export class ServerStack extends cdk.Stack {
       userAccountsTable: data.userAccountsTable,
       userLoginAuditTable: data.userLoginAuditTable,
     })
+    if (notification.createdDomainIdentity) {
+      auth.userPool.node.addDependency(notification.createdDomainIdentity)
+    }
 
     const storage = new S3Construct(this, 'Storage', {
       bucketName: env.mediaBucketName,
@@ -48,9 +55,6 @@ export class ServerStack extends cdk.Stack {
       mediaBucket: storage.mediaBucket,
     })
 
-    const notification = new SesConstruct(this, 'Notification', {
-      emailTrackingTable: data.emailTrackingTable,
-    })
     notification.grantSendEmail(auth.postConfirmationHandler)
     // Uncomment when re-enabling CUSTOM_EMAIL_SENDER.
     // notification.grantSendEmail(auth.customEmailSenderHandler)

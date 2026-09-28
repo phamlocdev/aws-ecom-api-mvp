@@ -45,9 +45,11 @@ export class S3Construct extends Construct {
         blockPublicPolicy: false,
         restrictPublicBuckets: false,
       }),
+      encryption: s3.BucketEncryption.S3_MANAGED,
       publicReadAccess: false,
       enforceSSL: true,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
       cors: [
         {
           allowedOrigins: props.clientOrigins,
