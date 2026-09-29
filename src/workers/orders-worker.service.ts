@@ -10,7 +10,7 @@ import { ProductsService } from '../products/products.service'
 import { Product } from '../products/product.types'
 import { OrderStatus } from '../orders/order-status.enum'
 import { OrdersService } from '../orders/orders.service'
-import { OrderItem, PlaceOrderMessage } from '../orders/orders.types'
+import { OrderItem, OrderMutationContext, PlaceOrderMessage } from '../orders/orders.types'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { ConfigService } from '@nestjs/config'
 
@@ -85,6 +85,7 @@ export class OrdersWorkerService {
         const released = await this.ordersService.expireReservationAndReleaseInventoryIfUnpaid(
           order,
           items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+          systemOrderMutationContext('reservation-expiry-poller', 'Payment expired'),
         )
         if (released) {
           reservationsReleased += 1
@@ -120,13 +121,19 @@ export class OrdersWorkerService {
         order.orderId,
         OrderStatus.EXPIRED,
         'Cart expired before checkout.',
+        systemOrderMutationContext('place-order-worker', 'Cart expired before checkout.'),
       )
       return
     }
 
     const cartItems = await this.cartsService.getCartItems(cart.cartId)
     if (cartItems.length === 0) {
-      await this.ordersService.markFailed(order.orderId, OrderStatus.FAILED, 'Cart has no items.')
+      await this.ordersService.markFailed(
+        order.orderId,
+        OrderStatus.FAILED,
+        'Cart has no items.',
+        systemOrderMutationContext('place-order-worker', 'Cart has no items.'),
+      )
       return
     }
 
@@ -166,7 +173,11 @@ export class OrdersWorkerService {
       }
 
       const totalAmount = orderItems.reduce((total, item) => total + item.lineTotal, 0)
-      await this.ordersService.markReserved(order.orderId, totalAmount)
+      await this.ordersService.markReserved(
+        order.orderId,
+        totalAmount,
+        systemOrderMutationContext('place-order-worker', 'Order reserved'),
+      )
       reservationSucceeded = true
     } catch (error) {
       const failureReason = error instanceof Error ? error.message : 'Failed to process order.'
@@ -176,9 +187,15 @@ export class OrdersWorkerService {
           order.orderId,
           failureReason,
           reservedItems,
+          systemOrderMutationContext('place-order-worker', failureReason),
         )
       } else {
-        await this.ordersService.markFailed(order.orderId, OrderStatus.FAILED, failureReason)
+        await this.ordersService.markFailed(
+          order.orderId,
+          OrderStatus.FAILED,
+          failureReason,
+          systemOrderMutationContext('place-order-worker', failureReason),
+        )
       }
 
       // Only rethrow the error if it's not a ConflictException, which indicates insufficient inventory.
@@ -203,4 +220,12 @@ function wait(milliseconds: number): Promise<void> {
 
 function toEpochSeconds(timestampMs: number): number {
   return Math.floor(timestampMs / 1000)
+}
+
+function systemOrderMutationContext(actorId: string, reason: string): OrderMutationContext {
+  return {
+    actorType: 'system',
+    actorId,
+    reason,
+  }
 }

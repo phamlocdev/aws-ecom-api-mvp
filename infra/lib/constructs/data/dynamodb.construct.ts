@@ -9,6 +9,7 @@ export class DynamoDbConstruct extends Construct {
   readonly cartsTable: dynamodb.Table
   readonly cartItemsTable: dynamodb.Table
   readonly ordersTable: dynamodb.Table
+  readonly orderAuditLogTable: dynamodb.Table
   readonly orderItemsTable: dynamodb.Table
   readonly emailTrackingTable: dynamodb.Table
   readonly eventConsumerIdempotencyTable: dynamodb.Table
@@ -55,6 +56,7 @@ export class DynamoDbConstruct extends Construct {
       tableName: infraEnv.ordersTableName,
       partitionKey: { name: 'orderId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
     this.ordersTable.addGlobalSecondaryIndex({
@@ -81,6 +83,15 @@ export class DynamoDbConstruct extends Construct {
       indexName: 'GSI_OrderStatusPaymentExpiresAt',
       partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'paymentExpiresAt', type: dynamodb.AttributeType.NUMBER },
+    })
+
+    this.orderAuditLogTable = new dynamodb.Table(this, 'OrderAuditLogTable', {
+      tableName: infraEnv.orderAuditLogTableName,
+      partitionKey: { name: 'orderId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'occurredAtAuditId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
     this.orderItemsTable = new dynamodb.Table(this, 'OrderItemsTable', {

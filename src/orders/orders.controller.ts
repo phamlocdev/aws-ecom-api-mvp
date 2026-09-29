@@ -74,7 +74,11 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
     @Query(new DtoValidationPipe(ListOrdersQueryDto)) query: ListOrdersQueryDto,
   ): Promise<PaginatedResponse<Order>> {
-    return this.ordersService.findAll(user, query)
+    const page = await this.ordersService.findAll(user, query)
+    return {
+      ...page,
+      items: page.items.map(stripOrderMutationContext),
+    }
   }
 
   @Get('email-statistics')
@@ -100,11 +104,12 @@ export class OrdersController {
   @ApiOperation({ summary: 'Get one order' })
   @ApiParam({ name: 'orderId', format: 'uuid' })
   @ApiOkResponse({ type: OrderDetailsResponseDto })
-  findOne(
+  async findOne(
     @CurrentUser() user: AuthenticatedUser,
     @Param('orderId') orderId: string,
   ): Promise<OrderDetails> {
-    return this.ordersService.findOne(user, orderId)
+    const order = await this.ordersService.findOne(user, orderId)
+    return stripOrderMutationContext(order) as OrderDetails
   }
 
   @Patch(':orderId/status')
@@ -113,11 +118,13 @@ export class OrdersController {
   @ApiOperation({ summary: 'Update an order status' })
   @ApiParam({ name: 'orderId', format: 'uuid' })
   @ApiOkResponse({ type: OrderResponseDto })
-  updateStatus(
+  async updateStatus(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('orderId') orderId: string,
     @Body(new DtoValidationPipe(UpdateOrderStatusDto)) dto: UpdateOrderStatusDto,
   ): Promise<Order> {
-    return this.ordersService.updateOrderStatus(orderId, dto.status)
+    const order = await this.ordersService.updateOrderStatus(user, orderId, dto.status)
+    return stripOrderMutationContext(order)
   }
 
   @Post(':orderId/emails/:emailType/resend-failed')
@@ -169,4 +176,16 @@ function resolveClientIp(request: Request): string {
   }
 
   return request.ip || '127.0.0.1'
+}
+
+function stripOrderMutationContext<T extends Order>(order: T): T {
+  const {
+    lastModifiedByType: _lastModifiedByType,
+    lastModifiedById: _lastModifiedById,
+    lastModifiedByEmail: _lastModifiedByEmail,
+    lastModifiedReason: _lastModifiedReason,
+    ...publicOrder
+  } = order
+
+  return publicOrder as T
 }

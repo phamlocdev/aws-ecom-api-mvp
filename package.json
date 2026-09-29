@@ -19,6 +19,7 @@
     "seed:user-access": "npx ts-node src/scripts/seed-user-access.ts",
     "seed:all": "npm run seed:catalog && npm run seed:users",
     "simulate:oversell": "npx ts-node src/scripts/simulate-oversell.ts",
+    "test:order-audit-log": "npx ts-node src/scripts/test-order-audit-log.ts",
     "test:notification-retry": "npx ts-node src/scripts/test-notification-retry-flows.ts",
     "test:client-rewrite": "npx ts-node src/scripts/test-client-rewrite.ts",
     "seo:backfill:products": "npx ts-node src/scripts/backfill-product-seo-pages.ts",

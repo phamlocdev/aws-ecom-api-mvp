@@ -26,6 +26,19 @@ export interface Order {
   paymentExpiresAt?: number
   failureReason?: string
   totalAmount?: number
+  lastModifiedByType?: OrderMutationActorType
+  lastModifiedById?: string
+  lastModifiedByEmail?: string
+  lastModifiedReason?: string
+}
+
+export type OrderMutationActorType = 'customer' | 'admin' | 'system' | 'unknown'
+
+export interface OrderMutationContext {
+  actorType: OrderMutationActorType
+  actorId?: string
+  actorEmail?: string
+  reason: string
 }
 
 export interface TriggerPaymentResult {
