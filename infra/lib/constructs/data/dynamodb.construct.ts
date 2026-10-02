@@ -9,6 +9,7 @@ export class DynamoDbConstruct extends Construct {
   readonly cartsTable: dynamodb.Table
   readonly cartItemsTable: dynamodb.Table
   readonly ordersTable: dynamodb.Table
+  readonly auditLogTable: dynamodb.Table
   readonly orderAuditLogTable: dynamodb.Table
   readonly orderItemsTable: dynamodb.Table
   readonly emailTrackingTable: dynamodb.Table
@@ -25,6 +26,7 @@ export class DynamoDbConstruct extends Construct {
       tableName: infraEnv.productsTableName,
       partitionKey: { name: 'productId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
@@ -32,6 +34,7 @@ export class DynamoDbConstruct extends Construct {
       tableName: infraEnv.categoriesTableName,
       partitionKey: { name: 'categoryId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
@@ -85,14 +88,20 @@ export class DynamoDbConstruct extends Construct {
       sortKey: { name: 'paymentExpiresAt', type: dynamodb.AttributeType.NUMBER },
     })
 
-    this.orderAuditLogTable = new dynamodb.Table(this, 'OrderAuditLogTable', {
-      tableName: infraEnv.orderAuditLogTableName,
-      partitionKey: { name: 'orderId', type: dynamodb.AttributeType.STRING },
+    this.auditLogTable = new dynamodb.Table(this, 'AuditLogTable', {
+      tableName: infraEnv.auditLogTableName,
+      partitionKey: { name: 'entityKey', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'occurredAtAuditId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: 'expiresAt',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
+    this.auditLogTable.addGlobalSecondaryIndex({
+      indexName: 'GSI_EntityTypeOccurredAt',
+      partitionKey: { name: 'entityType', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'occurredAtAuditId', type: dynamodb.AttributeType.STRING },
+    })
+    this.orderAuditLogTable = this.auditLogTable
 
     this.orderItemsTable = new dynamodb.Table(this, 'OrderItemsTable', {
       tableName: infraEnv.orderItemsTableName,
@@ -136,6 +145,7 @@ export class DynamoDbConstruct extends Construct {
       tableName: infraEnv.inventoryTableName,
       partitionKey: { name: 'productId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
@@ -143,6 +153,7 @@ export class DynamoDbConstruct extends Construct {
       tableName: infraEnv.userAccountsTableName,
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 

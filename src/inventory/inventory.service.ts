@@ -14,6 +14,15 @@ import {
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
+import {
+  AUDIT_ACTOR_ATTRIBUTE_NAMES,
+  AUDIT_ACTOR_FIELDS,
+  buildUserAuditMutationContext,
+  systemAuditMutationContext,
+  toAuditMutationAttributes,
+  toAuditMutationExpressionValues,
+} from '../audit/audit-actor'
+import { AuthenticatedUser } from '../auth/auth.types'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { DEFAULT_PAGE_SIZE } from '../pagination/pagination-query.dto'
 import { CursorScope, PaginatedResponse } from '../pagination/pagination.types'
@@ -50,6 +59,9 @@ export class InventoryService {
       availableQuantity: 0,
       reservedQuantity: 0,
       updatedAt: new Date().toISOString(),
+      ...toAuditMutationAttributes(
+        systemAuditMutationContext('inventory-service', 'Inventory record initialized'),
+      ),
     }
 
     await this.dynamoDbService.documentClient.send(
@@ -133,6 +145,7 @@ export class InventoryService {
   }
 
   async updateAvailableQuantity(
+    user: AuthenticatedUser,
     productId: string,
     availableQuantity: number,
   ): Promise<InventorySummary> {
@@ -142,21 +155,24 @@ export class InventoryService {
 
     const product = await this.findProductOrThrow(productId)
     await this.ensureInventoryRecord(productId)
+    const actor = buildUserAuditMutationContext(user, 'Inventory quantity adjusted')
 
     const response = await this.dynamoDbService.documentClient.send(
       new UpdateCommand({
         TableName: this.tableName,
         Key: { productId },
-        UpdateExpression: 'SET #availableQuantity = :availableQuantity, #updatedAt = :updatedAt',
+        UpdateExpression: `SET #availableQuantity = :availableQuantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
         ConditionExpression: 'attribute_exists(#productId)',
         ExpressionAttributeNames: {
           '#productId': 'productId',
           '#availableQuantity': 'availableQuantity',
           '#updatedAt': 'updatedAt',
+          ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
         },
         ExpressionAttributeValues: {
           ':availableQuantity': availableQuantity,
           ':updatedAt': new Date().toISOString(),
+          ...toAuditMutationExpressionValues(actor),
         },
         ReturnValues: 'ALL_NEW',
       }),
@@ -278,6 +294,7 @@ export class InventoryService {
 
   async reserve(productId: string, quantity: number): Promise<void> {
     await this.ensureInventoryRecord(productId)
+    const actor = systemAuditMutationContext('orders-service', 'Inventory reserved for order')
 
     try {
       await this.dynamoDbService.documentClient.send(
@@ -285,16 +302,18 @@ export class InventoryService {
           TableName: this.tableName,
           Key: { productId },
           UpdateExpression:
-            'SET #availableQuantity = #availableQuantity - :quantity, #reservedQuantity = #reservedQuantity + :quantity, #updatedAt = :updatedAt',
+            `SET #availableQuantity = #availableQuantity - :quantity, #reservedQuantity = #reservedQuantity + :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
           ConditionExpression: '#availableQuantity >= :quantity',
           ExpressionAttributeNames: {
             '#availableQuantity': 'availableQuantity',
             '#reservedQuantity': 'reservedQuantity',
             '#updatedAt': 'updatedAt',
+            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
           },
           ExpressionAttributeValues: {
             ':quantity': quantity,
             ':updatedAt': new Date().toISOString(),
+            ...toAuditMutationExpressionValues(actor),
           },
         }),
       )
@@ -311,22 +330,25 @@ export class InventoryService {
   }
 
   async release(items: ReservedInventoryItem[]): Promise<void> {
+    const actor = systemAuditMutationContext('orders-service', 'Inventory reservation released')
     for (const item of items) {
       await this.dynamoDbService.documentClient.send(
         new UpdateCommand({
           TableName: this.tableName,
           Key: { productId: item.productId },
           UpdateExpression:
-            'SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt',
+            `SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
           ConditionExpression: '#reservedQuantity >= :quantity',
           ExpressionAttributeNames: {
             '#availableQuantity': 'availableQuantity',
             '#reservedQuantity': 'reservedQuantity',
             '#updatedAt': 'updatedAt',
+            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
           },
           ExpressionAttributeValues: {
             ':quantity': item.quantity,
             ':updatedAt': new Date().toISOString(),
+            ...toAuditMutationExpressionValues(actor),
           },
         }),
       )

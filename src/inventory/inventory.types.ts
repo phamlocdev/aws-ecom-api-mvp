@@ -4,6 +4,10 @@ export interface InventoryRecord {
   productId: string
   availableQuantity: number
   reservedQuantity: number
+  lastModifiedByType?: string
+  lastModifiedById?: string
+  lastModifiedByEmail?: string
+  lastModifiedReason?: string
   updatedAt: string
 }
 

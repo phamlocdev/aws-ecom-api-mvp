@@ -7,12 +7,19 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
-  DeleteCommand,
   GetCommand,
   PutCommand,
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
+import {
+  AUDIT_ACTOR_ATTRIBUTE_NAMES,
+  AUDIT_ACTOR_FIELDS,
+  buildUserAuditMutationContext,
+  toAuditMutationAttributes,
+  toAuditMutationExpressionValues,
+} from '../audit/audit-actor'
+import { AuthenticatedUser } from '../auth/auth.types'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { Category } from './category.types'
 import { CreateCategoryDto } from './dto/create-category.dto'
@@ -34,14 +41,17 @@ export class CategoriesService {
     this.tableName = configService.get<string>('CATEGORIES_TABLE') ?? 'categories'
   }
 
-  async create(dto: CreateCategoryDto): Promise<Category> {
+  async create(user: AuthenticatedUser, dto: CreateCategoryDto): Promise<Category> {
     const timestamp = new Date().toISOString()
+    const actor = buildUserAuditMutationContext(user, 'Category created')
     const category: Category = {
       categoryId: dto.categoryId,
       name: dto.name,
       description: dto.description,
+      status: 'ACTIVE',
       createdAt: timestamp,
       updatedAt: timestamp,
+      ...toAuditMutationAttributes(actor),
     }
 
     try {
@@ -69,6 +79,9 @@ export class CategoriesService {
         TableName: this.tableName,
         Limit: pagination.limit,
         ExclusiveStartKey: pagination.startKey ?? undefined,
+        FilterExpression: 'attribute_not_exists(#status) OR #status <> :deleted',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: { ':deleted': 'DELETED' },
       }),
     )
     return toPaginatedResponse(
@@ -83,25 +96,35 @@ export class CategoriesService {
     const response = await this.dynamoDbService.documentClient.send(
       new GetCommand({ TableName: this.tableName, Key: { categoryId } }),
     )
-    if (!response.Item) {
+    const category = response.Item as Category | undefined
+    if (!category || category.status === 'DELETED') {
       throw new NotFoundException(`Category ${categoryId} was not found.`)
     }
-    return response.Item as Category
+    return category
   }
 
-  async update(categoryId: string, dto: UpdateCategoryDto): Promise<Category> {
+  async update(
+    user: AuthenticatedUser,
+    categoryId: string,
+    dto: UpdateCategoryDto,
+  ): Promise<Category> {
     const mutableFields = Object.entries(dto).filter(([, value]) => value !== undefined)
     if (mutableFields.length === 0) {
       throw new BadRequestException('Provide at least one category field to update.')
     }
 
     const timestamp = new Date().toISOString()
+    const actor = buildUserAuditMutationContext(user, 'Category updated')
     const expressionAttributeNames: Record<string, string> = {
       '#categoryId': 'categoryId',
+      '#status': 'status',
       '#updatedAt': 'updatedAt',
+      ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
     }
     const expressionAttributeValues: Record<string, unknown> = {
+      ':deleted': 'DELETED',
       ':updatedAt': timestamp,
+      ...toAuditMutationExpressionValues(actor),
     }
     const updateParts = mutableFields.map(([field, value]) => {
       const nameKey = `#${field}`
@@ -111,6 +134,7 @@ export class CategoriesService {
       return `${nameKey} = ${valueKey}`
     })
     updateParts.push('#updatedAt = :updatedAt')
+    updateParts.push(AUDIT_ACTOR_FIELDS)
 
     try {
       const response = await this.dynamoDbService.documentClient.send(
@@ -118,7 +142,7 @@ export class CategoriesService {
           TableName: this.tableName,
           Key: { categoryId },
           UpdateExpression: `SET ${updateParts.join(', ')}`,
-          ConditionExpression: 'attribute_exists(#categoryId)',
+          ConditionExpression: 'attribute_exists(#categoryId) AND #status <> :deleted',
           ExpressionAttributeNames: expressionAttributeNames,
           ExpressionAttributeValues: expressionAttributeValues,
           ReturnValues: 'ALL_NEW',
@@ -133,14 +157,30 @@ export class CategoriesService {
     }
   }
 
-  async remove(categoryId: string): Promise<void> {
+  async remove(user: AuthenticatedUser, categoryId: string): Promise<void> {
+    const timestamp = new Date().toISOString()
+    const actor = buildUserAuditMutationContext(user, 'Category deleted')
+
     try {
       await this.dynamoDbService.documentClient.send(
-        new DeleteCommand({
+        new UpdateCommand({
           TableName: this.tableName,
           Key: { categoryId },
-          ConditionExpression: 'attribute_exists(#categoryId)',
-          ExpressionAttributeNames: { '#categoryId': 'categoryId' },
+          UpdateExpression: `SET #status = :deleted, #deletedAt = :deletedAt, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
+          ConditionExpression: 'attribute_exists(#categoryId) AND #status <> :deleted',
+          ExpressionAttributeNames: {
+            '#categoryId': 'categoryId',
+            '#status': 'status',
+            '#deletedAt': 'deletedAt',
+            '#updatedAt': 'updatedAt',
+            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
+          },
+          ExpressionAttributeValues: {
+            ':deleted': 'DELETED',
+            ':deletedAt': timestamp,
+            ':updatedAt': timestamp,
+            ...toAuditMutationExpressionValues(actor),
+          },
         }),
       )
     } catch (error) {

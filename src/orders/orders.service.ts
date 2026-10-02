@@ -549,6 +549,7 @@ export class OrdersService {
               this.inventoryTableName,
               inventoryItems,
               cancelledAt,
+              actor,
             ),
           ],
         }),
@@ -1102,7 +1103,12 @@ export class OrdersService {
               },
             },
           },
-          ...buildReleaseInventoryTransactItems(this.inventoryTableName, inventoryItems, timestamp),
+          ...buildReleaseInventoryTransactItems(
+            this.inventoryTableName,
+            inventoryItems,
+            timestamp,
+            actor,
+          ),
         ],
       }),
     )
@@ -1159,6 +1165,7 @@ export class OrdersService {
               this.inventoryTableName,
               inventoryItems,
               timestamp,
+              actor,
             ),
           ],
         }),
@@ -1498,22 +1505,25 @@ function buildReleaseInventoryTransactItems(
   inventoryTableName: string,
   items: ReservedInventoryItem[],
   timestamp: string,
+  actor: OrderMutationContext,
 ) {
   return items.map((item) => ({
     Update: {
       TableName: inventoryTableName,
       Key: { productId: item.productId },
       UpdateExpression:
-        'SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt',
+        `SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
       ConditionExpression: '#reservedQuantity >= :quantity',
       ExpressionAttributeNames: {
         '#availableQuantity': 'availableQuantity',
         '#reservedQuantity': 'reservedQuantity',
         '#updatedAt': 'updatedAt',
+        ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
       },
       ExpressionAttributeValues: {
         ':quantity': item.quantity,
         ':updatedAt': timestamp,
+        ...toOrderMutationExpressionValues(actor),
       },
     },
   }))

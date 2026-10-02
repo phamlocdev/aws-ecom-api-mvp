@@ -1,21 +1,18 @@
 import { SQSEvent, SQSBatchResponse } from 'aws-lambda'
-import { OrderAuditLogProcessorService } from './audit/order-audit-log-processor.service'
+import { AuditLogService } from './audit/audit-log.service'
 import { createOrderAuditLogProcessorApp } from './worker.bootstrap'
 
-let processorServicePromise: Promise<OrderAuditLogProcessorService>
+let processorServicePromise: Promise<AuditLogService>
 
-async function getProcessorService(): Promise<OrderAuditLogProcessorService> {
+async function getProcessorService(): Promise<AuditLogService> {
   if (!processorServicePromise) {
-    processorServicePromise = createOrderAuditLogProcessorApp().then((app) =>
-      app.get(OrderAuditLogProcessorService),
-    )
+    processorServicePromise = createOrderAuditLogProcessorApp().then((app) => app.get(AuditLogService))
   }
 
   return processorServicePromise
 }
 
 export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
-  throw new Error('test-dlq-feature')
-  // const processor = await getProcessorService()
-  // return processor.handleBatch(event)
+  const processor = await getProcessorService()
+  return processor.handleBatch(event)
 }

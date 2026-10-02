@@ -50,6 +50,10 @@ export type UserAccount = {
   status?: UserAccountStatus
   passwordStatus?: UserPasswordStatus
   permissions: Permission[]
+  lastModifiedByType?: string
+  lastModifiedById?: string
+  lastModifiedByEmail?: string
+  lastModifiedReason?: string
   lastLoginAt?: string
   lastLoginIp?: string
   lastLoginUserAgent?: string

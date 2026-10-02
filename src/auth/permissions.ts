@@ -1,4 +1,5 @@
 export const Permission = {
+  AUDIT_READ: 'audit:read',
   PRODUCTS_READ: 'products:read',
   PRODUCTS_CREATE: 'products:create',
   PRODUCTS_UPDATE: 'products:update',

@@ -10,6 +10,8 @@ export interface SqsConstructProps {
 export class SqsConstruct extends Construct {
   readonly placeOrderDlq: sqs.Queue
   readonly placeOrderQueue: sqs.Queue
+  readonly auditLogDlq: sqs.Queue
+  readonly auditLogQueue: sqs.Queue
   readonly orderAuditLogDlq: sqs.Queue
   readonly orderAuditLogQueue: sqs.Queue
 
@@ -18,6 +20,7 @@ export class SqsConstruct extends Construct {
 
     const infraEnv = getAwsInfraEnv()
     const visibilityTimeout = props.visibilityTimeout ?? cdk.Duration.seconds(60)
+    const auditVisibilityTimeout = cdk.Duration.seconds(60)
 
     this.placeOrderDlq = new sqs.Queue(this, 'PlaceOrderDlq', {
       queueName: infraEnv.placeOrderDlqName,
@@ -41,26 +44,28 @@ export class SqsConstruct extends Construct {
       },
     })
 
-    this.orderAuditLogDlq = new sqs.Queue(this, 'OrderAuditLogDlq', {
-      queueName: infraEnv.orderAuditLogDlqName,
+    this.auditLogDlq = new sqs.Queue(this, 'AuditLogDlq', {
+      queueName: infraEnv.auditLogDlqName,
       fifo: true,
       contentBasedDeduplication: false,
       retentionPeriod: cdk.Duration.days(14),
-      visibilityTimeout,
+      visibilityTimeout: auditVisibilityTimeout,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
-    this.orderAuditLogQueue = new sqs.Queue(this, 'OrderAuditLogQueue', {
-      queueName: infraEnv.orderAuditLogQueueName,
+    this.auditLogQueue = new sqs.Queue(this, 'AuditLogQueue', {
+      queueName: infraEnv.auditLogQueueName,
       fifo: true,
       contentBasedDeduplication: false,
       receiveMessageWaitTime: cdk.Duration.seconds(20),
-      visibilityTimeout,
+      visibilityTimeout: auditVisibilityTimeout,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       deadLetterQueue: {
-        queue: this.orderAuditLogDlq,
+        queue: this.auditLogDlq,
         maxReceiveCount: 3,
       },
     })
+    this.orderAuditLogDlq = this.auditLogDlq
+    this.orderAuditLogQueue = this.auditLogQueue
   }
 }

@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { validateRuntimeEnv } from '../config/env.validation'
 import { DynamoDbModule } from '../dynamodb/dynamodb.module'
-import { OrderAuditLogProcessorService } from './order-audit-log-processor.service'
+import { AuditLogController } from './audit-log.controller'
+import { AuditLogService } from './audit-log.service'
 
 @Module({
   imports: [
@@ -13,7 +14,8 @@ import { OrderAuditLogProcessorService } from './order-audit-log-processor.servi
     }),
     DynamoDbModule,
   ],
-  providers: [OrderAuditLogProcessorService],
-  exports: [OrderAuditLogProcessorService],
+  controllers: [AuditLogController],
+  providers: [AuditLogService],
+  exports: [AuditLogService],
 })
-export class OrderAuditLogProcessorModule {}
+export class AuditLogModule {}

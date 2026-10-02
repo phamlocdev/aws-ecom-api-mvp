@@ -19,6 +19,11 @@ export interface Product {
   imageUrl?: string
   images?: ProductImage[]
   status: ProductStatus
+  deletedAt?: string
+  lastModifiedByType?: string
+  lastModifiedById?: string
+  lastModifiedByEmail?: string
+  lastModifiedReason?: string
   createdAt: string
   updatedAt: string
 }

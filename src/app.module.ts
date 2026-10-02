@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
+import { AuditLogModule } from './audit/audit-log.module'
 import { AuthModule } from './auth/auth.module'
 import { CartsModule } from './carts/carts.module'
 import { CategoriesModule } from './categories/categories.module'
@@ -20,6 +21,7 @@ import { validateRuntimeEnv } from './config/env.validation'
       validate: validateRuntimeEnv,
     }),
     AuthModule,
+    AuditLogModule,
     CartsModule,
     DynamoDbModule,
     HealthModule,

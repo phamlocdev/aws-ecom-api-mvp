@@ -24,6 +24,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 import { CreateProductDto } from './dto/create-product.dto'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { AuthenticatedUser } from '../auth/auth.types'
 import { Public } from '../auth/public.decorator'
 import { Permission } from '../auth/permissions'
 import { RequirePermissions } from '../auth/permissions.decorator'
@@ -49,8 +51,11 @@ export class ProductsController {
   @ApiCreatedResponse({ type: ProductResponseDto })
   @ApiBadRequestResponse({ description: 'The request body is invalid.' })
   @ApiConflictResponse({ description: 'Generated ID already exists.' })
-  create(@Body(new DtoValidationPipe(CreateProductDto)) dto: CreateProductDto): Promise<Product> {
-    return this.productsService.create(dto)
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new DtoValidationPipe(CreateProductDto)) dto: CreateProductDto,
+  ): Promise<Product> {
+    return this.productsService.create(user, dto)
   }
 
   @Get()
@@ -126,10 +131,11 @@ export class ProductsController {
   @ApiBadRequestResponse({ description: 'No mutable fields or invalid input.' })
   @ApiNotFoundResponse({ description: 'Product does not exist.' })
   update(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('productId') productId: string,
     @Body(new DtoValidationPipe(UpdateProductDto)) dto: UpdateProductDto,
   ): Promise<Product> {
-    return this.productsService.update(productId, dto)
+    return this.productsService.update(user, productId, dto)
   }
 
   @Delete(':productId')
@@ -140,7 +146,10 @@ export class ProductsController {
   @ApiParam({ name: 'productId', format: 'uuid' })
   @ApiNoContentResponse({ description: 'Product deleted.' })
   @ApiNotFoundResponse({ description: 'Product does not exist.' })
-  async remove(@Param('productId') productId: string): Promise<void> {
-    await this.productsService.remove(productId)
+  async remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('productId') productId: string,
+  ): Promise<void> {
+    await this.productsService.remove(user, productId)
   }
 }
