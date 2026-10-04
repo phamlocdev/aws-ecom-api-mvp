@@ -7,6 +7,7 @@ import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 
 const AUDIT_RETENTION_SECONDS = 365 * 24 * 60 * 60
+const ENTITY_TYPE_OCCURRED_AT_INDEX = 'GSI_EntityTypeOccurredAt'
 
 export const AUDIT_ENTITY_TYPES = [
   'ORDER',
@@ -72,6 +73,7 @@ const AUDIT_ENTITY_CONFIGS: Record<AuditEntityType, AuditEntityConfig> = {
       'permissions',
       'status',
       'passwordStatus',
+      'address',
     ],
   },
 }
@@ -157,29 +159,31 @@ export class AuditLogService {
 
   async findByEntity(input: {
     entityType: string
-    entityId: string
+    entityId?: string
     limit?: number
     cursor?: string
   }): Promise<AuditLogQueryResult> {
     const entityType = parseAuditEntityType(input.entityType)
     const entityId = readString(input.entityId)
-    if (!entityId) {
-      throw new BadRequestException('entityId is required.')
-    }
 
     const requestedLimit = Number.isFinite(input.limit) ? input.limit : 25
     const limit = Math.min(Math.max(requestedLimit ?? 25, 1), 100)
-    const entityKey = buildEntityKey(entityType, entityId)
+    const keyConditionExpression = entityId
+      ? '#entityKey = :entityKey'
+      : '#entityType = :entityType'
+    const expressionAttributeNames: Record<string, string> = entityId
+      ? { '#entityKey': 'entityKey' }
+      : { '#entityType': 'entityType' }
+    const expressionAttributeValues: Record<string, string> = entityId
+      ? { ':entityKey': buildEntityKey(entityType, entityId) }
+      : { ':entityType': entityType }
     const response = (await this.dynamoDbService.documentClient.send(
       new QueryCommand({
         TableName: this.auditLogTableName,
-        KeyConditionExpression: '#entityKey = :entityKey',
-        ExpressionAttributeNames: {
-          '#entityKey': 'entityKey',
-        },
-        ExpressionAttributeValues: {
-          ':entityKey': entityKey,
-        },
+        ...(entityId ? {} : { IndexName: ENTITY_TYPE_OCCURRED_AT_INDEX }),
+        KeyConditionExpression: keyConditionExpression,
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
         ScanIndexForward: false,
         Limit: limit,
         ExclusiveStartKey: decodeCursor(input.cursor),

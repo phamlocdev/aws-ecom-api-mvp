@@ -6,7 +6,9 @@ let processorServicePromise: Promise<AuditLogService>
 
 async function getProcessorService(): Promise<AuditLogService> {
   if (!processorServicePromise) {
-    processorServicePromise = createOrderAuditLogProcessorApp().then((app) => app.get(AuditLogService))
+    processorServicePromise = createOrderAuditLogProcessorApp().then((app) =>
+      app.get(AuditLogService),
+    )
   }
 
   return processorServicePromise

@@ -14,13 +14,18 @@ export class AuditLogController {
   @Get()
   @Roles(Role.ADMIN)
   @RequirePermissions(Permission.AUDIT_READ)
-  @ApiOperation({ summary: 'Get audit entries for one entity' })
-  @ApiQuery({ name: 'entityType', enum: ['ORDER', 'PRODUCT', 'CATEGORY', 'INVENTORY', 'USER_ACCOUNT'] })
-  @ApiQuery({ name: 'entityId' })
-  @ApiOkResponse({ description: 'Returns audit entries for an exact entity identity.' })
+  @ApiOperation({ summary: 'Get audit entries by entity type, optionally scoped to one entity' })
+  @ApiQuery({
+    name: 'entityType',
+    enum: ['ORDER', 'PRODUCT', 'CATEGORY', 'INVENTORY', 'USER_ACCOUNT'],
+  })
+  @ApiQuery({ name: 'entityId', required: false })
+  @ApiOkResponse({
+    description: 'Returns audit entries for one entity type or exact entity identity.',
+  })
   findByEntity(
     @Query('entityType') entityType: string,
-    @Query('entityId') entityId: string,
+    @Query('entityId') entityId?: string,
     @Query('limit') limit?: string,
     @Query('cursor') cursor?: string,
   ): Promise<AuditLogQueryResult> {

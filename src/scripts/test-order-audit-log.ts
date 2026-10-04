@@ -1,5 +1,6 @@
 import assert from 'assert'
 import {
+  AuditLogService,
   buildAuditDiff,
   buildAuditLogItem,
   parseAuditPipeEnvelope,
@@ -15,9 +16,12 @@ async function main(): Promise<void> {
   testObjectKeyOrderDoesNotCreateDiff()
   testArrayOrderStillCreatesDiff()
   testUserPlaintextPiiDiff()
+  testUserAddressDiff()
   testNonAllowlistedChanges()
   testSoftDeleteModify()
   testPipeWrappedRecordParsing()
+  await testFindByEntityUsesPrimaryKeyWhenEntityIdIsProvided()
+  await testFindByEntityUsesEntityTypeIndexWithoutEntityId()
   await testIdempotentConditionalFailure()
   await testRealWriteFailure()
 
@@ -142,6 +146,48 @@ function testUserPlaintextPiiDiff(): void {
   })
 }
 
+function testUserAddressDiff(): void {
+  const item = buildAuditLogItem({
+    entityType: 'USER_ACCOUNT',
+    sourceTable: 'user-accounts',
+    record: {
+      eventID: 'event-user-address',
+      eventName: 'MODIFY',
+      dynamodb: {
+        OldImage: {
+          userId: { S: 'user-1' },
+          address: {
+            M: {
+              line1: { S: '123 Old' },
+              location: { M: { city: { S: 'HCMC' }, district: { S: 'District 1' } } },
+            },
+          },
+        },
+        NewImage: {
+          userId: { S: 'user-1' },
+          address: {
+            M: {
+              line1: { S: '456 New' },
+              location: { M: { city: { S: 'HCMC' }, district: { S: 'District 3' } } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  assert.deepEqual(item?.diff.address, {
+    before: {
+      line1: '123 Old',
+      location: { city: 'HCMC', district: 'District 1' },
+    },
+    after: {
+      line1: '456 New',
+      location: { city: 'HCMC', district: 'District 3' },
+    },
+  })
+}
+
 function testNonAllowlistedChanges(): void {
   const item = buildAuditLogItem({
     entityType: 'ORDER',
@@ -244,6 +290,54 @@ async function testRealWriteFailure(): Promise<void> {
   }
 
   await assert.rejects(() => putAuditLogItem(client, 'audit-table', buildItem()), /boom/)
+}
+
+async function testFindByEntityUsesPrimaryKeyWhenEntityIdIsProvided(): Promise<void> {
+  let queryInput: Record<string, unknown> | undefined
+  const service = new AuditLogService(
+    {
+      documentClient: {
+        async send(command: { input: Record<string, unknown> }) {
+          queryInput = command.input
+          return { Items: [] }
+        },
+      },
+    } as never,
+    { get: () => 'audit-table' } as never,
+  )
+
+  await service.findByEntity({ entityType: 'ORDER', entityId: 'order-1' })
+
+  assert.equal(queryInput?.TableName, 'audit-table')
+  assert.equal(queryInput?.IndexName, undefined)
+  assert.equal(queryInput?.KeyConditionExpression, '#entityKey = :entityKey')
+  assert.deepEqual(queryInput?.ExpressionAttributeValues, {
+    ':entityKey': 'ORDER#order-1',
+  })
+}
+
+async function testFindByEntityUsesEntityTypeIndexWithoutEntityId(): Promise<void> {
+  let queryInput: Record<string, unknown> | undefined
+  const service = new AuditLogService(
+    {
+      documentClient: {
+        async send(command: { input: Record<string, unknown> }) {
+          queryInput = command.input
+          return { Items: [] }
+        },
+      },
+    } as never,
+    { get: () => 'audit-table' } as never,
+  )
+
+  await service.findByEntity({ entityType: 'ORDER' })
+
+  assert.equal(queryInput?.TableName, 'audit-table')
+  assert.equal(queryInput?.IndexName, 'GSI_EntityTypeOccurredAt')
+  assert.equal(queryInput?.KeyConditionExpression, '#entityType = :entityType')
+  assert.deepEqual(queryInput?.ExpressionAttributeValues, {
+    ':entityType': 'ORDER',
+  })
 }
 
 function buildItem(): AuditLogItem {

@@ -36,13 +36,15 @@ export class AuditLogConstruct extends Construct {
 
     for (const source of props.sources) {
       if (!source.table.tableStreamArn) {
-        throw new Error(`${source.table.tableName} stream must be enabled for audit log processing.`)
+        throw new Error(
+          `${source.table.tableName} stream must be enabled for audit log processing.`,
+        )
       }
     }
 
     this.auditLogProcessor = new nodejs.NodejsFunction(this, 'Processor', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('order-audit-log-processor.ts'),
+      entry: sourceEntryPath('audit-log-processor.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,

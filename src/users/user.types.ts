@@ -21,6 +21,18 @@ export type ManagedUser = {
 export type UserAccountStatus = 'ACTIVE' | 'SUSPENDED' | 'PENDING_APPROVAL' | 'DELETED'
 export type UserPasswordStatus = 'REQUIRED' | 'SET'
 
+export type UserAddress = {
+  recipientName?: string
+  phone?: string
+  line1?: string
+  location?: {
+    ward?: string
+    district?: string
+    city?: string
+  }
+  notes?: string
+}
+
 export interface CustomerProfile {
   username: string
   email?: string
@@ -36,6 +48,7 @@ export interface UserProfile {
   avatarKey?: string
   avatarReadUrl?: string
   avatarReadUrlExpiresInSeconds?: number
+  address?: UserAddress
   passwordStatus: UserPasswordStatus
   createdAt: string
   updatedAt: string
@@ -47,6 +60,7 @@ export type UserAccount = {
   email?: string
   name?: string
   avatarKey?: string
+  address?: UserAddress
   status?: UserAccountStatus
   passwordStatus?: UserPasswordStatus
   permissions: Permission[]

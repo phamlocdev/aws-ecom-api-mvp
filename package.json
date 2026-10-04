@@ -1,5 +1,5 @@
 {
-  "name": "dynamodb-ecommerce-learning",
+  "name": "aws-ecommerce-learning",
   "version": "1.0.0",
   "private": true,
   "description": "NestJS e-commerce MVP for learning DynamoDB on AWS",

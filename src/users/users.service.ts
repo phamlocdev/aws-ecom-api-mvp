@@ -42,6 +42,7 @@ import {
   CustomerProfile,
   ManagedUser,
   ResendUserEmailResult,
+  UserAddress,
   UserAccount,
   UserLoginAudit,
   UserLoginAuditQueryResult,
@@ -544,7 +545,9 @@ export class UsersService {
 
   private async putUserAccount(
     input: Pick<UserAccount, 'userId'> &
-      Partial<Pick<UserAccount, 'username' | 'email' | 'name' | 'permissions' | 'status'>> & {
+      Partial<
+        Pick<UserAccount, 'username' | 'email' | 'name' | 'permissions' | 'status' | 'address'>
+      > & {
         passwordStatus?: UserPasswordStatus
         avatarKey?: string | null
         auditActor?: AuditMutationContext
@@ -578,6 +581,11 @@ export class UsersService {
           : existing?.avatarKey
             ? { avatarKey: existing.avatarKey }
             : {}),
+      ...(input.address !== undefined
+        ? { address: input.address }
+        : existing?.address
+          ? { address: existing.address }
+          : {}),
       permissions: normalizePermissions(input.permissions ?? existing?.permissions),
       status: input.status ?? existing?.status ?? 'ACTIVE',
       passwordStatus:
@@ -659,6 +667,7 @@ export class UsersService {
       email: profileUser.email,
       name: dto.name !== undefined ? dto.name : (account?.name ?? profileUser.name),
       avatarKey: nextAvatarKey,
+      address: dto.address !== undefined ? normalizeUserAddress(dto.address) : account?.address,
       permissions: account?.permissions ?? [],
       auditActor: buildUserAuditMutationContext(user, 'Own profile updated'),
     })
@@ -864,9 +873,26 @@ function toUserProfile(user: AuthenticatedUser, storedProfile: UserAccount | nul
     ...((user.email ?? storedProfile?.email) ? { email: user.email ?? storedProfile?.email } : {}),
     ...(storedProfile?.name ? { name: storedProfile.name } : user.name ? { name: user.name } : {}),
     ...(storedProfile?.avatarKey ? { avatarKey: storedProfile.avatarKey } : {}),
+    ...(storedProfile?.address ? { address: storedProfile.address } : {}),
     passwordStatus: resolvePasswordStatus(storedProfile, user.username),
     createdAt: storedProfile?.createdAt ?? timestamp,
     updatedAt: storedProfile?.updatedAt ?? timestamp,
+  }
+}
+
+function normalizeUserAddress(address: UserAddress): UserAddress {
+  const location = {
+    ...(address.location?.ward ? { ward: address.location.ward } : {}),
+    ...(address.location?.district ? { district: address.location.district } : {}),
+    ...(address.location?.city ? { city: address.location.city } : {}),
+  }
+
+  return {
+    ...(address.recipientName ? { recipientName: address.recipientName } : {}),
+    ...(address.phone ? { phone: address.phone } : {}),
+    ...(address.line1 ? { line1: address.line1 } : {}),
+    ...(Object.keys(location).length > 0 ? { location } : {}),
+    ...(address.notes ? { notes: address.notes } : {}),
   }
 }
 
