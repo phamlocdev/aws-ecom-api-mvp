@@ -22,6 +22,12 @@ import {
   type UserType,
 } from '@aws-sdk/client-cognito-identity-provider'
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import {
+  AuditMutationContext,
+  buildUserAuditMutationContext,
+  systemAuditMutationContext,
+  toAuditMutationAttributes,
+} from '../audit/audit-actor'
 import { normalizePermissions, Permission } from '../auth/permissions'
 import { AuthenticatedUser } from '../auth/auth.types'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
@@ -36,6 +42,7 @@ import {
   CustomerProfile,
   ManagedUser,
   ResendUserEmailResult,
+  UserAddress,
   UserAccount,
   UserLoginAudit,
   UserLoginAuditQueryResult,
@@ -142,13 +149,18 @@ export class UsersService {
         name: user.name,
         permissions: normalizePermissions(dto.permissions),
         passwordStatus: 'SET',
+        auditActor: buildUserAuditMutationContext(actor, 'Managed user created'),
       })
     }
 
     return this.findManagedUserByUsername(dto.username)
   }
 
-  async updateManagedUser(userId: string, dto: UpdateManagedUserDto): Promise<ManagedUser> {
+  async updateManagedUser(
+    actor: AuthenticatedUser,
+    userId: string,
+    dto: UpdateManagedUserDto,
+  ): Promise<ManagedUser> {
     const user = await this.findManagedUserBySub(userId)
 
     const userAttributes: AttributeType[] = []
@@ -175,6 +187,7 @@ export class UsersService {
         email: dto.email ?? user.email,
         name: dto.name ?? user.name,
         permissions: user.permissions,
+        auditActor: buildUserAuditMutationContext(actor, 'Managed user profile updated'),
       })
     }
 
@@ -186,6 +199,7 @@ export class UsersService {
         name: dto.name ?? user.name,
         permissions: user.permissions,
         status: dto.status,
+        auditActor: buildUserAuditMutationContext(actor, 'Managed user status updated'),
       })
     }
 
@@ -197,13 +211,13 @@ export class UsersService {
         }),
       )
     } else if (dto.enabled === false && user.enabled) {
-      await this.disableManagedUser(userId)
+      await this.disableManagedUser(userId, actor)
     }
 
     return this.findManagedUserBySub(userId)
   }
 
-  async disableManagedUser(userId: string): Promise<void> {
+  async disableManagedUser(userId: string, actor?: AuthenticatedUser): Promise<void> {
     const user = await this.findManagedUserBySub(userId)
     await this.cognitoClient.send(
       new AdminDisableUserCommand({
@@ -211,6 +225,17 @@ export class UsersService {
         Username: user.username,
       }),
     )
+    await this.putUserAccount({
+      userId,
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      permissions: user.permissions,
+      status: 'SUSPENDED',
+      auditActor: actor
+        ? buildUserAuditMutationContext(actor, 'Managed user disabled')
+        : systemAuditMutationContext('users-service', 'Managed user disabled'),
+    })
   }
 
   async updateUserPermissions(
@@ -218,11 +243,11 @@ export class UsersService {
     permissions: Permission[],
     actor: AuthenticatedUser,
   ): Promise<UserPermissionsRecord> {
-    void actor
     await this.findManagedUserBySub(userId)
     const record = await this.putUserAccount({
       userId,
       permissions: normalizePermissions(permissions),
+      auditActor: buildUserAuditMutationContext(actor, 'Managed user permissions updated'),
     })
 
     return toUserPermissionsRecord(record)
@@ -269,6 +294,7 @@ export class UsersService {
       email: user.email,
       name: user.name,
       passwordStatus: 'SET',
+      auditActor: buildUserAuditMutationContext(user, 'Own password set'),
     })
   }
 
@@ -519,9 +545,12 @@ export class UsersService {
 
   private async putUserAccount(
     input: Pick<UserAccount, 'userId'> &
-      Partial<Pick<UserAccount, 'username' | 'email' | 'name' | 'permissions' | 'status'>> & {
+      Partial<
+        Pick<UserAccount, 'username' | 'email' | 'name' | 'permissions' | 'status' | 'address'>
+      > & {
         passwordStatus?: UserPasswordStatus
         avatarKey?: string | null
+        auditActor?: AuditMutationContext
       },
   ): Promise<UserAccount> {
     const existingResponse = await this.dynamoDbService.documentClient.send(
@@ -552,6 +581,11 @@ export class UsersService {
           : existing?.avatarKey
             ? { avatarKey: existing.avatarKey }
             : {}),
+      ...(input.address !== undefined
+        ? { address: input.address }
+        : existing?.address
+          ? { address: existing.address }
+          : {}),
       permissions: normalizePermissions(input.permissions ?? existing?.permissions),
       status: input.status ?? existing?.status ?? 'ACTIVE',
       passwordStatus:
@@ -564,6 +598,16 @@ export class UsersService {
       ...(existing?.loginCount !== undefined ? { loginCount: existing.loginCount } : {}),
       createdAt: existing?.createdAt ?? timestamp,
       updatedAt: timestamp,
+      ...(input.auditActor
+        ? toAuditMutationAttributes(input.auditActor)
+        : existing?.lastModifiedByType
+          ? {
+              lastModifiedByType: existing.lastModifiedByType,
+              lastModifiedById: existing.lastModifiedById,
+              lastModifiedByEmail: existing.lastModifiedByEmail,
+              lastModifiedReason: existing.lastModifiedReason,
+            }
+          : {}),
     }
 
     await this.dynamoDbService.documentClient.send(
@@ -623,7 +667,9 @@ export class UsersService {
       email: profileUser.email,
       name: dto.name !== undefined ? dto.name : (account?.name ?? profileUser.name),
       avatarKey: nextAvatarKey,
+      address: dto.address !== undefined ? normalizeUserAddress(dto.address) : account?.address,
       permissions: account?.permissions ?? [],
+      auditActor: buildUserAuditMutationContext(user, 'Own profile updated'),
     })
 
     if (previousAvatarKey && previousAvatarKey !== nextAvatarKey) {
@@ -684,6 +730,7 @@ export class UsersService {
       permissions: account?.permissions ?? [],
       status: account?.status,
       passwordStatus: resolvePasswordStatus(account, user.username),
+      auditActor: systemAuditMutationContext('users-service', 'Stored account profile backfilled'),
     })
   }
 
@@ -826,9 +873,26 @@ function toUserProfile(user: AuthenticatedUser, storedProfile: UserAccount | nul
     ...((user.email ?? storedProfile?.email) ? { email: user.email ?? storedProfile?.email } : {}),
     ...(storedProfile?.name ? { name: storedProfile.name } : user.name ? { name: user.name } : {}),
     ...(storedProfile?.avatarKey ? { avatarKey: storedProfile.avatarKey } : {}),
+    ...(storedProfile?.address ? { address: storedProfile.address } : {}),
     passwordStatus: resolvePasswordStatus(storedProfile, user.username),
     createdAt: storedProfile?.createdAt ?? timestamp,
     updatedAt: storedProfile?.updatedAt ?? timestamp,
+  }
+}
+
+function normalizeUserAddress(address: UserAddress): UserAddress {
+  const location = {
+    ...(address.location?.ward ? { ward: address.location.ward } : {}),
+    ...(address.location?.district ? { district: address.location.district } : {}),
+    ...(address.location?.city ? { city: address.location.city } : {}),
+  }
+
+  return {
+    ...(address.recipientName ? { recipientName: address.recipientName } : {}),
+    ...(address.phone ? { phone: address.phone } : {}),
+    ...(address.line1 ? { line1: address.line1 } : {}),
+    ...(Object.keys(location).length > 0 ? { location } : {}),
+    ...(address.notes ? { notes: address.notes } : {}),
   }
 }
 

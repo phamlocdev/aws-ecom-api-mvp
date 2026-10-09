@@ -12,6 +12,8 @@ import { Role } from '../auth/roles.enum'
 import { Roles } from '../auth/roles.decorator'
 import { Permission } from '../auth/permissions'
 import { RequirePermissions } from '../auth/permissions.decorator'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { AuthenticatedUser } from '../auth/auth.types'
 import { PaginatedResponse } from '../pagination/pagination.types'
 import { DtoValidationPipe } from '../validation/dto-validation.pipe'
 import { InventoryService } from './inventory.service'
@@ -76,9 +78,10 @@ export class InventoryController {
   @ApiBadRequestResponse({ description: 'Quantity must be a non-negative integer.' })
   @ApiNotFoundResponse({ description: 'Product does not exist.' })
   update(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('productId') productId: string,
     @Body(new DtoValidationPipe(UpdateInventoryDto)) dto: UpdateInventoryDto,
   ): Promise<InventorySummary> {
-    return this.inventoryService.updateAvailableQuantity(productId, dto.availableQuantity)
+    return this.inventoryService.updateAvailableQuantity(user, productId, dto.availableQuantity)
   }
 }

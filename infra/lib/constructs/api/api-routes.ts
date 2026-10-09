@@ -15,6 +15,13 @@ export function registerApiRoutes(
   })
 
   api.addRoutes({
+    path: '/audit',
+    methods: [apigatewayv2.HttpMethod.GET],
+    integration,
+    ...routeAuthOptions(authorizer),
+  })
+
+  api.addRoutes({
     path: '/products',
     methods: [apigatewayv2.HttpMethod.GET],
     integration,

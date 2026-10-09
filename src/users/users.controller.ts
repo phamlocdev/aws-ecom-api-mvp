@@ -156,7 +156,7 @@ export class UsersController {
     if (dto.status && dto.status !== 'ACTIVE') {
       assertNotSelfMutation(request, userId, 'You cannot block your own account.')
     }
-    return this.usersService.updateManagedUser(userId, dto)
+    return this.usersService.updateManagedUser(request.user!, userId, dto)
   }
 
   @Patch(':userId/permissions')
@@ -169,7 +169,6 @@ export class UsersController {
     @Param('userId') userId: string,
     @Body(new DtoValidationPipe(UpdateUserPermissionsDto)) dto: UpdateUserPermissionsDto,
   ): Promise<UserPermissionsRecord> {
-    assertNotSelfMutation(request, userId, 'You cannot update your own permissions.')
     return this.usersService.updateUserPermissions(userId, dto.permissions, request.user!)
   }
 
@@ -200,7 +199,7 @@ export class UsersController {
     @Param('userId') userId: string,
   ): Promise<void> {
     assertNotSelfMutation(request, userId, 'You cannot disable your own account.')
-    await this.usersService.disableManagedUser(userId)
+    await this.usersService.disableManagedUser(userId, request.user!)
   }
 
   @Get('me/profile')

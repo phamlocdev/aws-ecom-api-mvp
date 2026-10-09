@@ -4,6 +4,7 @@ import { Construct } from 'constructs'
 import { getAwsInfraEnv } from './config/env'
 import { HttpApiConstruct } from './constructs/api/http-api.construct'
 import { LambdaApiConstruct } from './constructs/api/lambda-api.construct'
+import { AuditLogConstruct } from './constructs/audit/audit-log.construct'
 import { CognitoConstruct } from './constructs/auth/cognito.construct'
 import { DynamoDbConstruct } from './constructs/data/dynamodb.construct'
 import { OrdersWorkersConstruct } from './constructs/messaging/orders-workers.construct'
@@ -21,7 +22,7 @@ export class ServerStack extends cdk.Stack {
 
     const data = new DynamoDbConstruct(this, 'Data')
     const messaging = new SqsConstruct(this, 'Messaging', {
-      visibilityTimeout: cdk.Duration.seconds(90),
+      visibilityTimeout: cdk.Duration.seconds(20),
     })
     const orderEventsBus = new events.EventBus(this, 'OrderEventsBus', {
       eventBusName: env.orderEventsBusName,
@@ -65,6 +66,7 @@ export class ServerStack extends cdk.Stack {
       cartsTable: data.cartsTable,
       cartItemsTable: data.cartItemsTable,
       ordersTable: data.ordersTable,
+      auditLogTable: data.auditLogTable,
       orderItemsTable: data.orderItemsTable,
       emailTrackingTable: data.emailTrackingTable,
       inventoryTable: data.inventoryTable,
@@ -86,6 +88,19 @@ export class ServerStack extends cdk.Stack {
       eventConsumerIdempotencyTable: data.eventConsumerIdempotencyTable,
     })
     notification.grantSendEmail(orderNotification.orderNotificationWorker)
+
+    new AuditLogConstruct(this, 'AuditLog', {
+      auditLogTable: data.auditLogTable,
+      auditLogQueue: messaging.auditLogQueue,
+      auditLogDlq: messaging.auditLogDlq,
+      sources: [
+        { entityType: 'ORDER', idField: 'orderId', table: data.ordersTable },
+        { entityType: 'PRODUCT', idField: 'productId', table: data.productsTable },
+        { entityType: 'CATEGORY', idField: 'categoryId', table: data.categoriesTable },
+        { entityType: 'INVENTORY', idField: 'productId', table: data.inventoryTable },
+        { entityType: 'USER_ACCOUNT', idField: 'userId', table: data.userAccountsTable },
+      ],
+    })
 
     new OrdersWorkersConstruct(this, 'OrdersWorkers', {
       productsTable: data.productsTable,
@@ -109,6 +124,10 @@ export class ServerStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ProductsTableName', { value: data.productsTable.tableName })
 
     new cdk.CfnOutput(this, 'OrdersTableName', { value: data.ordersTable.tableName })
+
+    new cdk.CfnOutput(this, 'AuditLogTableName', {
+      value: data.auditLogTable.tableName,
+    })
 
     new cdk.CfnOutput(this, 'EmailTrackingTableName', {
       value: data.emailTrackingTable.tableName,
@@ -148,6 +167,10 @@ export class ServerStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'PlaceOrderQueueUrl', {
       value: messaging.placeOrderQueue.queueUrl,
+    })
+
+    new cdk.CfnOutput(this, 'AuditLogQueueUrl', {
+      value: messaging.auditLogQueue.queueUrl,
     })
 
     new cdk.CfnOutput(this, 'OrderEventsBusName', {

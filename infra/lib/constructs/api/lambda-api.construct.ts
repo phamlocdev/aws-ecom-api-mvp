@@ -21,6 +21,7 @@ export interface LambdaApiConstructProps {
   cartsTable: dynamodb.ITable
   cartItemsTable: dynamodb.ITable
   ordersTable: dynamodb.ITable
+  auditLogTable: dynamodb.ITable
   orderItemsTable: dynamodb.ITable
   emailTrackingTable: dynamodb.ITable
   inventoryTable: dynamodb.ITable
@@ -58,6 +59,7 @@ export class LambdaApiConstruct extends Construct {
         CARTS_TABLE: props.cartsTable.tableName,
         CART_ITEMS_TABLE: props.cartItemsTable.tableName,
         ORDERS_TABLE: props.ordersTable.tableName,
+        AUDIT_LOG_TABLE: props.auditLogTable.tableName,
         ORDER_ITEMS_TABLE: props.orderItemsTable.tableName,
         EMAIL_TRACKING_TABLE: props.emailTrackingTable.tableName,
         INVENTORY_TABLE: props.inventoryTable.tableName,
@@ -94,6 +96,7 @@ export class LambdaApiConstruct extends Construct {
     props.cartsTable.grantReadWriteData(this.apiHandler)
     props.cartItemsTable.grantReadWriteData(this.apiHandler)
     props.ordersTable.grantReadWriteData(this.apiHandler)
+    props.auditLogTable.grantReadData(this.apiHandler)
     props.orderItemsTable.grantReadWriteData(this.apiHandler)
     props.emailTrackingTable.grantReadWriteData(this.apiHandler)
     props.inventoryTable.grantReadWriteData(this.apiHandler)
@@ -111,7 +114,11 @@ export class LambdaApiConstruct extends Construct {
     this.apiHandler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['dynamodb:TransactWriteItems'],
-        resources: [props.ordersTable.tableArn, props.inventoryTable.tableArn],
+        resources: [
+          props.ordersTable.tableArn,
+          props.productsTable.tableArn,
+          props.inventoryTable.tableArn,
+        ],
       }),
     )
 

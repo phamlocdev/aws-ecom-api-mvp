@@ -23,6 +23,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 import { Category } from './category.types'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { AuthenticatedUser } from '../auth/auth.types'
 import { Public } from '../auth/public.decorator'
 import { Permission } from '../auth/permissions'
 import { RequirePermissions } from '../auth/permissions.decorator'
@@ -49,9 +51,10 @@ export class CategoriesController {
   @ApiBadRequestResponse({ description: 'The request body is invalid.' })
   @ApiConflictResponse({ description: 'categoryId already exists.' })
   create(
+    @CurrentUser() user: AuthenticatedUser,
     @Body(new DtoValidationPipe(CreateCategoryDto)) dto: CreateCategoryDto,
   ): Promise<Category> {
-    return this.categoriesService.create(dto)
+    return this.categoriesService.create(user, dto)
   }
 
   @Get()
@@ -84,10 +87,11 @@ export class CategoriesController {
   @ApiBadRequestResponse({ description: 'No mutable fields or invalid input.' })
   @ApiNotFoundResponse({ description: 'Category does not exist.' })
   update(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('categoryId') categoryId: string,
     @Body(new DtoValidationPipe(UpdateCategoryDto)) dto: UpdateCategoryDto,
   ): Promise<Category> {
-    return this.categoriesService.update(categoryId, dto)
+    return this.categoriesService.update(user, categoryId, dto)
   }
 
   @Delete(':categoryId')
@@ -101,7 +105,10 @@ export class CategoriesController {
   @ApiParam({ name: 'categoryId', example: 'electronics' })
   @ApiNoContentResponse({ description: 'Category deleted.' })
   @ApiNotFoundResponse({ description: 'Category does not exist.' })
-  async remove(@Param('categoryId') categoryId: string): Promise<void> {
-    await this.categoriesService.remove(categoryId)
+  async remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('categoryId') categoryId: string,
+  ): Promise<void> {
+    await this.categoriesService.remove(user, categoryId)
   }
 }

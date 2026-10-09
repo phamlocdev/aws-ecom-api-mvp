@@ -42,6 +42,7 @@ import {
   Order,
   OrderDetails,
   OrderItem,
+  OrderMutationContext,
   ResendOrderEmailResult,
   TriggerPaymentResult,
   VnpayReturnResult,
@@ -70,6 +71,14 @@ const ORDER_EMAIL_TYPES: EmailType[] = [
   'SHIPPED_ORDER_NOTIFICATION',
   'CANCELLED_ORDER_NOTIFICATION',
 ]
+const ORDER_AUDIT_ACTOR_FIELDS =
+  '#lastModifiedByType = :lastModifiedByType, #lastModifiedById = :lastModifiedById, #lastModifiedByEmail = :lastModifiedByEmail, #lastModifiedReason = :lastModifiedReason'
+const ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES = {
+  '#lastModifiedByType': 'lastModifiedByType',
+  '#lastModifiedById': 'lastModifiedById',
+  '#lastModifiedByEmail': 'lastModifiedByEmail',
+  '#lastModifiedReason': 'lastModifiedReason',
+}
 
 @Injectable()
 export class OrdersService {
@@ -123,6 +132,7 @@ export class OrdersService {
         : await this.usersService.findCustomerProfileByUsername(user.username)
 
     const timestamp = new Date().toISOString()
+    const createActor = buildUserOrderMutationContext(user, 'Order created')
     const order: Order = {
       orderId: randomUUID(),
       customerId: user.sub,
@@ -136,6 +146,7 @@ export class OrdersService {
       paymentStatus: PaymentStatus.NOT_STARTED,
       createdAt: timestamp,
       updatedAt: timestamp,
+      ...toOrderMutationAttributes(createActor),
     }
 
     await this.dynamoDbService.documentClient.send(
@@ -410,13 +421,18 @@ export class OrdersService {
     })
   }
 
-  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
+  async updateOrderStatus(
+    user: AuthenticatedUser,
+    orderId: string,
+    status: OrderStatus,
+  ): Promise<Order> {
+    const actor = buildUserOrderMutationContext(user, 'Manual status update')
     if (status === OrderStatus.SHIPPED) {
-      return this.markOrderShipped(orderId)
+      return this.markOrderShipped(orderId, actor)
     }
 
     if (status === OrderStatus.CANCELLED) {
-      return this.cancelConfirmedPaidOrder(orderId)
+      return this.cancelConfirmedPaidOrder(orderId, actor)
     }
 
     throw new BadRequestException(
@@ -424,7 +440,7 @@ export class OrdersService {
     )
   }
 
-  private async markOrderShipped(orderId: string): Promise<Order> {
+  private async markOrderShipped(orderId: string, actor: OrderMutationContext): Promise<Order> {
     const order = await this.getById(orderId)
     if (order.status === OrderStatus.SHIPPED) {
       return order
@@ -440,14 +456,14 @@ export class OrdersService {
         new UpdateCommand({
           TableName: this.ordersTableName,
           Key: { orderId },
-          UpdateExpression:
-            'SET #status = :shipped, #shippedAt = :shippedAt, #updatedAt = :updatedAt',
+          UpdateExpression: `SET #status = :shipped, #shippedAt = :shippedAt, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
           ConditionExpression: '#status = :confirmed AND #paymentStatus = :paid',
           ExpressionAttributeNames: {
             '#status': 'status',
             '#paymentStatus': 'paymentStatus',
             '#shippedAt': 'shippedAt',
             '#updatedAt': 'updatedAt',
+            ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
           },
           ExpressionAttributeValues: {
             ':confirmed': OrderStatus.CONFIRMED,
@@ -455,6 +471,7 @@ export class OrdersService {
             ':shipped': OrderStatus.SHIPPED,
             ':shippedAt': shippedAt,
             ':updatedAt': shippedAt,
+            ...toOrderMutationExpressionValues(actor),
           },
         }),
       )
@@ -481,7 +498,10 @@ export class OrdersService {
     return updatedOrder
   }
 
-  private async cancelConfirmedPaidOrder(orderId: string): Promise<Order> {
+  private async cancelConfirmedPaidOrder(
+    orderId: string,
+    actor: OrderMutationContext,
+  ): Promise<Order> {
     const order = await this.getById(orderId)
     if (order.status === OrderStatus.CANCELLED) {
       return order
@@ -506,14 +526,14 @@ export class OrdersService {
               Update: {
                 TableName: this.ordersTableName,
                 Key: { orderId },
-                UpdateExpression:
-                  'SET #status = :cancelled, #cancelledAt = :cancelledAt, #updatedAt = :updatedAt',
+                UpdateExpression: `SET #status = :cancelled, #cancelledAt = :cancelledAt, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
                 ConditionExpression: '#status = :confirmed AND #paymentStatus = :paid',
                 ExpressionAttributeNames: {
                   '#status': 'status',
                   '#paymentStatus': 'paymentStatus',
                   '#cancelledAt': 'cancelledAt',
                   '#updatedAt': 'updatedAt',
+                  ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
                 },
                 ExpressionAttributeValues: {
                   ':confirmed': OrderStatus.CONFIRMED,
@@ -521,6 +541,7 @@ export class OrdersService {
                   ':cancelled': OrderStatus.CANCELLED,
                   ':cancelledAt': cancelledAt,
                   ':updatedAt': cancelledAt,
+                  ...toOrderMutationExpressionValues(actor),
                 },
               },
             },
@@ -528,6 +549,7 @@ export class OrdersService {
               this.inventoryTableName,
               inventoryItems,
               cancelledAt,
+              actor,
             ),
           ],
         }),
@@ -588,6 +610,7 @@ export class OrdersService {
     const paymentAttemptId = randomUUID()
     const requestedAt = new Date()
     const requestedAtIso = requestedAt.toISOString()
+    const actor = buildUserOrderMutationContext(user, 'Payment requested')
     const nowEpochSeconds = toEpochSeconds(requestedAt.getTime())
     const paymentGatewayExpiresAt = order.paymentExpiresAt - VNPAY_PAYMENT_EXPIRY_SKEW_SECONDS
     if (paymentGatewayExpiresAt <= nowEpochSeconds) {
@@ -609,8 +632,7 @@ export class OrdersService {
         new UpdateCommand({
           TableName: this.ordersTableName,
           Key: { orderId },
-          UpdateExpression:
-            'SET #paymentStatus = :paymentStatus, #paymentRequestedAt = :paymentRequestedAt, #paymentAttemptId = :paymentAttemptId, #updatedAt = :updatedAt REMOVE #paymentFailureReason, #paymentTransactionId, #paidAt',
+          UpdateExpression: `SET #paymentStatus = :paymentStatus, #paymentRequestedAt = :paymentRequestedAt, #paymentAttemptId = :paymentAttemptId, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS} REMOVE #paymentFailureReason, #paymentTransactionId, #paidAt`,
           ConditionExpression:
             '#status = :reserved AND (#paymentStatus = :notStarted OR #paymentStatus = :failed OR #paymentStatus = :processing) AND #paymentExpiresAt > :now',
           ExpressionAttributeNames: {
@@ -623,6 +645,7 @@ export class OrdersService {
             '#paymentTransactionId': 'paymentTransactionId',
             '#paidAt': 'paidAt',
             '#updatedAt': 'updatedAt',
+            ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
           },
           ExpressionAttributeValues: {
             ':reserved': OrderStatus.RESERVED,
@@ -634,6 +657,7 @@ export class OrdersService {
             ':paymentAttemptId': paymentAttemptId,
             ':updatedAt': requestedAtIso,
             ':now': nowEpochSeconds,
+            ...toOrderMutationExpressionValues(actor),
           },
         }),
       )
@@ -740,13 +764,13 @@ export class OrdersService {
     }
 
     if (!verify.isSuccess) {
-      return this.handleFailedIpn(order, verify.message)
+      return this.handleFailedIpn(order, verify.message, source)
     }
 
     if (this.isPaymentExpired(order)) {
       await this.releaseExpiredOrderReservation(order)
       const latestOrder = await this.getById(orderId)
-      const latePaymentResult = await this.handleLatePaymentSuccess(latestOrder, verify)
+      const latePaymentResult = await this.handleLatePaymentSuccess(latestOrder, verify, source)
       if (source === 'ipn') {
         this.vnpayService.logIpnResponse(orderId, latePaymentResult)
       }
@@ -763,7 +787,15 @@ export class OrdersService {
     }
 
     try {
-      await this.markPaymentSucceeded(orderId, order.paymentAttemptId, transactionId)
+      await this.markPaymentSucceeded(
+        orderId,
+        order.paymentAttemptId,
+        transactionId,
+        systemOrderMutationContext(
+          source === 'ipn' ? 'payment-ipn' : 'payment-return',
+          'Payment confirmed',
+        ),
+      )
       await this.sendOrderConfirmationEmailBestEffortByOrderId(orderId)
       this.logger.log(`VNPay ${source} confirmed payment for order ${orderId}.`)
       return IpnSuccess
@@ -778,43 +810,52 @@ export class OrdersService {
           return InpOrderAlreadyConfirmed
         }
         if (this.isPaymentExpired(latestOrder) || latestOrder.status === OrderStatus.EXPIRED) {
-          return this.handleLatePaymentSuccess(latestOrder, verify)
+          return this.handleLatePaymentSuccess(latestOrder, verify, source)
         }
       }
       throw error
     }
   }
 
-  async markFailed(orderId: string, status: OrderStatus, failureReason: string): Promise<void> {
+  async markFailed(
+    orderId: string,
+    status: OrderStatus,
+    failureReason: string,
+    actor = systemOrderMutationContext('orders-service', failureReason),
+  ): Promise<void> {
     await this.dynamoDbService.documentClient.send(
       new UpdateCommand({
         TableName: this.ordersTableName,
         Key: { orderId },
-        UpdateExpression:
-          'SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt',
+        UpdateExpression: `SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
         ExpressionAttributeNames: {
           '#status': 'status',
           '#failureReason': 'failureReason',
           '#updatedAt': 'updatedAt',
+          ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
         },
         ExpressionAttributeValues: {
           ':status': status,
           ':failureReason': failureReason,
           ':updatedAt': new Date().toISOString(),
+          ...toOrderMutationExpressionValues(actor),
         },
       }),
     )
   }
 
-  async markReserved(orderId: string, totalAmount: number): Promise<void> {
+  async markReserved(
+    orderId: string,
+    totalAmount: number,
+    actor = systemOrderMutationContext('orders-service', 'Order reserved'),
+  ): Promise<void> {
     const timestamp = new Date().toISOString()
     const paymentExpiresAt = toEpochSeconds(Date.now()) + this.paymentConfirmationTimeoutSeconds
     await this.dynamoDbService.documentClient.send(
       new UpdateCommand({
         TableName: this.ordersTableName,
         Key: { orderId },
-        UpdateExpression:
-          'SET #status = :status, #reservedAt = :reservedAt, #paymentExpiresAt = :paymentExpiresAt, #totalAmount = :totalAmount, #paymentStatus = :paymentStatus, #updatedAt = :updatedAt',
+        UpdateExpression: `SET #status = :status, #reservedAt = :reservedAt, #paymentExpiresAt = :paymentExpiresAt, #totalAmount = :totalAmount, #paymentStatus = :paymentStatus, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
         ExpressionAttributeNames: {
           '#status': 'status',
           '#reservedAt': 'reservedAt',
@@ -822,6 +863,7 @@ export class OrdersService {
           '#totalAmount': 'totalAmount',
           '#paymentStatus': 'paymentStatus',
           '#updatedAt': 'updatedAt',
+          ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
         },
         ExpressionAttributeValues: {
           ':status': OrderStatus.RESERVED,
@@ -830,6 +872,7 @@ export class OrdersService {
           ':totalAmount': totalAmount,
           ':paymentStatus': PaymentStatus.NOT_STARTED,
           ':updatedAt': timestamp,
+          ...toOrderMutationExpressionValues(actor),
         },
       }),
     )
@@ -839,14 +882,14 @@ export class OrdersService {
     orderId: string,
     paymentAttemptId: string,
     transactionId: string,
+    actor = systemOrderMutationContext('payment-ipn', 'Payment confirmed'),
   ): Promise<void> {
     const paidAt = new Date().toISOString()
     await this.dynamoDbService.documentClient.send(
       new UpdateCommand({
         TableName: this.ordersTableName,
         Key: { orderId },
-        UpdateExpression:
-          'SET #status = :status, #paymentStatus = :paymentStatus, #paymentTransactionId = :paymentTransactionId, #paidAt = :paidAt, #updatedAt = :updatedAt',
+        UpdateExpression: `SET #status = :status, #paymentStatus = :paymentStatus, #paymentTransactionId = :paymentTransactionId, #paidAt = :paidAt, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
         ConditionExpression:
           '#status = :reserved AND #paymentStatus = :processing AND #paymentAttemptId = :paymentAttemptId',
         ExpressionAttributeNames: {
@@ -856,6 +899,7 @@ export class OrdersService {
           '#paymentAttemptId': 'paymentAttemptId',
           '#paidAt': 'paidAt',
           '#updatedAt': 'updatedAt',
+          ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
         },
         ExpressionAttributeValues: {
           ':reserved': OrderStatus.RESERVED,
@@ -866,6 +910,7 @@ export class OrdersService {
           ':paymentTransactionId': transactionId,
           ':paidAt': paidAt,
           ':updatedAt': paidAt,
+          ...toOrderMutationExpressionValues(actor),
         },
       }),
     )
@@ -875,13 +920,13 @@ export class OrdersService {
     orderId: string,
     paymentAttemptId: string,
     failureReason: string,
+    actor = systemOrderMutationContext('payment-ipn', failureReason),
   ): Promise<void> {
     await this.dynamoDbService.documentClient.send(
       new UpdateCommand({
         TableName: this.ordersTableName,
         Key: { orderId },
-        UpdateExpression:
-          'SET #paymentStatus = :paymentStatus, #paymentFailureReason = :paymentFailureReason, #updatedAt = :updatedAt',
+        UpdateExpression: `SET #paymentStatus = :paymentStatus, #paymentFailureReason = :paymentFailureReason, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
         ConditionExpression:
           '#status = :reserved AND #paymentStatus = :processing AND #paymentAttemptId = :paymentAttemptId',
         ExpressionAttributeNames: {
@@ -890,6 +935,7 @@ export class OrdersService {
           '#paymentFailureReason': 'paymentFailureReason',
           '#paymentAttemptId': 'paymentAttemptId',
           '#updatedAt': 'updatedAt',
+          ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
         },
         ExpressionAttributeValues: {
           ':reserved': OrderStatus.RESERVED,
@@ -898,6 +944,7 @@ export class OrdersService {
           ':paymentStatus': PaymentStatus.FAILED,
           ':paymentFailureReason': failureReason,
           ':updatedAt': new Date().toISOString(),
+          ...toOrderMutationExpressionValues(actor),
         },
       }),
     )
@@ -907,13 +954,13 @@ export class OrdersService {
     orderId: string,
     transactionId: string,
     failureReason: string,
+    actor = systemOrderMutationContext('payment-ipn', failureReason),
   ): Promise<void> {
     await this.dynamoDbService.documentClient.send(
       new UpdateCommand({
         TableName: this.ordersTableName,
         Key: { orderId },
-        UpdateExpression:
-          'SET #status = :status, #paymentStatus = :paymentStatus, #paymentTransactionId = :paymentTransactionId, #paymentFailureReason = :paymentFailureReason, #failureReason = :failureReason, #updatedAt = :updatedAt',
+        UpdateExpression: `SET #status = :status, #paymentStatus = :paymentStatus, #paymentTransactionId = :paymentTransactionId, #paymentFailureReason = :paymentFailureReason, #failureReason = :failureReason, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
         ConditionExpression: '#status <> :confirmed AND #paymentStatus <> :paid',
         ExpressionAttributeNames: {
           '#status': 'status',
@@ -922,6 +969,7 @@ export class OrdersService {
           '#paymentFailureReason': 'paymentFailureReason',
           '#failureReason': 'failureReason',
           '#updatedAt': 'updatedAt',
+          ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
         },
         ExpressionAttributeValues: {
           ':confirmed': OrderStatus.CONFIRMED,
@@ -932,22 +980,30 @@ export class OrdersService {
           ':paymentFailureReason': failureReason,
           ':failureReason': failureReason,
           ':updatedAt': new Date().toISOString(),
+          ...toOrderMutationExpressionValues(actor),
         },
       }),
     )
   }
 
-  async updateStatus(orderId: string, status: OrderStatus, failureReason?: string): Promise<void> {
+  async updateStatus(
+    orderId: string,
+    status: OrderStatus,
+    failureReason?: string,
+    actor = systemOrderMutationContext('orders-service', failureReason ?? 'Status updated'),
+  ): Promise<void> {
     const names: Record<string, string> = {
       '#status': 'status',
       '#updatedAt': 'updatedAt',
+      ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
     }
     const values: Record<string, unknown> = {
       ':status': status,
       ':updatedAt': new Date().toISOString(),
+      ...toOrderMutationExpressionValues(actor),
     }
 
-    let updateExpression = 'SET #status = :status, #updatedAt = :updatedAt'
+    let updateExpression = `SET #status = :status, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`
     if (failureReason) {
       names['#failureReason'] = 'failureReason'
       values[':failureReason'] = failureReason
@@ -1015,6 +1071,7 @@ export class OrdersService {
     orderId: string,
     failureReason: string,
     items: ReservedInventoryItem[],
+    actor = systemOrderMutationContext('orders-service', failureReason),
   ): Promise<void> {
     const inventoryItems = aggregateReservedItems(items)
     assertTransactionSize(inventoryItems)
@@ -1027,14 +1084,14 @@ export class OrdersService {
             Update: {
               TableName: this.ordersTableName,
               Key: { orderId },
-              UpdateExpression:
-                'SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt',
+              UpdateExpression: `SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
               ConditionExpression: '#status = :pending AND #paymentStatus = :notStarted',
               ExpressionAttributeNames: {
                 '#status': 'status',
                 '#paymentStatus': 'paymentStatus',
                 '#failureReason': 'failureReason',
                 '#updatedAt': 'updatedAt',
+                ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
               },
               ExpressionAttributeValues: {
                 ':pending': OrderStatus.PENDING,
@@ -1042,10 +1099,16 @@ export class OrdersService {
                 ':status': OrderStatus.FAILED,
                 ':failureReason': failureReason,
                 ':updatedAt': timestamp,
+                ...toOrderMutationExpressionValues(actor),
               },
             },
           },
-          ...buildReleaseInventoryTransactItems(this.inventoryTableName, inventoryItems, timestamp),
+          ...buildReleaseInventoryTransactItems(
+            this.inventoryTableName,
+            inventoryItems,
+            timestamp,
+            actor,
+          ),
         ],
       }),
     )
@@ -1054,6 +1117,7 @@ export class OrdersService {
   async expireReservationAndReleaseInventoryIfUnpaid(
     order: Order,
     items: ReservedInventoryItem[],
+    actor = systemOrderMutationContext('reservation-expiry-poller', 'Payment expired'),
   ): Promise<boolean> {
     if (!order.paymentExpiresAt) {
       return false
@@ -1075,8 +1139,7 @@ export class OrdersService {
               Update: {
                 TableName: this.ordersTableName,
                 Key: { orderId: order.orderId },
-                UpdateExpression:
-                  'SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt',
+                UpdateExpression: `SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
                 ConditionExpression:
                   '#status = :reserved AND #paymentStatus <> :paid AND #paymentExpiresAt = :paymentExpiresAt',
                 ExpressionAttributeNames: {
@@ -1085,6 +1148,7 @@ export class OrdersService {
                   '#paymentExpiresAt': 'paymentExpiresAt',
                   '#failureReason': 'failureReason',
                   '#updatedAt': 'updatedAt',
+                  ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
                 },
                 ExpressionAttributeValues: {
                   ':reserved': OrderStatus.RESERVED,
@@ -1093,6 +1157,7 @@ export class OrdersService {
                   ':status': OrderStatus.EXPIRED,
                   ':failureReason': PAYMENT_WINDOW_EXPIRED_REASON,
                   ':updatedAt': timestamp,
+                  ...toOrderMutationExpressionValues(actor),
                 },
               },
             },
@@ -1100,6 +1165,7 @@ export class OrdersService {
               this.inventoryTableName,
               inventoryItems,
               timestamp,
+              actor,
             ),
           ],
         }),
@@ -1213,7 +1279,11 @@ export class OrdersService {
     }
   }
 
-  private async handleFailedIpn(order: Order, failureReason: string): Promise<IpnResponse> {
+  private async handleFailedIpn(
+    order: Order,
+    failureReason: string,
+    source: 'ipn' | 'return',
+  ): Promise<IpnResponse> {
     if (order.status !== OrderStatus.RESERVED || order.paymentStatus !== PaymentStatus.PROCESSING) {
       return IpnSuccess
     }
@@ -1226,7 +1296,15 @@ export class OrdersService {
     }
 
     try {
-      await this.markPaymentFailed(order.orderId, order.paymentAttemptId, failureReason)
+      await this.markPaymentFailed(
+        order.orderId,
+        order.paymentAttemptId,
+        failureReason,
+        systemOrderMutationContext(
+          source === 'ipn' ? 'payment-ipn' : 'payment-return',
+          failureReason,
+        ),
+      )
       return IpnSuccess
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
@@ -1239,6 +1317,7 @@ export class OrdersService {
   private async handleLatePaymentSuccess(
     order: Order,
     verify: VerifyIpnCall,
+    source: 'ipn' | 'return',
   ): Promise<IpnResponse> {
     const paymentRequestedAt = order.paymentRequestedAt
     const transactionNo = Number(verify.vnp_TransactionNo)
@@ -1294,6 +1373,10 @@ export class OrdersService {
         order.orderId,
         String(verify.vnp_TransactionNo),
         autoRefundReason,
+        systemOrderMutationContext(
+          source === 'ipn' ? 'payment-ipn' : 'payment-return',
+          autoRefundReason,
+        ),
       )
       return IpnSuccess
     } catch (error) {
@@ -1303,6 +1386,47 @@ export class OrdersService {
       )
       return IpnUnknownError
     }
+  }
+}
+
+function buildUserOrderMutationContext(
+  user: AuthenticatedUser,
+  reason: string,
+): OrderMutationContext {
+  const actorType =
+    user.groups.includes(Role.ADMIN) || user.groups.includes(Role.MANAGER) ? 'admin' : 'customer'
+
+  return {
+    actorType,
+    actorId: user.sub,
+    actorEmail: user.email,
+    reason,
+  }
+}
+
+function systemOrderMutationContext(actorId: string, reason: string): OrderMutationContext {
+  return {
+    actorType: 'system',
+    actorId,
+    reason,
+  }
+}
+
+function toOrderMutationAttributes(actor: OrderMutationContext) {
+  return {
+    lastModifiedByType: actor.actorType,
+    lastModifiedById: actor.actorId,
+    lastModifiedByEmail: actor.actorEmail,
+    lastModifiedReason: actor.reason,
+  }
+}
+
+function toOrderMutationExpressionValues(actor: OrderMutationContext): Record<string, unknown> {
+  return {
+    ':lastModifiedByType': actor.actorType,
+    ':lastModifiedById': actor.actorId ?? 'unknown',
+    ':lastModifiedByEmail': actor.actorEmail ?? 'unknown',
+    ':lastModifiedReason': actor.reason,
   }
 }
 
@@ -1381,22 +1505,25 @@ function buildReleaseInventoryTransactItems(
   inventoryTableName: string,
   items: ReservedInventoryItem[],
   timestamp: string,
+  actor: OrderMutationContext,
 ) {
   return items.map((item) => ({
     Update: {
       TableName: inventoryTableName,
       Key: { productId: item.productId },
       UpdateExpression:
-        'SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt',
+        `SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt, ${ORDER_AUDIT_ACTOR_FIELDS}`,
       ConditionExpression: '#reservedQuantity >= :quantity',
       ExpressionAttributeNames: {
         '#availableQuantity': 'availableQuantity',
         '#reservedQuantity': 'reservedQuantity',
         '#updatedAt': 'updatedAt',
+        ...ORDER_AUDIT_ACTOR_ATTRIBUTE_NAMES,
       },
       ExpressionAttributeValues: {
         ':quantity': item.quantity,
         ':updatedAt': timestamp,
+        ...toOrderMutationExpressionValues(actor),
       },
     },
   }))

@@ -8,13 +8,20 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
-  DeleteCommand,
   GetCommand,
   ScanCommand,
   TransactWriteCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'crypto'
+import {
+  AUDIT_ACTOR_ATTRIBUTE_NAMES,
+  AUDIT_ACTOR_FIELDS,
+  buildUserAuditMutationContext,
+  toAuditMutationAttributes,
+  toAuditMutationExpressionValues,
+} from '../audit/audit-actor'
+import { AuthenticatedUser } from '../auth/auth.types'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { CreateProductDto } from './dto/create-product.dto'
 import { ListProductsQueryDto } from './dto/list-products-query.dto'
@@ -46,9 +53,10 @@ export class ProductsService {
     this.inventoryTableName = configService.get<string>('INVENTORY_TABLE') ?? 'inventory'
   }
 
-  async create(dto: CreateProductDto): Promise<Product> {
+  async create(user: AuthenticatedUser, dto: CreateProductDto): Promise<Product> {
     const timestamp = new Date().toISOString()
     const images = await this.prepareProductImages(dto.images)
+    const actor = buildUserAuditMutationContext(user, 'Product created')
     const product: Product = {
       productId: randomUUID(),
       name: dto.name,
@@ -61,12 +69,17 @@ export class ProductsService {
       status: dto.status ?? ProductStatus.ACTIVE,
       createdAt: timestamp,
       updatedAt: timestamp,
+      ...toAuditMutationAttributes(actor),
     }
     const inventory = {
       productId: product.productId,
       availableQuantity: dto.availableQuantity ?? 0,
       reservedQuantity: 0,
       updatedAt: timestamp,
+      ...toAuditMutationAttributes({
+        ...actor,
+        reason: 'Initial inventory created',
+      }),
     }
 
     try {
@@ -177,13 +190,14 @@ export class ProductsService {
         Key: { productId },
       }),
     )
-    if (!response.Item) {
+    const product = response.Item as Product | undefined
+    if (!product || product.status === ProductStatus.DELETED) {
       throw new NotFoundException(`Product ${productId} was not found.`)
     }
-    return response.Item as Product
+    return product
   }
 
-  async update(productId: string, dto: UpdateProductDto): Promise<Product> {
+  async update(user: AuthenticatedUser, productId: string, dto: UpdateProductDto): Promise<Product> {
     const existingProduct = await this.findStoredOne(productId)
     const { images, ...productFieldUpdates } = dto
     const updates: Partial<Product> = { ...productFieldUpdates }
@@ -197,12 +211,17 @@ export class ProductsService {
     }
 
     const timestamp = new Date().toISOString()
+    const actor = buildUserAuditMutationContext(user, 'Product updated')
     const expressionAttributeNames: Record<string, string> = {
       '#productId': 'productId',
+      '#status': 'status',
       '#updatedAt': 'updatedAt',
+      ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
     }
     const expressionAttributeValues: Record<string, unknown> = {
+      ':deleted': ProductStatus.DELETED,
       ':updatedAt': timestamp,
+      ...toAuditMutationExpressionValues(actor),
     }
     const updateParts = mutableFields.map(([field, value]) => {
       const nameKey = `#${field}`
@@ -212,6 +231,7 @@ export class ProductsService {
       return `${nameKey} = ${valueKey}`
     })
     updateParts.push('#updatedAt = :updatedAt')
+    updateParts.push(AUDIT_ACTOR_FIELDS)
 
     try {
       const response = await this.dynamoDbService.documentClient.send(
@@ -219,7 +239,7 @@ export class ProductsService {
           TableName: this.tableName,
           Key: { productId },
           UpdateExpression: `SET ${updateParts.join(', ')}`,
-          ConditionExpression: 'attribute_exists(#productId)',
+          ConditionExpression: 'attribute_exists(#productId) AND #status <> :deleted',
           ExpressionAttributeNames: expressionAttributeNames,
           ExpressionAttributeValues: expressionAttributeValues,
           ReturnValues: 'ALL_NEW',
@@ -241,16 +261,31 @@ export class ProductsService {
     }
   }
 
-  async remove(productId: string): Promise<void> {
+  async remove(user: AuthenticatedUser, productId: string): Promise<void> {
     const existingProduct = await this.findStoredOne(productId)
+    const timestamp = new Date().toISOString()
+    const actor = buildUserAuditMutationContext(user, 'Product deleted')
 
     try {
       await this.dynamoDbService.documentClient.send(
-        new DeleteCommand({
+        new UpdateCommand({
           TableName: this.tableName,
           Key: { productId },
-          ConditionExpression: 'attribute_exists(#productId)',
-          ExpressionAttributeNames: { '#productId': 'productId' },
+          UpdateExpression: `SET #status = :deleted, #deletedAt = :deletedAt, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
+          ConditionExpression: 'attribute_exists(#productId) AND #status <> :deleted',
+          ExpressionAttributeNames: {
+            '#productId': 'productId',
+            '#status': 'status',
+            '#deletedAt': 'deletedAt',
+            '#updatedAt': 'updatedAt',
+            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
+          },
+          ExpressionAttributeValues: {
+            ':deleted': ProductStatus.DELETED,
+            ':deletedAt': timestamp,
+            ':updatedAt': timestamp,
+            ...toAuditMutationExpressionValues(actor),
+          },
         }),
       )
       await this.uploadService.deleteObjectsBestEffort(getProductImageKeys(existingProduct.images))
@@ -461,9 +496,9 @@ function toCursorScope(filters: ProductFilters): CursorScope {
 }
 
 function buildProductFilterExpression(filters: ProductFilters): ProductFilterExpression {
-  const expressions: string[] = []
-  const names: Record<string, string> = {}
-  const values: Record<string, unknown> = {}
+  const expressions: string[] = ['#status <> :deletedStatus']
+  const names: Record<string, string> = { '#status': 'status' }
+  const values: Record<string, unknown> = { ':deletedStatus': ProductStatus.DELETED }
 
   if (filters.categoryId) {
     names['#categoryId'] = 'categoryId'
@@ -471,7 +506,6 @@ function buildProductFilterExpression(filters: ProductFilters): ProductFilterExp
     expressions.push('#categoryId = :categoryId')
   }
   if (filters.status) {
-    names['#status'] = 'status'
     values[':status'] = filters.status
     expressions.push('#status = :status')
   }
@@ -508,10 +542,6 @@ function buildProductFilterExpression(filters: ProductFilters): ProductFilterExp
     names['#description'] = 'description'
     values[':q'] = filters.q
     expressions.push('(contains(#name, :q) OR contains(#description, :q))')
-  }
-
-  if (expressions.length === 0) {
-    return {}
   }
 
   return {
