@@ -15,8 +15,10 @@ async function main(): Promise<void> {
   testProductModifyDiff()
   testObjectKeyOrderDoesNotCreateDiff()
   testArrayOrderStillCreatesDiff()
+  testKeyedArrayFieldDiff()
   testUserPlaintextPiiDiff()
   testUserAddressDiff()
+  testUserAddressLeafDiff()
   testNonAllowlistedChanges()
   testSoftDeleteModify()
   testPipeWrappedRecordParsing()
@@ -120,6 +122,38 @@ function testArrayOrderStillCreatesDiff(): void {
   })
 }
 
+function testKeyedArrayFieldDiff(): void {
+  const diff = buildAuditDiff(
+    'MODIFY',
+    {
+      images: [
+        { key: 'front.jpg', sortOrder: 1, isPrimary: true },
+        { key: 'back.jpg', sortOrder: 2, isPrimary: false },
+      ],
+    },
+    {
+      images: [
+        { key: 'front.jpg', sortOrder: 1, isPrimary: false },
+        { key: 'back.jpg', sortOrder: 2, isPrimary: true },
+      ],
+    },
+    ['images'],
+  )
+
+  assert.deepEqual(diff, {
+    images: {
+      before: [
+        { key: 'front.jpg', isPrimary: true },
+        { key: 'back.jpg', isPrimary: false },
+      ],
+      after: [
+        { key: 'front.jpg', isPrimary: false },
+        { key: 'back.jpg', isPrimary: true },
+      ],
+    },
+  })
+}
+
 function testUserPlaintextPiiDiff(): void {
   const item = buildAuditLogItem({
     entityType: 'USER_ACCOUNT',
@@ -179,11 +213,71 @@ function testUserAddressDiff(): void {
   assert.deepEqual(item?.diff.address, {
     before: {
       line1: '123 Old',
-      location: { city: 'HCMC', district: 'District 1' },
+      location: { district: 'District 1' },
     },
     after: {
       line1: '456 New',
-      location: { city: 'HCMC', district: 'District 3' },
+      location: { district: 'District 3' },
+    },
+  })
+}
+
+function testUserAddressLeafDiff(): void {
+  const item = buildAuditLogItem({
+    entityType: 'USER_ACCOUNT',
+    sourceTable: 'user-accounts',
+    record: {
+      eventID: 'event-user-address-leaf',
+      eventName: 'MODIFY',
+      dynamodb: {
+        OldImage: {
+          userId: { S: 'user-1' },
+          address: {
+            M: {
+              line1: { S: 'Duong Quang Ham' },
+              phone: { S: '08622886221' },
+              recipientName: { S: 'Phú Lộc' },
+              notes: { S: 'ko co j het' },
+              location: {
+                M: {
+                  city: { S: 'Ho Chi Minh City 12' },
+                  district: { S: 'Go Vap 123' },
+                  ward: { S: 'An Nhon 123' },
+                },
+              },
+            },
+          },
+        },
+        NewImage: {
+          userId: { S: 'user-1' },
+          address: {
+            M: {
+              line1: { S: 'Duong Quang Ham' },
+              phone: { S: '08622886222' },
+              recipientName: { S: 'Phú Lộc 123' },
+              notes: { S: 'ko co j het' },
+              location: {
+                M: {
+                  city: { S: 'Ho Chi Minh City 12' },
+                  district: { S: 'Go Vap 123' },
+                  ward: { S: 'An Nhon 123' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  assert.deepEqual(item?.diff.address, {
+    before: {
+      phone: '08622886221',
+      recipientName: 'Phú Lộc',
+    },
+    after: {
+      phone: '08622886222',
+      recipientName: 'Phú Lộc 123',
     },
   })
 }

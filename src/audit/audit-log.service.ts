@@ -22,6 +22,7 @@ type AuditEventName = 'INSERT' | 'MODIFY' | 'REMOVE'
 type AuditActorType = 'customer' | 'admin' | 'system' | 'unknown'
 type AuditFieldChange = { before?: unknown; after?: unknown }
 type AuditDiff = Record<string, AuditFieldChange>
+const ARRAY_KEY_FIELDS = ['id', 'key', 'productId', 'lineId', 'userId'] as const
 
 interface AuditEntityConfig {
   idFields: string[]
@@ -309,11 +310,9 @@ export function buildAuditDiff(
       continue
     }
 
-    if (!isSameValue(before, after)) {
-      diff[field] = {
-        ...(before !== undefined ? { before } : {}),
-        ...(after !== undefined ? { after } : {}),
-      }
+    const change = buildChangedValuePair(before, after)
+    if (change) {
+      diff[field] = change
     }
   }
 
@@ -512,6 +511,204 @@ function isSameValue(left: unknown, right: unknown): boolean {
   }
 
   return true
+}
+
+function buildChangedValuePair(before: unknown, after: unknown): AuditFieldChange | undefined {
+  if (isSameValue(before, after)) {
+    return undefined
+  }
+
+  if (isPlainObject(before) && isPlainObject(after)) {
+    return buildObjectChange(before, after)
+  }
+
+  if (Array.isArray(before) && Array.isArray(after)) {
+    return (
+      buildArrayChange(before, after) ?? {
+        before,
+        after,
+      }
+    )
+  }
+
+  return {
+    ...(before !== undefined ? { before } : {}),
+    ...(after !== undefined ? { after } : {}),
+  }
+}
+
+function buildObjectChange(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): AuditFieldChange | undefined {
+  const beforePatch: Record<string, unknown> = {}
+  const afterPatch: Record<string, unknown> = {}
+  let changed = false
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+
+  for (const key of keys) {
+    const childChange = buildChangedValuePair(before[key], after[key])
+    if (!childChange) {
+      continue
+    }
+
+    changed = true
+    if ('before' in childChange) {
+      beforePatch[key] = childChange.before
+    }
+    if ('after' in childChange) {
+      afterPatch[key] = childChange.after
+    }
+  }
+
+  if (!changed) {
+    return undefined
+  }
+
+  return {
+    before: beforePatch,
+    after: afterPatch,
+  }
+}
+
+function buildArrayChange(before: unknown[], after: unknown[]): AuditFieldChange | undefined {
+  if (!canUseKeyedArrayDiff(before, after)) {
+    return undefined
+  }
+
+  if (hasCommonArrayKeyReorder(before, after)) {
+    return undefined
+  }
+
+  const beforeByKey = new Map(
+    before.map((item) => {
+      const key = readArrayItemKey(item)
+      return [key.token, { item, key }] as const
+    }),
+  )
+  const afterByKey = new Map(
+    after.map((item) => {
+      const key = readArrayItemKey(item)
+      return [key.token, { item, key }] as const
+    }),
+  )
+  const keys = Array.from(new Set([...beforeByKey.keys(), ...afterByKey.keys()])).sort(
+    (left, right) => {
+      const leftIndex = readArrayKeyIndex(left, before, after)
+      const rightIndex = readArrayKeyIndex(right, before, after)
+      return leftIndex - rightIndex
+    },
+  )
+  const beforePatch: unknown[] = []
+  const afterPatch: unknown[] = []
+
+  for (const key of keys) {
+    const beforeEntry = beforeByKey.get(key)
+    const afterEntry = afterByKey.get(key)
+
+    if (!beforeEntry) {
+      afterPatch.push(afterEntry?.item)
+      continue
+    }
+
+    if (!afterEntry) {
+      beforePatch.push(beforeEntry.item)
+      continue
+    }
+
+    const childChange = buildChangedValuePair(beforeEntry.item, afterEntry.item)
+    if (!childChange) {
+      continue
+    }
+
+    if ('before' in childChange) {
+      beforePatch.push(ensureArrayItemKey(childChange.before, beforeEntry.key))
+    }
+    if ('after' in childChange) {
+      afterPatch.push(ensureArrayItemKey(childChange.after, afterEntry.key))
+    }
+  }
+
+  if (beforePatch.length === 0 && afterPatch.length === 0) {
+    return undefined
+  }
+
+  return {
+    before: beforePatch,
+    after: afterPatch,
+  }
+}
+
+function canUseKeyedArrayDiff(before: unknown[], after: unknown[]): boolean {
+  const items = [...before, ...after]
+  if (items.length === 0 || !items.every(isPlainObject)) {
+    return false
+  }
+
+  const beforeKeys = before.map((item) => readArrayItemKey(item).token)
+  const afterKeys = after.map((item) => readArrayItemKey(item).token)
+
+  return (
+    beforeKeys.every(Boolean) &&
+    afterKeys.every(Boolean) &&
+    new Set(beforeKeys).size === beforeKeys.length &&
+    new Set(afterKeys).size === afterKeys.length
+  )
+}
+
+function hasCommonArrayKeyReorder(before: unknown[], after: unknown[]): boolean {
+  const afterKeys = new Set(after.map((item) => readArrayItemKey(item).token))
+  const beforeCommonKeys = before
+    .map((item) => readArrayItemKey(item).token)
+    .filter((key) => afterKeys.has(key))
+  const beforeKeys = new Set(beforeCommonKeys)
+  const afterCommonKeys = after
+    .map((item) => readArrayItemKey(item).token)
+    .filter((key) => beforeKeys.has(key))
+
+  return !isSameValue(beforeCommonKeys, afterCommonKeys)
+}
+
+function readArrayKeyIndex(key: string, before: unknown[], after: unknown[]): number {
+  const beforeIndex = before.findIndex((item) => readArrayItemKey(item).token === key)
+  if (beforeIndex >= 0) {
+    return beforeIndex
+  }
+
+  return after.findIndex((item) => readArrayItemKey(item).token === key)
+}
+
+function readArrayItemKey(item: unknown): { field: string; value: string | number; token: string } {
+  if (!isPlainObject(item)) {
+    return { field: '', value: '', token: '' }
+  }
+
+  for (const field of ARRAY_KEY_FIELDS) {
+    const value = item[field]
+    if (typeof value === 'string' || typeof value === 'number') {
+      return { field, value, token: `${field}:${value}` }
+    }
+  }
+
+  return { field: '', value: '', token: '' }
+}
+
+function ensureArrayItemKey(
+  value: unknown,
+  key: { field: string; value: string | number },
+): unknown {
+  if (!isPlainObject(value) || key.field in value) {
+    return value
+  }
+
+  return {
+    [key.field]: key.value,
+    ...value,
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function isConditionalCheckFailure(error: unknown): boolean {

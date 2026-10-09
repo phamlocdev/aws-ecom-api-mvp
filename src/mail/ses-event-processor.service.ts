@@ -162,7 +162,7 @@ export class SesEventProcessorService {
   }
 }
 
-function buildEventUpdate(
+function  buildEventUpdate(
   event: SesSnsEvent,
   timestamp: string,
   recipientEmail: string,
