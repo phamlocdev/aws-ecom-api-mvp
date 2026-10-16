@@ -42,6 +42,7 @@ export class ServerStack extends cdk.Stack {
       userAccountsTable: data.userAccountsTable,
       userLoginAuditTable: data.userLoginAuditTable,
     })
+
     if (notification.createdDomainIdentity) {
       auth.userPool.node.addDependency(notification.createdDomainIdentity)
     }

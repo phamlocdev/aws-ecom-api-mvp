@@ -15,6 +15,12 @@ export class ProductResponseDto {
   @ApiProperty()
   categoryId!: string
 
+  @ApiPropertyOptional({
+    type: () => ProductCategorySummaryResponseDto,
+    description: 'Denormalized category summary, resolved server-side via BatchGetItem.',
+  })
+  category?: ProductCategorySummaryResponseDto
+
   @ApiProperty({ example: 1299000 })
   price!: number
 
@@ -35,6 +41,14 @@ export class ProductResponseDto {
 
   @ApiProperty({ format: 'date-time' })
   updatedAt!: string
+}
+
+export class ProductCategorySummaryResponseDto {
+  @ApiProperty({ example: 'electronics' })
+  categoryId!: string
+
+  @ApiProperty({ example: 'Thiết bị điện tử' })
+  name!: string
 }
 
 export class ProductImageResponseDto {

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
+  BatchGetCommand,
   GetCommand,
   PutCommand,
   ScanCommand,
@@ -103,6 +104,48 @@ export class CategoriesService {
     return category
   }
 
+  /**
+   * Fetches categories by key in batches (BatchGetItem allows at most 100 keys per
+   * request), used to enrich product list responses without scanning the whole table.
+   */
+  async batchGetByIds(categoryIds: string[]): Promise<Category[]> {
+    const uniqueIds = [...new Set(categoryIds)]
+    if (uniqueIds.length === 0) {
+      return []
+    }
+
+    const chunks: string[][] = []
+    for (let i = 0; i < uniqueIds.length; i += BATCH_GET_CHUNK_SIZE) {
+      chunks.push(uniqueIds.slice(i, i + BATCH_GET_CHUNK_SIZE))
+    }
+
+    const chunkResults = await Promise.all(chunks.map((chunk) => this.batchGetChunk(chunk)))
+    return chunkResults.flat()
+  }
+
+  private async batchGetChunk(categoryIds: string[]): Promise<Category[]> {
+    const items: Category[] = []
+    let keys = categoryIds.map((categoryId) => ({ categoryId }))
+    let attempts = 0
+
+    while (keys.length > 0 && attempts < MAX_UNPROCESSED_KEY_RETRIES) {
+      const response = await this.dynamoDbService.documentClient.send(
+        new BatchGetCommand({
+          RequestItems: {
+            [this.tableName]: { Keys: keys },
+          },
+        }),
+      )
+
+      items.push(...((response.Responses?.[this.tableName] ?? []) as Category[]))
+      const unprocessedKeys = response.UnprocessedKeys?.[this.tableName]?.Keys
+      keys = (unprocessedKeys ?? []) as { categoryId: string }[]
+      attempts += 1
+    }
+
+    return items
+  }
+
   async update(
     user: AuthenticatedUser,
     categoryId: string,
@@ -191,6 +234,9 @@ export class CategoriesService {
     }
   }
 }
+
+const BATCH_GET_CHUNK_SIZE = 100
+const MAX_UNPROCESSED_KEY_RETRIES = 3
 
 function isConditionalCheckFailure(error: unknown): boolean {
   return (

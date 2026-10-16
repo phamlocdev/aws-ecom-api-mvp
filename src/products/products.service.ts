@@ -23,6 +23,7 @@ import {
 } from '../audit/audit-actor'
 import { AuthenticatedUser } from '../auth/auth.types'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
+import { CategoriesService } from '../categories/categories.service'
 import { CreateProductDto } from './dto/create-product.dto'
 import { ListProductsQueryDto } from './dto/list-products-query.dto'
 import { UpdateProductDto } from './dto/update-product.dto'
@@ -46,6 +47,8 @@ export class ProductsService {
     private readonly uploadService: UploadService,
     @Inject(ProductEventsPublisher)
     private readonly productEventsPublisher: ProductEventsPublisher,
+    @Inject(CategoriesService)
+    private readonly categoriesService: CategoriesService,
     @Inject(ConfigService)
     configService: ConfigService,
   ) {
@@ -167,12 +170,35 @@ export class ProductsService {
       // Và chưa lấy đủ số LIMIT frontend yêu cầu
     } while (items.length < pagination.limit && lastEvaluatedKey)
 
-    const enrichedItems = await this.withPrimaryImageReadUrls(items)
+    const itemsWithImages = await this.withPrimaryImageReadUrls(items)
+    const enrichedItems = await this.withCategories(itemsWithImages)
 
     return {
       ...toPaginatedResponse('products', pagination, enrichedItems, lastEvaluatedKey),
       scannedCount,
     }
+  }
+
+  /**
+   * Enriches a page of products with their category name using BatchGetItem on the
+   * distinct categoryIds in the page, instead of making the client fetch and join the
+   * full categories list itself.
+   */
+  private async withCategories(products: Product[]): Promise<Product[]> {
+    const categoryIds = [...new Set(products.map((product) => product.categoryId))]
+    if (categoryIds.length === 0) {
+      return products
+    }
+
+    const categories = await this.categoriesService.batchGetByIds(categoryIds)
+    const categoryById = new Map(categories.map((category) => [category.categoryId, category]))
+
+    return products.map((product) => {
+      const category = categoryById.get(product.categoryId)
+      return category
+        ? { ...product, category: { categoryId: category.categoryId, name: category.name } }
+        : product
+    })
   }
 
   async findOne(productId: string): Promise<Product> {

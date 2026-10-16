@@ -164,6 +164,13 @@ export async function runIdempotentEventConsumer(
   input: EventConsumerClaimInput,
   sideEffect: () => Promise<void>,
 ): Promise<EventConsumerClaimResultStatus> {
+  // DEMO ONLY: lets us reproduce the duplicate-processing bug on purpose by
+  // bypassing the idempotency claim. Never set in infra; must stay unset in production.
+  if (process.env.DISABLE_EVENT_CONSUMER_IDEMPOTENCY === 'true') {
+    await sideEffect()
+    return 'CLAIMED'
+  }
+
   const claim = await claimOnce(input)
   if (claim.status === 'DUPLICATE') {
     console.log(

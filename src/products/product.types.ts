@@ -9,11 +9,17 @@ export interface ProductImage {
   readUrlExpiresInSeconds?: number
 }
 
+export interface ProductCategorySummary {
+  categoryId: string
+  name: string
+}
+
 export interface Product {
   productId: string
   name: string
   description: string
   categoryId: string
+  category?: ProductCategorySummary
   price: number
   currency: 'VND'
   imageUrl?: string
