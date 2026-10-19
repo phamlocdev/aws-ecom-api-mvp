@@ -5,7 +5,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import {
   DeleteCommand,
   GetCommand,
@@ -15,6 +14,7 @@ import {
 } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'crypto'
 import { AuthenticatedUser } from '../auth/auth.types'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { CartStatus } from './cart-status.enum'
 import { Cart, CartDetails, CartItem } from './cart.types'
@@ -32,11 +32,11 @@ export class CartsService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.cartsTableName = configService.get<string>('CARTS_TABLE') ?? 'carts'
-    this.cartItemsTableName = configService.get<string>('CART_ITEMS_TABLE') ?? 'cart-items'
+    this.cartsTableName = dynamoTables.carts
+    this.cartItemsTableName = dynamoTables.cartItems
   }
 
   async create(user: AuthenticatedUser, dto: CreateCartDto): Promise<Cart> {

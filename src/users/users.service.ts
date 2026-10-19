@@ -30,6 +30,7 @@ import {
 } from '../audit/audit-actor'
 import { normalizePermissions, Permission } from '../auth/permissions'
 import { AuthenticatedUser } from '../auth/auth.types'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { EmailTrackingService } from '../mail/email-tracking.service'
 import { EmailDeliveryStatistics, EmailTrackingView } from '../mail/mail.types'
@@ -61,6 +62,7 @@ export class UsersService {
 
   constructor(
     @Inject(ConfigService) configService: ConfigService,
+    @Inject(DynamoTablesService) dynamoTables: DynamoTablesService,
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
     @Inject(EmailTrackingService)
@@ -71,9 +73,8 @@ export class UsersService {
     private readonly uploadService: UploadService,
   ) {
     this.userPoolId = configService.get<string>('COGNITO_USER_POOL_ID') ?? ''
-    this.userAccountsTableName = configService.get<string>('USER_ACCOUNTS_TABLE') ?? 'user-accounts'
-    this.userLoginAuditTableName =
-      configService.get<string>('USER_LOGIN_AUDIT_TABLE') ?? 'user-login-audit'
+    this.userAccountsTableName = dynamoTables.userAccounts
+    this.userLoginAuditTableName = dynamoTables.userLoginAudit
 
     const region =
       configService.get<string>('AWS_REGION') ??

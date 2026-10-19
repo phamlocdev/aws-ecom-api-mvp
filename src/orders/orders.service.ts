@@ -20,6 +20,7 @@ import { AuthenticatedUser } from '../auth/auth.types'
 import { Role } from '../auth/roles.enum'
 import { CartsService } from '../carts/carts.service'
 import { CartStatus } from '../carts/cart-status.enum'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { InventoryService } from '../inventory/inventory.service'
 import { ReservedInventoryItem } from '../inventory/inventory.types'
@@ -111,10 +112,12 @@ export class OrdersService {
     private readonly vnpayService: VnpayService,
     @Inject(ConfigService)
     configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.ordersTableName = configService.get<string>('ORDERS_TABLE') ?? 'orders'
-    this.orderItemsTableName = configService.get<string>('ORDER_ITEMS_TABLE') ?? 'order-items'
-    this.inventoryTableName = configService.get<string>('INVENTORY_TABLE') ?? 'inventory'
+    this.ordersTableName = dynamoTables.orders
+    this.orderItemsTableName = dynamoTables.orderItems
+    this.inventoryTableName = dynamoTables.inventory
     this.paymentConfirmationTimeoutSeconds = Number(
       configService.getOrThrow<number>('PAYMENT_CONFIRMATION_SECONDS_TIMEOUT'),
     )

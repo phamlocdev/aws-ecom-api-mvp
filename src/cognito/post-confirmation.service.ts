@@ -6,6 +6,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider'
 import { PutCommand } from '@aws-sdk/lib-dynamodb'
 import type { PostConfirmationTriggerEvent } from 'aws-lambda'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { SesMailService } from '../mail/ses-mail.service'
 
@@ -18,13 +19,14 @@ export class PostConfirmationService {
 
   constructor(
     @Inject(ConfigService) configService: ConfigService,
+    @Inject(DynamoTablesService) dynamoTables: DynamoTablesService,
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
     @Inject(SesMailService)
     private readonly sesMailService: SesMailService,
   ) {
     this.defaultGroup = configService.get<string>('COGNITO_DEFAULT_GROUP') ?? 'customer'
-    this.userAccountsTableName = configService.get<string>('USER_ACCOUNTS_TABLE') ?? 'user-accounts'
+    this.userAccountsTableName = dynamoTables.userAccounts
     const region =
       configService.get<string>('AWS_REGION') ??
       configService.get<string>('AWS_DEFAULT_REGION') ??

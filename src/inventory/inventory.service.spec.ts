@@ -1,7 +1,7 @@
-import { ConfigService } from '@nestjs/config'
-import { ConflictException } from '@nestjs/common'
 import { mockClient } from 'aws-sdk-client-mock'
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { ConflictError } from '../common/domain-error'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { InventoryService } from './inventory.service'
 
@@ -19,11 +19,12 @@ describe('InventoryService.reserve / release', () => {
       documentClient: ddbMock as unknown as DynamoDBDocumentClient,
     } as unknown as DynamoDbService
 
-    const configService = {
-      get: (key: string) => (key === 'INVENTORY_TABLE' ? 'inventory-test' : 'products-test'),
-    } as unknown as ConfigService
+    const dynamoTables = {
+      inventory: 'inventory-test',
+      products: 'products-test',
+    } as unknown as DynamoTablesService
 
-    service = new InventoryService(dynamoDbService, configService)
+    service = new InventoryService(dynamoDbService, dynamoTables)
   })
 
   it('reserves stock with a conditional UpdateCommand requiring enough availableQuantity', async () => {
@@ -41,7 +42,7 @@ describe('InventoryService.reserve / release', () => {
     expect(input.ExpressionAttributeValues).toMatchObject({ ':quantity': 3 })
   })
 
-  it('throws ConflictException when DynamoDB rejects the reservation (insufficient stock)', async () => {
+  it('throws ConflictError when DynamoDB rejects the reservation (insufficient stock)', async () => {
     ddbMock
       .on(GetCommand)
       .resolves({ Item: { productId: 'p1', availableQuantity: 1, reservedQuantity: 0 } })
@@ -51,7 +52,7 @@ describe('InventoryService.reserve / release', () => {
       }),
     )
 
-    await expect(service.reserve('p1', 5)).rejects.toThrow(ConflictException)
+    await expect(service.reserve('p1', 5)).rejects.toThrow(ConflictError)
   })
 
   it('releases reserved stock with a conditional UpdateCommand requiring enough reservedQuantity', async () => {

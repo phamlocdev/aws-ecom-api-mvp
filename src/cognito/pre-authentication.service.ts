@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import type { PreAuthenticationTriggerEvent } from 'aws-lambda'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { UserAccountStatus } from '../users/user.types'
 
@@ -18,11 +18,11 @@ export class PreAuthenticationService {
   private readonly userAccountsTableName: string
 
   constructor(
-    @Inject(ConfigService) configService: ConfigService,
+    @Inject(DynamoTablesService) dynamoTables: DynamoTablesService,
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
   ) {
-    this.userAccountsTableName = configService.get<string>('USER_ACCOUNTS_TABLE') ?? 'user-accounts'
+    this.userAccountsTableName = dynamoTables.userAccounts
   }
 
   async handle(event: PreAuthenticationTriggerEvent): Promise<PreAuthenticationTriggerEvent> {

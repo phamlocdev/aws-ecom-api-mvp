@@ -30,7 +30,6 @@ import { ResendEmailRecipientDto } from '../mail/dto/resend-email-recipient.dto'
 import { EmailDeliveryStatistics } from '../mail/mail.types'
 import { EmailType } from '../mail/mail.types'
 import { PaginatedResponse } from '../pagination/pagination.types'
-import { DtoValidationPipe } from '../validation/dto-validation.pipe'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto'
 import {
@@ -55,7 +54,7 @@ export class OrdersController {
   @ApiAcceptedResponse({ type: PlaceOrderResponseDto })
   async create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new DtoValidationPipe(CreateOrderDto)) dto: CreateOrderDto,
+    @Body() dto: CreateOrderDto,
   ): Promise<PlaceOrderResponseDto> {
     const order = await this.ordersService.createOrderRequest(user, dto)
     return {
@@ -72,7 +71,7 @@ export class OrdersController {
   @ApiOkResponse({ type: PaginatedOrderResponseDto })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query(new DtoValidationPipe(ListOrdersQueryDto)) query: ListOrdersQueryDto,
+    @Query() query: ListOrdersQueryDto,
   ): Promise<PaginatedResponse<Order>> {
     const page = await this.ordersService.findAll(user, query)
     return {
@@ -121,7 +120,7 @@ export class OrdersController {
   async updateStatus(
     @CurrentUser() user: AuthenticatedUser,
     @Param('orderId') orderId: string,
-    @Body(new DtoValidationPipe(UpdateOrderStatusDto)) dto: UpdateOrderStatusDto,
+    @Body() dto: UpdateOrderStatusDto,
   ): Promise<Order> {
     const order = await this.ordersService.updateOrderStatus(user, orderId, dto.status)
     return stripOrderMutationContext(order)
@@ -141,7 +140,7 @@ export class OrdersController {
   resendFailedOrderEmail(
     @Param('orderId') orderId: string,
     @Param('emailType') emailType: EmailType,
-    @Body(new DtoValidationPipe(ResendEmailRecipientDto)) dto: ResendEmailRecipientDto,
+    @Body() dto: ResendEmailRecipientDto,
   ): Promise<ResendOrderEmailResult> {
     return this.ordersService.resendFailedOrderEmail(orderId, emailType, dto.recipientEmail)
   }

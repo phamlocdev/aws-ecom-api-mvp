@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'crypto'
 import type { PostAuthenticationTriggerEvent } from 'aws-lambda'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 
 const AUDIT_RETENTION_SECONDS = 90 * 24 * 60 * 60
@@ -14,13 +14,12 @@ export class PostAuthenticationService {
   private readonly userLoginAuditTableName: string
 
   constructor(
-    @Inject(ConfigService) configService: ConfigService,
+    @Inject(DynamoTablesService) dynamoTables: DynamoTablesService,
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
   ) {
-    this.userAccountsTableName = configService.get<string>('USER_ACCOUNTS_TABLE') ?? 'user-accounts'
-    this.userLoginAuditTableName =
-      configService.get<string>('USER_LOGIN_AUDIT_TABLE') ?? 'user-login-audit'
+    this.userAccountsTableName = dynamoTables.userAccounts
+    this.userLoginAuditTableName = dynamoTables.userLoginAudit
   }
 
   async handle(event: PostAuthenticationTriggerEvent): Promise<PostAuthenticationTriggerEvent> {

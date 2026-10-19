@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import {
   GetCommand,
   PutCommand,
@@ -8,6 +7,7 @@ import {
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { createHash, randomUUID } from 'crypto'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import {
   EMAIL_DELIVERY_STATUSES,
@@ -30,10 +30,10 @@ export class EmailTrackingService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.tableName = configService.get<string>('EMAIL_TRACKING_TABLE') ?? 'email-tracking'
+    this.tableName = dynamoTables.emailTracking
   }
 
   async hasActiveOrderConfirmationTracking(orderId: string): Promise<boolean> {

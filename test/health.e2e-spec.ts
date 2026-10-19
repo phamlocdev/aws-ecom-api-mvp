@@ -4,6 +4,7 @@ import request from 'supertest'
 import { HealthModule } from '../src/health/health.module'
 import { DynamoDbModule } from '../src/dynamodb/dynamodb.module'
 import { DynamoDbService } from '../src/dynamodb/dynamodb.service'
+import { DynamoTablesService } from '../src/config/dynamo-tables.service'
 
 // Baseline e2e smoke test for Giai đoạn 0: confirms the HTTP contract of
 // GET /health (200 when DynamoDB is reachable, 503 otherwise) before any
@@ -20,6 +21,8 @@ describe('Health (e2e)', () => {
     })
       .overrideProvider(DynamoDbService)
       .useValue({ checkConnection })
+      .overrideProvider(DynamoTablesService)
+      .useValue({})
       .compile()
 
     app = moduleRef.createNestApplication()

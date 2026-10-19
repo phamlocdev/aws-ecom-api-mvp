@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { EmailTrackingService } from '../mail/email-tracking.service'
 import { SesMailService } from '../mail/ses-mail.service'
@@ -31,11 +31,11 @@ export class OrderNotificationWorkerService {
     private readonly emailTrackingService: EmailTrackingService,
     @Inject(SesMailService)
     private readonly sesMailService: SesMailService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.ordersTableName = configService.get<string>('ORDERS_TABLE') ?? 'orders'
-    this.orderItemsTableName = configService.get<string>('ORDER_ITEMS_TABLE') ?? 'order-items'
+    this.ordersTableName = dynamoTables.orders
+    this.orderItemsTableName = dynamoTables.orderItems
   }
 
   async handleOrderShippedEvent(detail: OrderShippedNotificationEventDetail): Promise<void> {

@@ -37,7 +37,6 @@ import { UpdateProductDto } from './dto/update-product.dto'
 import { ProductsService } from './products.service'
 import { Product } from './product.types'
 import { PaginatedResponse } from '../pagination/pagination.types'
-import { DtoValidationPipe } from '../validation/dto-validation.pipe'
 
 @ApiTags('products')
 @Controller('products')
@@ -53,7 +52,7 @@ export class ProductsController {
   @ApiConflictResponse({ description: 'Generated ID already exists.' })
   create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new DtoValidationPipe(CreateProductDto)) dto: CreateProductDto,
+    @Body() dto: CreateProductDto,
   ): Promise<Product> {
     return this.productsService.create(user, dto)
   }
@@ -107,7 +106,7 @@ export class ProductsController {
   })
   @ApiOkResponse({ type: PaginatedProductResponseDto })
   findAll(
-    @Query(new DtoValidationPipe(ListProductsQueryDto)) query: ListProductsQueryDto,
+    @Query() query: ListProductsQueryDto,
   ): Promise<PaginatedResponse<Product>> {
     return this.productsService.findAll(query)
   }
@@ -133,7 +132,7 @@ export class ProductsController {
   update(
     @CurrentUser() user: AuthenticatedUser,
     @Param('productId') productId: string,
-    @Body(new DtoValidationPipe(UpdateProductDto)) dto: UpdateProductDto,
+    @Body() dto: UpdateProductDto,
   ): Promise<Product> {
     return this.productsService.update(user, productId, dto)
   }

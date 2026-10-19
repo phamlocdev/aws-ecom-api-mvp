@@ -36,7 +36,6 @@ import { CreateCategoryDto } from './dto/create-category.dto'
 import { UpdateCategoryDto } from './dto/update-category.dto'
 import { PaginationQueryDto } from '../pagination/pagination-query.dto'
 import { PaginatedResponse } from '../pagination/pagination.types'
-import { DtoValidationPipe } from '../validation/dto-validation.pipe'
 
 @ApiTags('categories')
 @Controller('categories')
@@ -52,7 +51,7 @@ export class CategoriesController {
   @ApiConflictResponse({ description: 'categoryId already exists.' })
   create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new DtoValidationPipe(CreateCategoryDto)) dto: CreateCategoryDto,
+    @Body() dto: CreateCategoryDto,
   ): Promise<Category> {
     return this.categoriesService.create(user, dto)
   }
@@ -63,7 +62,7 @@ export class CategoriesController {
   @ApiOperation({ summary: 'List categories' })
   @ApiOkResponse({ type: PaginatedCategoryResponseDto })
   findAll(
-    @Query(new DtoValidationPipe(PaginationQueryDto)) query: PaginationQueryDto,
+    @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponse<Category>> {
     return this.categoriesService.findAll(query)
   }
@@ -89,7 +88,7 @@ export class CategoriesController {
   update(
     @CurrentUser() user: AuthenticatedUser,
     @Param('categoryId') categoryId: string,
-    @Body(new DtoValidationPipe(UpdateCategoryDto)) dto: UpdateCategoryDto,
+    @Body() dto: UpdateCategoryDto,
   ): Promise<Category> {
     return this.categoriesService.update(user, categoryId, dto)
   }

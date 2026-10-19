@@ -5,13 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import {
-  GetCommand,
-  PutCommand,
-  ScanCommand,
-  UpdateCommand,
-} from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import {
   AUDIT_ACTOR_ATTRIBUTE_NAMES,
   AUDIT_ACTOR_FIELDS,
@@ -20,6 +14,7 @@ import {
   toAuditMutationExpressionValues,
 } from '../audit/audit-actor'
 import { AuthenticatedUser } from '../auth/auth.types'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { Category } from './category.types'
 import { CreateCategoryDto } from './dto/create-category.dto'
@@ -35,10 +30,10 @@ export class CategoriesService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.tableName = configService.get<string>('CATEGORIES_TABLE') ?? 'categories'
+    this.tableName = dynamoTables.categories
   }
 
   async create(user: AuthenticatedUser, dto: CreateCategoryDto): Promise<Category> {

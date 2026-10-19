@@ -1,12 +1,6 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
+import { Inject, Injectable, Logger } from '@nestjs/common'
+import { ConflictError, InvalidInputError, NotFoundError } from '../common/domain-error'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import {
   BatchGetCommand,
   GetCommand,
@@ -41,11 +35,11 @@ export class InventoryService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.tableName = configService.get<string>('INVENTORY_TABLE') ?? 'inventory'
-    this.productsTableName = configService.get<string>('PRODUCTS_TABLE') ?? 'products'
+    this.tableName = dynamoTables.inventory
+    this.productsTableName = dynamoTables.products
   }
 
   async ensureInventoryRecord(productId: string): Promise<InventoryRecord> {
@@ -150,7 +144,7 @@ export class InventoryService {
     availableQuantity: number,
   ): Promise<InventorySummary> {
     if (availableQuantity < 0) {
-      throw new BadRequestException('availableQuantity must be a non-negative integer.')
+      throw new InvalidInputError('availableQuantity must be a non-negative integer.')
     }
 
     const product = await this.findProductOrThrow(productId)
@@ -209,7 +203,7 @@ export class InventoryService {
     )
 
     if (!response.Item) {
-      throw new NotFoundException(`Product ${productId} was not found.`)
+      throw new NotFoundError(`Product ${productId} was not found.`)
     }
 
     return response.Item as Product
@@ -323,7 +317,7 @@ export class InventoryService {
         this.logger.warn(
           `Reserve rejected for product ${productId} with quantity=${quantity} due to insufficient inventory.`,
         )
-        throw new ConflictException(`Insufficient inventory for product ${productId}.`)
+        throw new ConflictError(`Insufficient inventory for product ${productId}.`)
       }
       throw error
     }

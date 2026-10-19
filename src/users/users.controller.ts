@@ -30,7 +30,6 @@ import { Roles } from '../auth/roles.decorator'
 import { EmailStatisticsQueryDto } from '../mail/dto/email-statistics-query.dto'
 import { ResendEmailRecipientDto } from '../mail/dto/resend-email-recipient.dto'
 import { EmailDeliveryStatistics } from '../mail/mail.types'
-import { DtoValidationPipe } from '../validation/dto-validation.pipe'
 import { CreateManagedUserDto } from './dto/create-managed-user.dto'
 import { ResetManagedUserPasswordDto } from './dto/reset-managed-user-password.dto'
 import { SetOwnPasswordDto } from './dto/set-own-password.dto'
@@ -52,7 +51,7 @@ export class UsersController {
   @ApiOkResponse({ description: 'Returns all Cognito users and their current roles.' })
   findAll(
     @Req() request: AuthenticatedRequest,
-    @Query(new DtoValidationPipe(EmailStatisticsQueryDto)) query: EmailStatisticsQueryDto,
+    @Query() query: EmailStatisticsQueryDto,
   ): Promise<ManagedUser[] | EmailDeliveryStatistics> {
     if (query.emailStatistics === 'true') {
       if (!request.user?.groups.includes(Role.ADMIN)) {
@@ -123,7 +122,7 @@ export class UsersController {
   @ApiOkResponse({ description: 'Returns resend result for one retryable recipient.' })
   resendFailedWelcomeEmail(
     @Param('userId') userId: string,
-    @Body(new DtoValidationPipe(ResendEmailRecipientDto)) dto: ResendEmailRecipientDto,
+    @Body() dto: ResendEmailRecipientDto,
   ) {
     return this.usersService.resendFailedWelcomeEmail(userId, dto.recipientEmail)
   }
@@ -135,7 +134,7 @@ export class UsersController {
   @ApiCreatedResponse({ description: 'Returns the created account.' })
   createManagedUser(
     @Req() request: AuthenticatedRequest,
-    @Body(new DtoValidationPipe(CreateManagedUserDto)) dto: CreateManagedUserDto,
+    @Body() dto: CreateManagedUserDto,
   ): Promise<ManagedUser> {
     return this.usersService.createManagedUser(request.user!, dto)
   }
@@ -148,7 +147,7 @@ export class UsersController {
   updateManagedUser(
     @Req() request: AuthenticatedRequest,
     @Param('userId') userId: string,
-    @Body(new DtoValidationPipe(UpdateManagedUserDto)) dto: UpdateManagedUserDto,
+    @Body() dto: UpdateManagedUserDto,
   ): Promise<ManagedUser> {
     if (dto.enabled === false) {
       assertNotSelfMutation(request, userId, 'You cannot disable your own account.')
@@ -167,7 +166,7 @@ export class UsersController {
   updateUserPermissions(
     @Req() request: AuthenticatedRequest,
     @Param('userId') userId: string,
-    @Body(new DtoValidationPipe(UpdateUserPermissionsDto)) dto: UpdateUserPermissionsDto,
+    @Body() dto: UpdateUserPermissionsDto,
   ): Promise<UserPermissionsRecord> {
     return this.usersService.updateUserPermissions(userId, dto.permissions, request.user!)
   }
@@ -182,7 +181,7 @@ export class UsersController {
   resetManagedUserPassword(
     @Req() request: AuthenticatedRequest,
     @Param('userId') userId: string,
-    @Body(new DtoValidationPipe(ResetManagedUserPasswordDto)) dto: ResetManagedUserPasswordDto,
+    @Body() dto: ResetManagedUserPasswordDto,
   ): Promise<void> {
     assertNotSelfMutation(request, userId, 'You cannot reset your own password from admin.')
     return this.usersService.resetManagedUserPassword(userId, dto.password)
@@ -219,7 +218,7 @@ export class UsersController {
   @ApiUnauthorizedResponse({ description: 'Authentication is required.' })
   updateOwnProfile(
     @Req() request: AuthenticatedRequest,
-    @Body(new DtoValidationPipe(UpdateUserProfileDto)) dto: UpdateUserProfileDto,
+    @Body() dto: UpdateUserProfileDto,
   ): Promise<UserProfile> {
     return this.usersService.updateOwnProfile(request.user!, dto)
   }
@@ -233,7 +232,7 @@ export class UsersController {
   @ApiUnauthorizedResponse({ description: 'Authentication is required.' })
   async setOwnPassword(
     @Req() request: AuthenticatedRequest,
-    @Body(new DtoValidationPipe(SetOwnPasswordDto)) dto: SetOwnPasswordDto,
+    @Body() dto: SetOwnPasswordDto,
   ): Promise<void> {
     await this.usersService.setOwnPassword(request.user!, dto.password)
   }

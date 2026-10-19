@@ -1,9 +1,9 @@
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { unmarshall } from '@aws-sdk/util-dynamodb'
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import type { AttributeValue } from '@aws-sdk/client-dynamodb'
 import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 
 const AUDIT_RETENTION_SECONDS = 365 * 24 * 60 * 60
@@ -135,10 +135,10 @@ export class AuditLogService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.auditLogTableName = configService.get<string>('AUDIT_LOG_TABLE') ?? 'audit-log'
+    this.auditLogTableName = dynamoTables.auditLog
   }
 
   async handleBatch(event: SQSEvent): Promise<SQSBatchResponse> {

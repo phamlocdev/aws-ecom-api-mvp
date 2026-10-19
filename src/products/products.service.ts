@@ -6,13 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import {
-  GetCommand,
-  ScanCommand,
-  TransactWriteCommand,
-  UpdateCommand,
-} from '@aws-sdk/lib-dynamodb'
+import { GetCommand, ScanCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'crypto'
 import {
   AUDIT_ACTOR_ATTRIBUTE_NAMES,
@@ -22,6 +16,7 @@ import {
   toAuditMutationExpressionValues,
 } from '../audit/audit-actor'
 import { AuthenticatedUser } from '../auth/auth.types'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { CreateProductDto } from './dto/create-product.dto'
 import { ListProductsQueryDto } from './dto/list-products-query.dto'
@@ -46,11 +41,11 @@ export class ProductsService {
     private readonly uploadService: UploadService,
     @Inject(ProductEventsPublisher)
     private readonly productEventsPublisher: ProductEventsPublisher,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.tableName = configService.get<string>('PRODUCTS_TABLE') ?? 'products'
-    this.inventoryTableName = configService.get<string>('INVENTORY_TABLE') ?? 'inventory'
+    this.tableName = dynamoTables.products
+    this.inventoryTableName = dynamoTables.inventory
   }
 
   async create(user: AuthenticatedUser, dto: CreateProductDto): Promise<Product> {

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { SNSEvent } from 'aws-lambda'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { EmailTracking } from './mail.types'
 
@@ -56,10 +56,10 @@ export class SesEventProcessorService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.tableName = configService.get<string>('EMAIL_TRACKING_TABLE') ?? 'email-tracking'
+    this.tableName = dynamoTables.emailTracking
   }
 
   async handleSesEventBatch(event: SNSEvent): Promise<void> {

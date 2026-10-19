@@ -11,6 +11,7 @@ import { Product } from '../products/product.types'
 import { OrderStatus } from '../orders/order-status.enum'
 import { OrdersService } from '../orders/orders.service'
 import { OrderItem, OrderMutationContext, PlaceOrderMessage } from '../orders/orders.types'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { ConfigService } from '@nestjs/config'
 
@@ -33,8 +34,10 @@ export class OrdersWorkerService {
     private readonly dynamoDbService: DynamoDbService,
     @Inject(ConfigService)
     configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.orderItemsTableName = configService.get<string>('ORDER_ITEMS_TABLE') ?? 'order-items'
+    this.orderItemsTableName = dynamoTables.orderItems
     this.placeOrderDelayMs = Number(configService.get<string>('PLACE_ORDER_DELAY_MS') ?? 0)
   }
 

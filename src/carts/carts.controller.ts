@@ -20,7 +20,6 @@ import {
 } from '@nestjs/swagger'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { AuthenticatedUser } from '../auth/auth.types'
-import { DtoValidationPipe } from '../validation/dto-validation.pipe'
 import { CartsService } from './carts.service'
 import { CreateCartDto } from './dto/create-cart.dto'
 import { CartDetailsResponseDto, CartResponseDto } from './dto/cart-response.dto'
@@ -38,7 +37,7 @@ export class CartsController {
   @ApiCreatedResponse({ type: CartResponseDto })
   create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new DtoValidationPipe(CreateCartDto)) dto: CreateCartDto,
+    @Body() dto: CreateCartDto,
   ): Promise<Cart> {
     return this.cartsService.create(user, dto)
   }
@@ -68,7 +67,7 @@ export class CartsController {
   addItem(
     @CurrentUser() user: AuthenticatedUser,
     @Param('cartId') cartId: string,
-    @Body(new DtoValidationPipe(UpsertCartItemDto)) dto: UpsertCartItemDto,
+    @Body() dto: UpsertCartItemDto,
   ): Promise<CartDetails> {
     return this.cartsService.addItem(user, cartId, dto)
   }
@@ -80,7 +79,7 @@ export class CartsController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('cartId') cartId: string,
     @Param('productId') productId: string,
-    @Body(new DtoValidationPipe(UpdateCartItemDto)) dto: UpdateCartItemDto,
+    @Body() dto: UpdateCartItemDto,
   ): Promise<CartDetails> {
     return this.cartsService.updateItem(user, cartId, productId, dto)
   }
