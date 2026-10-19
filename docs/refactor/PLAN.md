@@ -51,12 +51,14 @@ Quy tắc phụ thuộc (bắt buộc tuân thủ khi refactor bất kỳ module
 Thứ tự: `products` → `carts` → `users`/`auth` → `orders` (phức tạp nhất: payments/VNPay, queue, events — để cuối cùng).
 
 Mỗi module khi refactor:
+0. **Trước khi sửa code của module**: kiểm tra baseline test đã có ở Giai đoạn 0 có phủ đủ các nghiệp vụ quan trọng của module đó chưa (xem cột "Baseline test" của module trong PROGRESS.md). Nếu chưa đủ, bổ sung test baseline (unit mock AWS SDK bằng `aws-sdk-client-mock`, hoặc e2e) cho hành vi hiện tại TRƯỚC khi đổi code, để có cơ sở so sánh hành vi trước/sau refactor. Không refactor module khi chưa có baseline cho nghiệp vụ cốt lõi của nó.
 1. Tách Entity domain khỏi DynamoDB item shape.
 2. Định nghĩa Repository port (interface).
 3. Chuyển toàn bộ DynamoDB Command ra Infrastructure adapter implement port đó.
 4. Viết use-case cho từng nghiệp vụ (1 method = 1 use-case hoặc nhóm nhỏ liên quan).
 5. Viết unit test cho use-case bằng cách mock repository port (không cần mock AWS SDK nữa).
 6. Controller chỉ gọi use-case, không gọi thẳng service cũ.
+7. Chạy lại baseline test từ bước 0 — phải pass, xác nhận hành vi không đổi — trước khi coi module là xong.
 
 `orders` module (55KB, có payment/VNPay, queue, events publisher) phải tách thành nhiều use-case nhỏ: `CreateOrderUseCase`, `CancelOrderUseCase`, `ConfirmPaymentUseCase`, ... thay vì 1 service khổng lồ.
 
