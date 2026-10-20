@@ -29,8 +29,8 @@ import { SesMailService } from '../mail/ses-mail.service'
 import { EmailDeliveryStatistics, EmailTrackingView, EmailType } from '../mail/mail.types'
 import { resolvePaginationState, toPaginatedResponse } from '../pagination/pagination.util'
 import { PaginatedResponse } from '../pagination/pagination.types'
-import { Product } from '../products/product.types'
-import { ProductsService } from '../products/products.service'
+import { Product } from '../products/domain/product.entity'
+import { FindOneProductUseCase } from '../products/application/find-one-product.use-case'
 import { UsersService } from '../users/users.service'
 import { OrdersQueueService } from './orders.queue'
 import { CreateOrderDto } from './dto/create-order.dto'
@@ -96,8 +96,8 @@ export class OrdersService {
     private readonly cartsService: CartsService,
     @Inject(InventoryService)
     private readonly inventoryService: InventoryService,
-    @Inject(ProductsService)
-    private readonly productsService: ProductsService,
+    @Inject(FindOneProductUseCase)
+    private readonly findOneProductUseCase: FindOneProductUseCase,
     @Inject(UsersService)
     private readonly usersService: UsersService,
     @Inject(EmailTrackingService)
@@ -180,7 +180,7 @@ export class OrdersService {
     try {
       const productSnapshots: Array<{ item: (typeof cartItems)[number]; product: Product }> = []
       for (const item of cartItems) {
-        const product = await this.productsService.findOne(item.productId)
+        const product = await this.findOneProductUseCase.execute(item.productId)
 
         await this.inventoryService.reserve(item.productId, item.quantity)
         reservedItems.push({ productId: item.productId, quantity: item.quantity })

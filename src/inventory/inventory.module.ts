@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common'
-import { ProductsModule } from '../products/products.module'
+import { ProductsModule } from '../products/presentation/products.module'
 import { InventoryController } from './inventory.controller'
 import { InventoryService } from './inventory.service'
 

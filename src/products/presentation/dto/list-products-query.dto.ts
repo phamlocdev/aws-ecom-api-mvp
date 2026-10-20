@@ -14,8 +14,8 @@ import {
   ValidatorConstraintInterface,
   ValidationArguments,
 } from 'class-validator'
-import { PaginationQueryDto } from '../../pagination/pagination-query.dto'
-import { ProductStatus } from '../product-status.enum'
+import { PaginationQueryDto } from '../../../pagination/pagination-query.dto'
+import { ProductStatus } from '../../domain/product-status.enum'
 
 const trimString = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value

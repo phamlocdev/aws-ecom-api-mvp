@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { PaginatedResponseDto } from '../../pagination/pagination.types'
-import { ProductStatus } from '../product-status.enum'
+import { PaginatedResponseDto } from '../../../pagination/pagination.types'
+import { ProductStatus } from '../../domain/product-status.enum'
 
 export class ProductResponseDto {
   @ApiProperty({ format: 'uuid' })

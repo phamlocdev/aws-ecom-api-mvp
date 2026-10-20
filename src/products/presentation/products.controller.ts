@@ -23,25 +23,37 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger'
+import { CurrentUser } from '../../auth/current-user.decorator'
+import { AuthenticatedUser } from '../../auth/auth.types'
+import { Public } from '../../auth/public.decorator'
+import { Permission } from '../../auth/permissions'
+import { RequirePermissions } from '../../auth/permissions.decorator'
+import { Role } from '../../auth/roles.enum'
+import { Roles } from '../../auth/roles.decorator'
+import { PaginatedResponse } from '../../pagination/pagination.types'
+import { Product } from '../domain/product.entity'
+import { CreateProductUseCase } from '../application/create-product.use-case'
+import { FindAllProductsUseCase } from '../application/find-all-products.use-case'
+import { FindProductForResponseUseCase } from '../application/find-product-for-response.use-case'
+import { UpdateProductUseCase } from '../application/update-product.use-case'
+import { DeleteProductUseCase } from '../application/delete-product.use-case'
 import { CreateProductDto } from './dto/create-product.dto'
-import { CurrentUser } from '../auth/current-user.decorator'
-import { AuthenticatedUser } from '../auth/auth.types'
-import { Public } from '../auth/public.decorator'
-import { Permission } from '../auth/permissions'
-import { RequirePermissions } from '../auth/permissions.decorator'
-import { Role } from '../auth/roles.enum'
-import { Roles } from '../auth/roles.decorator'
 import { ListProductsQueryDto } from './dto/list-products-query.dto'
 import { PaginatedProductResponseDto, ProductResponseDto } from './dto/product-response.dto'
 import { UpdateProductDto } from './dto/update-product.dto'
-import { ProductsService } from './products.service'
-import { Product } from './product.types'
-import { PaginatedResponse } from '../pagination/pagination.types'
 
 @ApiTags('products')
 @Controller('products')
 export class ProductsController {
-  constructor(@Inject(ProductsService) private readonly productsService: ProductsService) {}
+  constructor(
+    @Inject(CreateProductUseCase) private readonly createProductUseCase: CreateProductUseCase,
+    @Inject(FindAllProductsUseCase)
+    private readonly findAllProductsUseCase: FindAllProductsUseCase,
+    @Inject(FindProductForResponseUseCase)
+    private readonly findProductForResponseUseCase: FindProductForResponseUseCase,
+    @Inject(UpdateProductUseCase) private readonly updateProductUseCase: UpdateProductUseCase,
+    @Inject(DeleteProductUseCase) private readonly deleteProductUseCase: DeleteProductUseCase,
+  ) {}
 
   @Post()
   @Roles(Role.MANAGER, Role.ADMIN)
@@ -54,7 +66,16 @@ export class ProductsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateProductDto,
   ): Promise<Product> {
-    return this.productsService.create(user, dto)
+    return this.createProductUseCase.execute(user, {
+      name: dto.name,
+      description: dto.description,
+      categoryId: dto.categoryId,
+      price: dto.price,
+      availableQuantity: dto.availableQuantity,
+      imageUrl: dto.imageUrl,
+      images: dto.images,
+      status: dto.status,
+    })
   }
 
   @Get()
@@ -105,10 +126,8 @@ export class ProductsController {
     description: 'Case-sensitive substring search across product name and description.',
   })
   @ApiOkResponse({ type: PaginatedProductResponseDto })
-  findAll(
-    @Query() query: ListProductsQueryDto,
-  ): Promise<PaginatedResponse<Product>> {
-    return this.productsService.findAll(query)
+  findAll(@Query() query: ListProductsQueryDto): Promise<PaginatedResponse<Product>> {
+    return this.findAllProductsUseCase.execute(query)
   }
 
   @Get(':productId')
@@ -118,7 +137,7 @@ export class ProductsController {
   @ApiOkResponse({ type: ProductResponseDto })
   @ApiNotFoundResponse({ description: 'Product does not exist.' })
   findOne(@Param('productId') productId: string): Promise<Product> {
-    return this.productsService.findOneForResponse(productId)
+    return this.findProductForResponseUseCase.execute(productId)
   }
 
   @Patch(':productId')
@@ -134,7 +153,15 @@ export class ProductsController {
     @Param('productId') productId: string,
     @Body() dto: UpdateProductDto,
   ): Promise<Product> {
-    return this.productsService.update(user, productId, dto)
+    return this.updateProductUseCase.execute(user, productId, {
+      name: dto.name,
+      description: dto.description,
+      categoryId: dto.categoryId,
+      price: dto.price,
+      imageUrl: dto.imageUrl,
+      images: dto.images,
+      status: dto.status,
+    })
   }
 
   @Delete(':productId')
@@ -149,6 +176,6 @@ export class ProductsController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('productId') productId: string,
   ): Promise<void> {
-    await this.productsService.remove(user, productId)
+    await this.deleteProductUseCase.execute(user, productId)
   }
 }

@@ -2,7 +2,7 @@
 
 > File này là trạng thái SỐNG — luôn đọc file này trước khi bắt đầu bất kỳ công việc refactor nào, và CẬP NHẬT lại trước khi kết thúc phiên. Kiến trúc đích và các giai đoạn xem ở [PLAN.md](./PLAN.md).
 
-Cập nhật lần cuối: 2026-10-19
+Cập nhật lần cuối: 2026-10-20
 
 ## Trạng thái tổng quan
 
@@ -11,7 +11,7 @@ Cập nhật lần cuối: 2026-10-19
 | 0 — Safety net (Jest + baseline test + ESLint) | ✅ Xong | Xem chi tiết bên dưới |
 | 1 — Dọn hạ tầng dùng chung | ✅ Xong | Xem chi tiết bên dưới |
 | 2 — Module mẫu (pilot) | ✅ Xong | Module mẫu: `categories`. Pattern tham chiếu xem bên dưới |
-| 3 — Nhân rộng các module | ☐ Chưa bắt đầu | |
+| 3 — Nhân rộng các module | 🔄 Đang làm | `products` xong, còn `carts`/`users`/`auth`/`orders` |
 | 4 — Dọn Lambda worker | ☐ Chưa bắt đầu | |
 | 5 — CI | ☐ Chưa bắt đầu | |
 
@@ -23,7 +23,7 @@ Cột **Baseline test** = test được viết TRƯỚC khi sửa code của mod
 |---|---|---|---|---|---|---|---|---|
 | categories | ✅ Xong (module mẫu) | 🔶 unit test use-case (mock port), chưa có e2e/baseline trước-refactor vì đây là module mẫu đầu tiên | ✅ | ✅ | ✅ | ✅ | ✅ 11 test case | Module mẫu Giai đoạn 2. Behavior HTTP giữ nguyên (strangler) |
 | inventory | ☐ Chưa bắt đầu | ✅ `inventory.service.spec.ts` (reserve/release) | | | | | | Ứng viên module mẫu. Baseline mới phủ reserve/release, chưa phủ findAll/pagination/updateAvailableQuantity — xem lại trước khi refactor các phần đó. Đã migrate sang `DomainError` (NotFoundError/ConflictError/InvalidInputError) và `DynamoTablesService` ở Giai đoạn 1 — service vẫn còn gọi DynamoDB Command trực tiếp (chưa tách Repository) |
-| products | ☐ Chưa bắt đầu | ☐ | | | | | | |
+| products | ✅ Xong | ✅ `products.integration.spec.ts` (viết lại từ baseline gốc, chạy qua use-case + `DynamoDbProductRepository` thay vì service cũ) | ✅ | ✅ | ✅ | ✅ | ✅ 20 test case | 6 use-case: create/find-all/find-one/find-for-response/update/delete. `find-one` dùng lại cho cả nội bộ (orders, orders-worker) lẫn `find-for-response` (enrich ảnh) cho controller |
 | carts | ☐ Chưa bắt đầu | ☐ | | | | | | |
 | users / auth | ☐ Chưa bắt đầu | 🔶 một phần (`roles.guard.spec.ts`) | | | | | | RolesGuard có test, nhưng JwtAuthGuard (verify JWT qua Cognito) và PermissionsGuard chưa có test |
 | orders | ☐ Chưa bắt đầu | ☐ | | | | | | Phức tạp nhất — payments/VNPay, queue, events. Cần baseline cho checkout flow trước khi đụng vào |
@@ -102,3 +102,15 @@ _Không có việc dang dở._
   - Kiểm tra: `tsc --noEmit` sạch, `npx eslint .` không phát sinh lỗi/warning mới trong `src/categories/**` (cảnh báo CRLF còn lại trên toàn repo là code cũ, đã biết từ Giai đoạn 0), `npx jest` 30/30 pass (19 cũ + 11 mới).
   - Pattern chi tiết đã ghi lại ở mục "Pattern tham chiếu" bên trên — Giai đoạn 3 copy nguyên cấu trúc này, không tự sáng tạo lại.
   - Lưu ý cho module sau: `categories` KHÔNG có baseline e2e/test viết trước-khi-sửa-code (vì là module mẫu đầu tiên, risk thấp, chấp nhận). Từ Giai đoạn 3 trở đi PHẢI có baseline test trước khi đụng code của module, theo đúng bước 0 trong PLAN.md.
+- 2026-10-20: Refactor module `products` (Giai đoạn 3, module đầu tiên nhân rộng pattern từ `categories`):
+  - **Baseline trước khi sửa** (bước 0): viết `src/products/products.service.spec.ts` (12 test case, mock AWS SDK bằng `aws-sdk-client-mock` + mock `UploadService`/`ProductEventsPublisher`) phủ `create` (transact write 2 bảng + conflict), `findOneForResponse` (not-found/soft-deleted/enrich ảnh), `update` (no-field/not-found/success), `remove` (not-found/success + xoá ảnh), `findAll` (filter expression cơ bản). Chạy pass trên code cũ trước khi đổi gì, sau đó xoá file cũ.
+  - Tách `products.service.ts` (560 dòng, nhiều hơn categories do có upload ảnh + inventory transact write + EventBridge events + filter/pagination phức tạp) thành:
+    - `domain/`: `product.entity.ts`, `product-status.enum.ts` (move nguyên từ root), `product.repository.port.ts` (port với `create` nhận kèm `InitialProductInventory` để giữ transaction 2 bảng, `findAll` nhận `ProductFilters` thuần, `findOne` trả `null`/raw như categories).
+    - `application/`: 6 use-case (1 method cũ = 1 use-case, riêng `findOne`/`findOneForResponse` tách thành `FindOneProductUseCase` dùng nội bộ + `FindProductForResponseUseCase` enrich ảnh cho controller) + 3 file helper thuần (`product-image.util.ts`, `product-query.util.ts`, `product-event.util.ts`) để tránh lặp code giữa các use-case (các helper này nhận `UploadService`/`ProductEventsPublisher`/`Logger` qua tham số, không phải class DI).
+    - `infrastructure/`: `dynamodb-product.repository.ts` (TransactWriteCommand tạo product+inventory, vòng lặp Scan điền đủ `limit` + build FilterExpression, dịch `ConditionalCheckFailedException`/`TransactionCanceledException` sang `ConflictError`/`NotFoundError`), `product-events.publisher.ts` (move nguyên từ root — đây là adapter AWS SDK (`@aws-sdk/client-eventbridge`) nên thuộc Infrastructure).
+    - `presentation/`: controller/module/dto move nguyên, controller map DTO → input use-case bằng object literal tường minh.
+  - **Module khác đang phụ thuộc `ProductsService`/`Product`/`ProductStatus` trực tiếp — đã cập nhật để không phá vỡ**: `orders.service.ts` và `workers/orders-worker.service.ts` đổi từ inject `ProductsService` sang inject `FindOneProductUseCase` (chỉ dùng method `findOne`, không dùng tính năng CRUD khác); `inventory.service.ts`/`inventory.types.ts`/`inventory/dto/*` chỉ đổi đường dẫn import `Product`/`ProductStatus` sang `products/domain/*` (không có phụ thuộc DI thật); `scripts/catalog-seed-data.ts` đổi đường dẫn `ProductStatus`; `app.module.ts`/`orders.module.ts`/`workers/orders-worker.module.ts`/`inventory.module.ts` trỏ `ProductsModule` sang `products/presentation/products.module.ts`. `ProductsModule` export `FindOneProductUseCase` (trước đây export `ProductsService`).
+  - Lưu ý: `FindOneProductUseCase` ném `NotFoundError` (domain) thay vì `NotFoundException` (Nest) như `ProductsService.findOne` cũ — đã kiểm tra `orders.service.ts`/`orders-worker.service.ts` không có chỗ nào bắt `instanceof NotFoundException` quanh lời gọi này (chỉ có `try/catch` chung hoặc check `instanceof NotFoundException` ở một nhánh khác không liên quan đến product), nên hành vi HTTP cuối cùng không đổi.
+  - **Baseline sau refactor** (bước 7): baseline cũ không thể chạy lại nguyên trạng vì `ProductsService` đã bị xoá (đúng tinh thần strangler nhưng khác categories — categories không có baseline trước). Đã viết lại thành `src/products/products.integration.spec.ts`, giữ nguyên các kịch bản/assertion của baseline gốc nhưng lắp qua `DynamoDbProductRepository` + các use-case thật (không mock port) để xác nhận hành vi DynamoDB/HTTP không đổi. Thêm `src/products/application/products.use-cases.spec.ts` (unit test mock `ProductRepositoryPort`, theo đúng kiểu categories).
+  - Kiểm tra: `tsc --noEmit` sạch, `npx jest` 54/54 pass (34 cũ + 20 mới), `npx eslint` trên `src/products/**` + mọi file đã sửa (`orders`, `workers`, `inventory`, `scripts/catalog-seed-data.ts`, `app.module.ts`) không phát sinh lỗi/warning mới (18 lỗi ESLint hiện có đều ở file không đụng tới: `orders.controller.ts`, `vnpay.service.ts`, vài file trong `scripts/`).
+  - Giữ nguyên 100% HTTP contract (route, DTO, response shape kể cả `scannedCount`, Roles/Permissions decorator).

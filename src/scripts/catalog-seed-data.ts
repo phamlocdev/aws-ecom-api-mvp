@@ -1,4 +1,4 @@
-import { ProductStatus } from '../products/product-status.enum'
+import { ProductStatus } from '../products/domain/product-status.enum'
 import { stableUuid } from './script-helpers'
 
 export type SeedCategory = {

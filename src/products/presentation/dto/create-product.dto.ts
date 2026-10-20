@@ -15,7 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { ProductStatus } from '../product-status.enum'
+import { ProductStatus } from '../../domain/product-status.enum'
 
 const trimString = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value

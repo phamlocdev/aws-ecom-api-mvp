@@ -6,8 +6,8 @@ import { CartsService } from '../carts/carts.service'
 import { CartStatus } from '../carts/cart-status.enum'
 import { InventoryService } from '../inventory/inventory.service'
 import { ReservedInventoryItem } from '../inventory/inventory.types'
-import { ProductsService } from '../products/products.service'
-import { Product } from '../products/product.types'
+import { FindOneProductUseCase } from '../products/application/find-one-product.use-case'
+import { Product } from '../products/domain/product.entity'
 import { OrderStatus } from '../orders/order-status.enum'
 import { OrdersService } from '../orders/orders.service'
 import { OrderItem, OrderMutationContext, PlaceOrderMessage } from '../orders/orders.types'
@@ -26,8 +26,8 @@ export class OrdersWorkerService {
     private readonly cartsService: CartsService,
     @Inject(InventoryService)
     private readonly inventoryService: InventoryService,
-    @Inject(ProductsService)
-    private readonly productsService: ProductsService,
+    @Inject(FindOneProductUseCase)
+    private readonly findOneProductUseCase: FindOneProductUseCase,
     @Inject(OrdersService)
     private readonly ordersService: OrdersService,
     @Inject(DynamoDbService)
@@ -146,7 +146,7 @@ export class OrdersWorkerService {
     try {
       const productSnapshots: Array<{ item: (typeof cartItems)[number]; product: Product }> = []
       for (const item of cartItems) {
-        const product = await this.productsService.findOne(item.productId)
+        const product = await this.findOneProductUseCase.execute(item.productId)
 
         await this.inventoryService.reserve(item.productId, item.quantity)
         reservedItems.push({ productId: item.productId, quantity: item.quantity })
