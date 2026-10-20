@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
-import { CartsModule } from '../carts/carts.module'
+import { CartsModule } from '../carts/presentation/carts.module'
 import { DynamoDbModule } from '../dynamodb/dynamodb.module'
 import { InventoryModule } from '../inventory/inventory.module'
 import { OrdersModule } from '../orders/orders.module'

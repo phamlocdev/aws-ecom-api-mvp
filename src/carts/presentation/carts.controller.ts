@@ -18,19 +18,31 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { CurrentUser } from '../auth/current-user.decorator'
-import { AuthenticatedUser } from '../auth/auth.types'
-import { CartsService } from './carts.service'
+import { CurrentUser } from '../../auth/current-user.decorator'
+import { AuthenticatedUser } from '../../auth/auth.types'
+import { Cart, CartDetails } from '../domain/cart.entity'
+import { CreateCartUseCase } from '../application/create-cart.use-case'
+import { FindAllCartsUseCase } from '../application/find-all-carts.use-case'
+import { FindOneCartUseCase } from '../application/find-one-cart.use-case'
+import { AddCartItemUseCase } from '../application/add-cart-item.use-case'
+import { UpdateCartItemUseCase } from '../application/update-cart-item.use-case'
+import { RemoveCartItemUseCase } from '../application/remove-cart-item.use-case'
 import { CreateCartDto } from './dto/create-cart.dto'
 import { CartDetailsResponseDto, CartResponseDto } from './dto/cart-response.dto'
 import { UpdateCartItemDto } from './dto/update-cart-item.dto'
 import { UpsertCartItemDto } from './dto/upsert-cart-item.dto'
-import { Cart, CartDetails } from './cart.types'
 
 @ApiTags('carts')
 @Controller('carts')
 export class CartsController {
-  constructor(@Inject(CartsService) private readonly cartsService: CartsService) {}
+  constructor(
+    @Inject(CreateCartUseCase) private readonly createCartUseCase: CreateCartUseCase,
+    @Inject(FindAllCartsUseCase) private readonly findAllCartsUseCase: FindAllCartsUseCase,
+    @Inject(FindOneCartUseCase) private readonly findOneCartUseCase: FindOneCartUseCase,
+    @Inject(AddCartItemUseCase) private readonly addCartItemUseCase: AddCartItemUseCase,
+    @Inject(UpdateCartItemUseCase) private readonly updateCartItemUseCase: UpdateCartItemUseCase,
+    @Inject(RemoveCartItemUseCase) private readonly removeCartItemUseCase: RemoveCartItemUseCase,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a cart for the authenticated customer' })
@@ -39,14 +51,14 @@ export class CartsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateCartDto,
   ): Promise<Cart> {
-    return this.cartsService.create(user, dto)
+    return this.createCartUseCase.execute(user, { ttlDays: dto.ttlDays })
   }
 
   @Get()
   @ApiOperation({ summary: 'List carts for the authenticated customer' })
   @ApiOkResponse({ type: CartResponseDto, isArray: true })
   findAll(@CurrentUser() user: AuthenticatedUser): Promise<Cart[]> {
-    return this.cartsService.findAllForCustomer(user)
+    return this.findAllCartsUseCase.execute(user)
   }
 
   @Get(':cartId')
@@ -57,7 +69,7 @@ export class CartsController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('cartId') cartId: string,
   ): Promise<CartDetails> {
-    return this.cartsService.findOneForCustomer(user, cartId)
+    return this.findOneCartUseCase.execute(user, cartId)
   }
 
   @Post(':cartId/items')
@@ -69,7 +81,10 @@ export class CartsController {
     @Param('cartId') cartId: string,
     @Body() dto: UpsertCartItemDto,
   ): Promise<CartDetails> {
-    return this.cartsService.addItem(user, cartId, dto)
+    return this.addCartItemUseCase.execute(user, cartId, {
+      productId: dto.productId,
+      quantity: dto.quantity,
+    })
   }
 
   @Patch(':cartId/items/:productId')
@@ -81,7 +96,7 @@ export class CartsController {
     @Param('productId') productId: string,
     @Body() dto: UpdateCartItemDto,
   ): Promise<CartDetails> {
-    return this.cartsService.updateItem(user, cartId, productId, dto)
+    return this.updateCartItemUseCase.execute(user, cartId, productId, dto.quantity)
   }
 
   @Delete(':cartId/items/:productId')
@@ -93,6 +108,6 @@ export class CartsController {
     @Param('cartId') cartId: string,
     @Param('productId') productId: string,
   ): Promise<void> {
-    await this.cartsService.removeItem(user, cartId, productId)
+    await this.removeCartItemUseCase.execute(user, cartId, productId)
   }
 }

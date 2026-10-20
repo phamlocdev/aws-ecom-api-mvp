@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { CartStatus } from '../cart-status.enum'
+import { CartStatus } from '../../domain/cart-status.enum'
 
 export class CartItemResponseDto {
   @ApiProperty({ format: 'uuid' })

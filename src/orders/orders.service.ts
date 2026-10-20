@@ -18,8 +18,10 @@ import {
 import { randomUUID } from 'crypto'
 import { AuthenticatedUser } from '../auth/auth.types'
 import { Role } from '../auth/roles.enum'
-import { CartsService } from '../carts/carts.service'
-import { CartStatus } from '../carts/cart-status.enum'
+import { GetOwnedCartUseCase } from '../carts/application/get-owned-cart.use-case'
+import { GetCartItemsUseCase } from '../carts/application/get-cart-items.use-case'
+import { MarkCartExpiredUseCase } from '../carts/application/mark-cart-expired.use-case'
+import { CartStatus } from '../carts/domain/cart-status.enum'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { InventoryService } from '../inventory/inventory.service'
@@ -92,8 +94,12 @@ export class OrdersService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(CartsService)
-    private readonly cartsService: CartsService,
+    @Inject(GetOwnedCartUseCase)
+    private readonly getOwnedCartUseCase: GetOwnedCartUseCase,
+    @Inject(GetCartItemsUseCase)
+    private readonly getCartItemsUseCase: GetCartItemsUseCase,
+    @Inject(MarkCartExpiredUseCase)
+    private readonly markCartExpiredUseCase: MarkCartExpiredUseCase,
     @Inject(InventoryService)
     private readonly inventoryService: InventoryService,
     @Inject(FindOneProductUseCase)
@@ -124,7 +130,7 @@ export class OrdersService {
   }
 
   async createOrderRequest(user: AuthenticatedUser, dto: CreateOrderDto): Promise<Order> {
-    const cart = await this.cartsService.getOwnedCartOrThrow(user.sub, dto.cartId)
+    const cart = await this.getOwnedCartUseCase.execute(user.sub, dto.cartId)
     if (cart.status === CartStatus.EXPIRED || cart.expiresAt <= Math.floor(Date.now() / 1000)) {
       throw new BadRequestException(`Cart ${dto.cartId} has expired.`)
     }
@@ -165,7 +171,7 @@ export class OrdersService {
       `>>>>>> [START]: Processing order ${order.orderId} for cart ${order.cartId} and customer ${order.customerId}.`,
     )
 
-    const cartItems = await this.cartsService.getCartItems(cart.cartId)
+    const cartItems = await this.getCartItemsUseCase.execute(cart.cartId)
     if (cartItems.length === 0) {
       this.logger.warn(
         `>>>>>> [WARN]: Order ${order.orderId} failed because cart ${cart.cartId} has no items.`,
@@ -242,7 +248,7 @@ export class OrdersService {
     }
 
     if (reservationSucceeded) {
-      await this.cartsService.markExpired(cart)
+      await this.markCartExpiredUseCase.execute(cart)
     }
 
     return this.getById(order.orderId)

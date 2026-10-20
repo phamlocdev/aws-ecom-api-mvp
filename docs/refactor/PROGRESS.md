@@ -11,7 +11,7 @@ Cập nhật lần cuối: 2026-10-20
 | 0 — Safety net (Jest + baseline test + ESLint) | ✅ Xong | Xem chi tiết bên dưới |
 | 1 — Dọn hạ tầng dùng chung | ✅ Xong | Xem chi tiết bên dưới |
 | 2 — Module mẫu (pilot) | ✅ Xong | Module mẫu: `categories`. Pattern tham chiếu xem bên dưới |
-| 3 — Nhân rộng các module | 🔄 Đang làm | `products` xong, còn `carts`/`users`/`auth`/`orders` |
+| 3 — Nhân rộng các module | 🔄 Đang làm | `products`, `carts` xong, còn `users`/`auth`/`orders` |
 | 4 — Dọn Lambda worker | ☐ Chưa bắt đầu | |
 | 5 — CI | ☐ Chưa bắt đầu | |
 
@@ -24,7 +24,7 @@ Cột **Baseline test** = test được viết TRƯỚC khi sửa code của mod
 | categories | ✅ Xong (module mẫu) | 🔶 unit test use-case (mock port), chưa có e2e/baseline trước-refactor vì đây là module mẫu đầu tiên | ✅ | ✅ | ✅ | ✅ | ✅ 11 test case | Module mẫu Giai đoạn 2. Behavior HTTP giữ nguyên (strangler) |
 | inventory | ☐ Chưa bắt đầu | ✅ `inventory.service.spec.ts` (reserve/release) | | | | | | Ứng viên module mẫu. Baseline mới phủ reserve/release, chưa phủ findAll/pagination/updateAvailableQuantity — xem lại trước khi refactor các phần đó. Đã migrate sang `DomainError` (NotFoundError/ConflictError/InvalidInputError) và `DynamoTablesService` ở Giai đoạn 1 — service vẫn còn gọi DynamoDB Command trực tiếp (chưa tách Repository) |
 | products | ✅ Xong | ✅ `products.integration.spec.ts` (viết lại từ baseline gốc, chạy qua use-case + `DynamoDbProductRepository` thay vì service cũ) | ✅ | ✅ | ✅ | ✅ | ✅ 20 test case | 6 use-case: create/find-all/find-one/find-for-response/update/delete. `find-one` dùng lại cho cả nội bộ (orders, orders-worker) lẫn `find-for-response` (enrich ảnh) cho controller |
-| carts | ☐ Chưa bắt đầu | ☐ | | | | | | |
+| carts | ✅ Xong | ✅ `carts.integration.spec.ts` (viết lại từ baseline gốc, chạy qua use-case + `DynamoDbCartRepository` thay vì service cũ) | ✅ | ✅ | ✅ | ✅ | ✅ 23 test case | 9 use-case (1 method cũ = 1 use-case, kể cả 3 method vốn chỉ dùng nội bộ/cross-module: `GetOwnedCartUseCase`, `GetCartItemsUseCase`, `MarkCartExpiredUseCase` — export cho `orders`/`orders-worker`). Business rule "cart hết hạn" (`deriveCartStatus`/`ensureCartUsable`) đưa xuống `domain/cart.rules.ts` vì là pure function chỉ phụ thuộc entity |
 | users / auth | ☐ Chưa bắt đầu | 🔶 một phần (`roles.guard.spec.ts`) | | | | | | RolesGuard có test, nhưng JwtAuthGuard (verify JWT qua Cognito) và PermissionsGuard chưa có test |
 | orders | ☐ Chưa bắt đầu | ☐ | | | | | | Phức tạp nhất — payments/VNPay, queue, events. Cần baseline cho checkout flow trước khi đụng vào |
 
@@ -114,3 +114,15 @@ _Không có việc dang dở._
   - **Baseline sau refactor** (bước 7): baseline cũ không thể chạy lại nguyên trạng vì `ProductsService` đã bị xoá (đúng tinh thần strangler nhưng khác categories — categories không có baseline trước). Đã viết lại thành `src/products/products.integration.spec.ts`, giữ nguyên các kịch bản/assertion của baseline gốc nhưng lắp qua `DynamoDbProductRepository` + các use-case thật (không mock port) để xác nhận hành vi DynamoDB/HTTP không đổi. Thêm `src/products/application/products.use-cases.spec.ts` (unit test mock `ProductRepositoryPort`, theo đúng kiểu categories).
   - Kiểm tra: `tsc --noEmit` sạch, `npx jest` 54/54 pass (34 cũ + 20 mới), `npx eslint` trên `src/products/**` + mọi file đã sửa (`orders`, `workers`, `inventory`, `scripts/catalog-seed-data.ts`, `app.module.ts`) không phát sinh lỗi/warning mới (18 lỗi ESLint hiện có đều ở file không đụng tới: `orders.controller.ts`, `vnpay.service.ts`, vài file trong `scripts/`).
   - Giữ nguyên 100% HTTP contract (route, DTO, response shape kể cả `scannedCount`, Roles/Permissions decorator).
+- 2026-10-20: Refactor module `carts` (Giai đoạn 3, module thứ hai nhân rộng):
+  - **Baseline trước khi sửa** (bước 0): viết `src/carts/carts.service.spec.ts` (11 test case, mock AWS SDK bằng `aws-sdk-client-mock`) phủ `create`, `getOwnedCartOrThrow` (not-found/derive-expired/unauthorized-khác-customer), `addItem`/`updateItem`/`removeItem` (expired/not-in-cart/success), `markExpired` (no-op khi đã EXPIRED + chuyển trạng thái). Chạy pass trên code cũ trước khi đổi gì, sau đó xoá file cũ.
+  - Tách `carts.service.ts` (297 dòng) thành:
+    - `domain/`: `cart.entity.ts`, `cart-status.enum.ts` (move nguyên), `cart.repository.port.ts`, và **`cart.rules.ts`** (mới so với pattern categories/products) — 2 pure function `deriveCartStatus`/`ensureCartUsable` + `toEpochSeconds`, đưa xuống domain vì chỉ phụ thuộc `Cart` entity và `common/domain-error.ts` (không có `@nestjs/*`/`@aws-sdk/*`), được tái sử dụng bởi nhiều use-case.
+    - `application/`: 9 use-case (1 method cũ = 1 use-case): `CreateCartUseCase`, `FindAllCartsUseCase`, `FindOneCartUseCase`, `AddCartItemUseCase`, `UpdateCartItemUseCase`, `RemoveCartItemUseCase`, `GetOwnedCartUseCase`, `GetCartItemsUseCase`, `MarkCartExpiredUseCase` + helper dùng chung `touch-cart.util.ts` (hàm thuần nhận `CartRepositoryPort`+`Cart`, tránh lặp logic "touch cart" ở 3 use-case mutate item).
+    - `infrastructure/`: `dynamodb-cart.repository.ts` — giữ nguyên hành vi gốc từng method, kể cả chỗ `create()` KHÔNG dịch lỗi conditional-check sang `ConflictError` (bug/thiếu sót có sẵn trong code gốc — không sửa ở lần refactor này, chỉ tái hiện y nguyên theo strangler pattern).
+    - `presentation/`: controller/module/dto move nguyên.
+  - **Method vốn chỉ dùng public bởi module khác** (`getOwnedCartOrThrow`, `getCartItems`, `markExpired`) được tách thành use-case riêng (`GetOwnedCartUseCase`/`GetCartItemsUseCase`/`MarkCartExpiredUseCase`) và export từ `CartsModule`, thay vì export nguyên `CartsService`. Cập nhật `orders.service.ts` và `workers/orders-worker.service.ts` inject 3 use-case này thay vì `CartsService`.
+  - Lỗi: `UnauthorizedException`/`BadRequestException`/`NotFoundException` (Nest) cũ → `UnauthorizedDomainError`/`InvalidInputError`/`NotFoundError` (domain) mới. Đã kiểm tra `orders.service.ts`/`workers/orders-worker.service.ts` không có `instanceof` nào bắt riêng các exception này quanh lời gọi cart use-case (chỉ có `instanceof NotFoundException`/`ConflictException` ở nhánh khác không liên quan tới cart) — hành vi HTTP cuối (status code qua `DomainExceptionFilter`) không đổi.
+  - **Baseline sau refactor** (bước 7): viết lại baseline gốc thành `src/carts/carts.integration.spec.ts`, lắp qua `DynamoDbCartRepository` + use-case thật. Thêm `src/carts/application/carts.use-cases.spec.ts` (unit test mock `CartRepositoryPort`).
+  - Kiểm tra: `tsc --noEmit` sạch, `npx jest` 77/77 pass (54 cũ + 23 mới), `npx eslint` trên `src/carts/**` + file đã sửa (`orders`, `workers`, `app.module.ts`) không phát sinh lỗi/warning mới.
+  - Giữ nguyên 100% HTTP contract.

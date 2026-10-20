@@ -2,8 +2,10 @@ import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common'
 import { SQSEvent, SQSBatchResponse, SQSRecord } from 'aws-lambda'
 import { PutCommand } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'crypto'
-import { CartsService } from '../carts/carts.service'
-import { CartStatus } from '../carts/cart-status.enum'
+import { GetOwnedCartUseCase } from '../carts/application/get-owned-cart.use-case'
+import { GetCartItemsUseCase } from '../carts/application/get-cart-items.use-case'
+import { MarkCartExpiredUseCase } from '../carts/application/mark-cart-expired.use-case'
+import { CartStatus } from '../carts/domain/cart-status.enum'
 import { InventoryService } from '../inventory/inventory.service'
 import { ReservedInventoryItem } from '../inventory/inventory.types'
 import { FindOneProductUseCase } from '../products/application/find-one-product.use-case'
@@ -22,8 +24,12 @@ export class OrdersWorkerService {
   private readonly placeOrderDelayMs: number
 
   constructor(
-    @Inject(CartsService)
-    private readonly cartsService: CartsService,
+    @Inject(GetOwnedCartUseCase)
+    private readonly getOwnedCartUseCase: GetOwnedCartUseCase,
+    @Inject(GetCartItemsUseCase)
+    private readonly getCartItemsUseCase: GetCartItemsUseCase,
+    @Inject(MarkCartExpiredUseCase)
+    private readonly markCartExpiredUseCase: MarkCartExpiredUseCase,
     @Inject(InventoryService)
     private readonly inventoryService: InventoryService,
     @Inject(FindOneProductUseCase)
@@ -117,9 +123,9 @@ export class OrdersWorkerService {
 
     await wait(this.placeOrderDelayMs)
 
-    const cart = await this.cartsService.getOwnedCartOrThrow(message.customerId, message.cartId)
+    const cart = await this.getOwnedCartUseCase.execute(message.customerId, message.cartId)
     if (cart.status === CartStatus.EXPIRED || cart.expiresAt <= Math.floor(Date.now() / 1000)) {
-      await this.cartsService.markExpired(cart)
+      await this.markCartExpiredUseCase.execute(cart)
       await this.ordersService.markFailed(
         order.orderId,
         OrderStatus.EXPIRED,
@@ -129,7 +135,7 @@ export class OrdersWorkerService {
       return
     }
 
-    const cartItems = await this.cartsService.getCartItems(cart.cartId)
+    const cartItems = await this.getCartItemsUseCase.execute(cart.cartId)
     if (cartItems.length === 0) {
       await this.ordersService.markFailed(
         order.orderId,
@@ -208,7 +214,7 @@ export class OrdersWorkerService {
     }
 
     if (reservationSucceeded) {
-      await this.cartsService.markExpired(cart)
+      await this.markCartExpiredUseCase.execute(cart)
     }
   }
 }
