@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { PaginatedResponseDto } from '../../pagination/pagination.types'
+import { PaginatedResponseDto } from '../../../pagination/pagination.types'
 
 export class CategoryResponseDto {
   @ApiProperty({ example: 'electronics' })

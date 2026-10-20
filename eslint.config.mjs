@@ -42,4 +42,13 @@ export default tseslint.config(
       '@typescript-eslint/no-misused-promises': 'off',
     },
   },
+  {
+    files: ['**/*.spec.ts', 'test/**/*.ts'],
+    rules: {
+      // Asserting on a mocked method (e.g. `expect(repo.create).toHaveBeenCalledWith(...)`)
+      // is the standard jest pattern for repository-port mocks and does not risk an
+      // unintended `this` binding the way the rule is meant to guard against.
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 )

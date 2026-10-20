@@ -1,5 +1,5 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
-import { CreateCategoryDto } from './categories/dto/create-category.dto'
+import { CreateCategoryDto } from './categories/presentation/dto/create-category.dto'
 
 // Baseline test for Giai đoạn 1: the global ValidationPipe (app.bootstrap.ts)
 // must keep enforcing whitelist/forbidNonWhitelisted/transform the same way

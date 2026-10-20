@@ -1,30 +1,23 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { ConflictError, NotFoundError } from '../../common/domain-error'
 import {
   AUDIT_ACTOR_ATTRIBUTE_NAMES,
   AUDIT_ACTOR_FIELDS,
-  buildUserAuditMutationContext,
-  toAuditMutationAttributes,
+  AuditMutationContext,
   toAuditMutationExpressionValues,
-} from '../audit/audit-actor'
-import { AuthenticatedUser } from '../auth/auth.types'
-import { DynamoTablesService } from '../config/dynamo-tables.service'
-import { DynamoDbService } from '../dynamodb/dynamodb.service'
-import { Category } from './category.types'
-import { CreateCategoryDto } from './dto/create-category.dto'
-import { UpdateCategoryDto } from './dto/update-category.dto'
-import { PaginationQueryDto } from '../pagination/pagination-query.dto'
-import { PaginatedResponse } from '../pagination/pagination.types'
-import { resolvePaginationState, toPaginatedResponse } from '../pagination/pagination.util'
+} from '../../audit/audit-actor'
+import { DynamoTablesService } from '../../config/dynamo-tables.service'
+import { DynamoDbService } from '../../dynamodb/dynamodb.service'
+import { Category } from '../domain/category.entity'
+import {
+  CategoryPage,
+  CategoryRepositoryPort,
+  UpdateCategoryChanges,
+} from '../domain/category.repository.port'
 
 @Injectable()
-export class CategoriesService {
+export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
   private readonly tableName: string
 
   constructor(
@@ -36,19 +29,7 @@ export class CategoriesService {
     this.tableName = dynamoTables.categories
   }
 
-  async create(user: AuthenticatedUser, dto: CreateCategoryDto): Promise<Category> {
-    const timestamp = new Date().toISOString()
-    const actor = buildUserAuditMutationContext(user, 'Category created')
-    const category: Category = {
-      categoryId: dto.categoryId,
-      name: dto.name,
-      description: dto.description,
-      status: 'ACTIVE',
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      ...toAuditMutationAttributes(actor),
-    }
-
+  async create(category: Category): Promise<void> {
     try {
       await this.dynamoDbService.documentClient.send(
         new PutCommand({
@@ -58,58 +39,44 @@ export class CategoriesService {
           ExpressionAttributeNames: { '#categoryId': 'categoryId' },
         }),
       )
-      return category
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
-        throw new ConflictException(`Category ${dto.categoryId} already exists.`)
+        throw new ConflictError(`Category ${category.categoryId} already exists.`)
       }
       throw error
     }
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Category>> {
-    const pagination = resolvePaginationState('categories', query)
+  async findAll(limit: number, startKey?: Record<string, unknown> | null): Promise<CategoryPage> {
     const response = await this.dynamoDbService.documentClient.send(
       new ScanCommand({
         TableName: this.tableName,
-        Limit: pagination.limit,
-        ExclusiveStartKey: pagination.startKey ?? undefined,
+        Limit: limit,
+        ExclusiveStartKey: startKey ?? undefined,
         FilterExpression: 'attribute_not_exists(#status) OR #status <> :deleted',
         ExpressionAttributeNames: { '#status': 'status' },
         ExpressionAttributeValues: { ':deleted': 'DELETED' },
       }),
     )
-    return toPaginatedResponse(
-      'categories',
-      pagination,
-      (response.Items ?? []) as Category[],
-      response.LastEvaluatedKey,
-    )
+    return {
+      items: (response.Items ?? []) as Category[],
+      lastEvaluatedKey: response.LastEvaluatedKey,
+    }
   }
 
-  async findOne(categoryId: string): Promise<Category> {
+  async findOne(categoryId: string): Promise<Category | null> {
     const response = await this.dynamoDbService.documentClient.send(
       new GetCommand({ TableName: this.tableName, Key: { categoryId } }),
     )
-    const category = response.Item as Category | undefined
-    if (!category || category.status === 'DELETED') {
-      throw new NotFoundException(`Category ${categoryId} was not found.`)
-    }
-    return category
+    return (response.Item as Category | undefined) ?? null
   }
 
   async update(
-    user: AuthenticatedUser,
     categoryId: string,
-    dto: UpdateCategoryDto,
+    changes: UpdateCategoryChanges,
+    updatedAt: string,
+    audit: AuditMutationContext,
   ): Promise<Category> {
-    const mutableFields = Object.entries(dto).filter(([, value]) => value !== undefined)
-    if (mutableFields.length === 0) {
-      throw new BadRequestException('Provide at least one category field to update.')
-    }
-
-    const timestamp = new Date().toISOString()
-    const actor = buildUserAuditMutationContext(user, 'Category updated')
     const expressionAttributeNames: Record<string, string> = {
       '#categoryId': 'categoryId',
       '#status': 'status',
@@ -118,9 +85,10 @@ export class CategoriesService {
     }
     const expressionAttributeValues: Record<string, unknown> = {
       ':deleted': 'DELETED',
-      ':updatedAt': timestamp,
-      ...toAuditMutationExpressionValues(actor),
+      ':updatedAt': updatedAt,
+      ...toAuditMutationExpressionValues(audit),
     }
+    const mutableFields = Object.entries(changes).filter(([, value]) => value !== undefined)
     const updateParts = mutableFields.map(([field, value]) => {
       const nameKey = `#${field}`
       const valueKey = `:${field}`
@@ -146,16 +114,13 @@ export class CategoriesService {
       return response.Attributes as Category
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
-        throw new NotFoundException(`Category ${categoryId} was not found.`)
+        throw new NotFoundError(`Category ${categoryId} was not found.`)
       }
       throw error
     }
   }
 
-  async remove(user: AuthenticatedUser, categoryId: string): Promise<void> {
-    const timestamp = new Date().toISOString()
-    const actor = buildUserAuditMutationContext(user, 'Category deleted')
-
+  async remove(categoryId: string, deletedAt: string, audit: AuditMutationContext): Promise<void> {
     try {
       await this.dynamoDbService.documentClient.send(
         new UpdateCommand({
@@ -172,15 +137,15 @@ export class CategoriesService {
           },
           ExpressionAttributeValues: {
             ':deleted': 'DELETED',
-            ':deletedAt': timestamp,
-            ':updatedAt': timestamp,
-            ...toAuditMutationExpressionValues(actor),
+            ':deletedAt': deletedAt,
+            ':updatedAt': deletedAt,
+            ...toAuditMutationExpressionValues(audit),
           },
         }),
       )
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
-        throw new NotFoundException(`Category ${categoryId} was not found.`)
+        throw new NotFoundError(`Category ${categoryId} was not found.`)
       }
       throw error
     }
