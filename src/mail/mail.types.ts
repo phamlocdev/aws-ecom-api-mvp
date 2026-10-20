@@ -1,4 +1,4 @@
-import type { Order, OrderItem } from '../orders/orders.types'
+import type { Order, OrderItem } from '../orders/domain/order.entity'
 
 export interface SendOrderConfirmationEmailInput {
   order: Order

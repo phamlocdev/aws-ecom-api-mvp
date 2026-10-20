@@ -2,6 +2,7 @@ import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common'
 import { SQSEvent, SQSBatchResponse, SQSRecord } from 'aws-lambda'
 import { PutCommand } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'crypto'
+import { systemAuditMutationContext } from '../audit/audit-actor'
 import { GetOwnedCartUseCase } from '../carts/application/get-owned-cart.use-case'
 import { GetCartItemsUseCase } from '../carts/application/get-cart-items.use-case'
 import { MarkCartExpiredUseCase } from '../carts/application/mark-cart-expired.use-case'
@@ -10,9 +11,15 @@ import { InventoryService } from '../inventory/inventory.service'
 import { ReservedInventoryItem } from '../inventory/inventory.types'
 import { FindOneProductUseCase } from '../products/application/find-one-product.use-case'
 import { Product } from '../products/domain/product.entity'
-import { OrderStatus } from '../orders/order-status.enum'
-import { OrdersService } from '../orders/orders.service'
-import { OrderItem, OrderMutationContext, PlaceOrderMessage } from '../orders/orders.types'
+import { ExpireReservationAndReleaseInventoryIfUnpaidUseCase } from '../orders/application/expire-reservation-and-release-inventory-if-unpaid.use-case'
+import { FailPendingOrderAndReleaseReservationUseCase } from '../orders/application/fail-pending-order-and-release-reservation.use-case'
+import { FindExpiredReservedOrdersUseCase } from '../orders/application/find-expired-reserved-orders.use-case'
+import { FindOrderItemsUseCase } from '../orders/application/find-order-items.use-case'
+import { GetOrderByIdUseCase } from '../orders/application/get-order-by-id.use-case'
+import { MarkFailedUseCase } from '../orders/application/mark-failed.use-case'
+import { MarkReservedUseCase } from '../orders/application/mark-reserved.use-case'
+import { OrderStatus } from '../orders/domain/order-status.enum'
+import { OrderItem, PlaceOrderMessage } from '../orders/domain/order.entity'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { ConfigService } from '@nestjs/config'
@@ -34,8 +41,20 @@ export class OrdersWorkerService {
     private readonly inventoryService: InventoryService,
     @Inject(FindOneProductUseCase)
     private readonly findOneProductUseCase: FindOneProductUseCase,
-    @Inject(OrdersService)
-    private readonly ordersService: OrdersService,
+    @Inject(GetOrderByIdUseCase)
+    private readonly getOrderByIdUseCase: GetOrderByIdUseCase,
+    @Inject(FindOrderItemsUseCase)
+    private readonly findOrderItemsUseCase: FindOrderItemsUseCase,
+    @Inject(FindExpiredReservedOrdersUseCase)
+    private readonly findExpiredReservedOrdersUseCase: FindExpiredReservedOrdersUseCase,
+    @Inject(MarkFailedUseCase)
+    private readonly markFailedUseCase: MarkFailedUseCase,
+    @Inject(MarkReservedUseCase)
+    private readonly markReservedUseCase: MarkReservedUseCase,
+    @Inject(FailPendingOrderAndReleaseReservationUseCase)
+    private readonly failPendingOrderAndReleaseReservationUseCase: FailPendingOrderAndReleaseReservationUseCase,
+    @Inject(ExpireReservationAndReleaseInventoryIfUnpaidUseCase)
+    private readonly expireReservationAndReleaseInventoryIfUnpaidUseCase: ExpireReservationAndReleaseInventoryIfUnpaidUseCase,
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
     @Inject(ConfigService)
@@ -76,7 +95,7 @@ export class OrdersWorkerService {
     let reservationsReleased = 0
 
     do {
-      const response = await this.ordersService.findExpiredReservedOrders(
+      const response = await this.findExpiredReservedOrdersUseCase.execute(
         nowEpochSeconds,
         25,
         exclusiveStartKey,
@@ -85,16 +104,16 @@ export class OrdersWorkerService {
       expiredOrdersFound += response.items.length
 
       for (const order of response.items) {
-        const items = await this.ordersService.findOrderItems(order.orderId)
+        const items = await this.findOrderItemsUseCase.execute(order.orderId)
         if (items.length === 0) {
           this.logger.warn(`Expired reserved order ${order.orderId} has no order items.`)
           continue
         }
 
-        const released = await this.ordersService.expireReservationAndReleaseInventoryIfUnpaid(
+        const released = await this.expireReservationAndReleaseInventoryIfUnpaidUseCase.execute(
           order,
           items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-          systemOrderMutationContext('reservation-expiry-poller', 'Payment expired'),
+          systemAuditMutationContext('reservation-expiry-poller', 'Payment expired'),
         )
         if (released) {
           reservationsReleased += 1
@@ -115,7 +134,7 @@ export class OrdersWorkerService {
 
   private async handlePlaceOrderRecord(record: SQSRecord): Promise<void> {
     const message = parseJson<PlaceOrderMessage>(record.body)
-    const order = await this.ordersService.getById(message.orderId)
+    const order = await this.getOrderByIdUseCase.execute(message.orderId)
 
     if (order.status !== OrderStatus.PENDING) {
       return
@@ -126,22 +145,22 @@ export class OrdersWorkerService {
     const cart = await this.getOwnedCartUseCase.execute(message.customerId, message.cartId)
     if (cart.status === CartStatus.EXPIRED || cart.expiresAt <= Math.floor(Date.now() / 1000)) {
       await this.markCartExpiredUseCase.execute(cart)
-      await this.ordersService.markFailed(
+      await this.markFailedUseCase.execute(
         order.orderId,
         OrderStatus.EXPIRED,
         'Cart expired before checkout.',
-        systemOrderMutationContext('place-order-worker', 'Cart expired before checkout.'),
+        systemAuditMutationContext('place-order-worker', 'Cart expired before checkout.'),
       )
       return
     }
 
     const cartItems = await this.getCartItemsUseCase.execute(cart.cartId)
     if (cartItems.length === 0) {
-      await this.ordersService.markFailed(
+      await this.markFailedUseCase.execute(
         order.orderId,
         OrderStatus.FAILED,
         'Cart has no items.',
-        systemOrderMutationContext('place-order-worker', 'Cart has no items.'),
+        systemAuditMutationContext('place-order-worker', 'Cart has no items.'),
       )
       return
     }
@@ -182,28 +201,28 @@ export class OrdersWorkerService {
       }
 
       const totalAmount = orderItems.reduce((total, item) => total + item.lineTotal, 0)
-      await this.ordersService.markReserved(
+      await this.markReservedUseCase.execute(
         order.orderId,
         totalAmount,
-        systemOrderMutationContext('place-order-worker', 'Order reserved'),
+        systemAuditMutationContext('place-order-worker', 'Order reserved'),
       )
       reservationSucceeded = true
     } catch (error) {
       const failureReason = error instanceof Error ? error.message : 'Failed to process order.'
 
       if (reservedItems.length > 0) {
-        await this.ordersService.failPendingOrderAndReleaseReservation(
+        await this.failPendingOrderAndReleaseReservationUseCase.execute(
           order.orderId,
           failureReason,
           reservedItems,
-          systemOrderMutationContext('place-order-worker', failureReason),
+          systemAuditMutationContext('place-order-worker', failureReason),
         )
       } else {
-        await this.ordersService.markFailed(
+        await this.markFailedUseCase.execute(
           order.orderId,
           OrderStatus.FAILED,
           failureReason,
-          systemOrderMutationContext('place-order-worker', failureReason),
+          systemAuditMutationContext('place-order-worker', failureReason),
         )
       }
 
@@ -229,12 +248,4 @@ function wait(milliseconds: number): Promise<void> {
 
 function toEpochSeconds(timestampMs: number): number {
   return Math.floor(timestampMs / 1000)
-}
-
-function systemOrderMutationContext(actorId: string, reason: string): OrderMutationContext {
-  return {
-    actorType: 'system',
-    actorId,
-    reason,
-  }
 }

@@ -20,16 +20,25 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 import { type Request } from 'express'
-import { CurrentUser } from '../auth/current-user.decorator'
-import { AuthenticatedUser } from '../auth/auth.types'
-import { Permission } from '../auth/permissions'
-import { RequirePermissions } from '../auth/permissions.decorator'
-import { Role } from '../auth/roles.enum'
-import { Roles } from '../auth/roles.decorator'
-import { ResendEmailRecipientDto } from '../mail/dto/resend-email-recipient.dto'
-import { EmailDeliveryStatistics } from '../mail/mail.types'
-import { EmailType } from '../mail/mail.types'
-import { PaginatedResponse } from '../pagination/pagination.types'
+import { CurrentUser } from '../../auth/current-user.decorator'
+import { AuthenticatedUser } from '../../auth/auth.types'
+import { Permission } from '../../auth/permissions'
+import { RequirePermissions } from '../../auth/permissions.decorator'
+import { Role } from '../../auth/roles.enum'
+import { Roles } from '../../auth/roles.decorator'
+import { ResendEmailRecipientDto } from '../../mail/dto/resend-email-recipient.dto'
+import { EmailDeliveryStatistics } from '../../mail/mail.types'
+import { EmailType } from '../../mail/mail.types'
+import { PaginatedResponse } from '../../pagination/pagination.types'
+import { CreateOrderRequestUseCase } from '../application/create-order-request.use-case'
+import { FindOneOrderUseCase } from '../application/find-one-order.use-case'
+import { FindOrdersUseCase } from '../application/find-orders.use-case'
+import { GetOrderEmailStatisticsUseCase } from '../application/get-order-email-statistics.use-case'
+import { GetOrderEmailTrackingUseCase } from '../application/get-order-email-tracking.use-case'
+import { ResendFailedOrderEmailUseCase } from '../application/resend-failed-order-email.use-case'
+import { TriggerPaymentUseCase } from '../application/trigger-payment.use-case'
+import { UpdateOrderStatusUseCase } from '../application/update-order-status.use-case'
+import { Order, OrderDetails, ResendOrderEmailResult } from '../domain/order.entity'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto'
 import {
@@ -40,13 +49,28 @@ import {
   TriggerPaymentResponseDto,
 } from './dto/order-response.dto'
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto'
-import { OrdersService } from './orders.service'
-import { Order, OrderDetails, ResendOrderEmailResult } from './orders.types'
 
 @ApiTags('orders')
 @Controller('orders')
 export class OrdersController {
-  constructor(@Inject(OrdersService) private readonly ordersService: OrdersService) {}
+  constructor(
+    @Inject(CreateOrderRequestUseCase)
+    private readonly createOrderRequestUseCase: CreateOrderRequestUseCase,
+    @Inject(FindOrdersUseCase)
+    private readonly findOrdersUseCase: FindOrdersUseCase,
+    @Inject(FindOneOrderUseCase)
+    private readonly findOneOrderUseCase: FindOneOrderUseCase,
+    @Inject(GetOrderEmailStatisticsUseCase)
+    private readonly getOrderEmailStatisticsUseCase: GetOrderEmailStatisticsUseCase,
+    @Inject(GetOrderEmailTrackingUseCase)
+    private readonly getOrderEmailTrackingUseCase: GetOrderEmailTrackingUseCase,
+    @Inject(UpdateOrderStatusUseCase)
+    private readonly updateOrderStatusUseCase: UpdateOrderStatusUseCase,
+    @Inject(ResendFailedOrderEmailUseCase)
+    private readonly resendFailedOrderEmailUseCase: ResendFailedOrderEmailUseCase,
+    @Inject(TriggerPaymentUseCase)
+    private readonly triggerPaymentUseCase: TriggerPaymentUseCase,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
@@ -56,7 +80,7 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateOrderDto,
   ): Promise<PlaceOrderResponseDto> {
-    const order = await this.ordersService.createOrderRequest(user, dto)
+    const order = await this.createOrderRequestUseCase.execute(user, dto)
     return {
       orderId: order.orderId,
       status: order.status,
@@ -73,7 +97,7 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: ListOrdersQueryDto,
   ): Promise<PaginatedResponse<Order>> {
-    const page = await this.ordersService.findAll(user, query)
+    const page = await this.findOrdersUseCase.execute(user, query)
     return {
       ...page,
       items: page.items.map(stripOrderMutationContext),
@@ -85,8 +109,8 @@ export class OrdersController {
   @RequirePermissions(Permission.ORDERS_EMAIL_READ)
   @ApiOperation({ summary: 'Get order email delivery statistics' })
   @ApiOkResponse({ description: 'Returns counts by order email type and delivery status.' })
-  getEmailStatistics() {
-    return this.ordersService.getEmailStatistics()
+  getEmailStatistics(): Promise<EmailDeliveryStatistics> {
+    return this.getOrderEmailStatisticsUseCase.execute()
   }
 
   @Get(':orderId/email-tracking')
@@ -96,7 +120,7 @@ export class OrdersController {
   @ApiParam({ name: 'orderId', format: 'uuid' })
   @ApiOkResponse({ description: 'Returns order email tracking attempts.' })
   getEmailTracking(@Param('orderId') orderId: string) {
-    return this.ordersService.getEmailTracking(orderId)
+    return this.getOrderEmailTrackingUseCase.execute(orderId)
   }
 
   @Get(':orderId')
@@ -107,7 +131,7 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('orderId') orderId: string,
   ): Promise<OrderDetails> {
-    const order = await this.ordersService.findOne(user, orderId)
+    const order = await this.findOneOrderUseCase.execute(user, orderId)
     return stripOrderMutationContext(order) as OrderDetails
   }
 
@@ -122,7 +146,7 @@ export class OrdersController {
     @Param('orderId') orderId: string,
     @Body() dto: UpdateOrderStatusDto,
   ): Promise<Order> {
-    const order = await this.ordersService.updateOrderStatus(user, orderId, dto.status)
+    const order = await this.updateOrderStatusUseCase.execute(user, orderId, dto.status)
     return stripOrderMutationContext(order)
   }
 
@@ -142,7 +166,7 @@ export class OrdersController {
     @Param('emailType') emailType: EmailType,
     @Body() dto: ResendEmailRecipientDto,
   ): Promise<ResendOrderEmailResult> {
-    return this.ordersService.resendFailedOrderEmail(orderId, emailType, dto.recipientEmail)
+    return this.resendFailedOrderEmailUseCase.execute(orderId, emailType, dto.recipientEmail)
   }
 
   @Post(':orderId/pay')
@@ -155,7 +179,7 @@ export class OrdersController {
     @Param('orderId') orderId: string,
     @Req() request: Request,
   ): Promise<TriggerPaymentResponseDto> {
-    return this.ordersService.triggerPayment(user, orderId, resolveClientIp(request))
+    return this.triggerPaymentUseCase.execute(user, orderId, resolveClientIp(request))
   }
 }
 

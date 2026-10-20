@@ -2,14 +2,20 @@ import { Controller, Get, HttpCode, HttpStatus, Inject, Query, Res } from '@nest
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { type Response } from 'express'
 import { type IpnResponse } from 'vnpay'
-import { Public } from '../auth/public.decorator'
+import { Public } from '../../auth/public.decorator'
+import { HandleVnpayIpnUseCase } from '../application/handle-vnpay-ipn.use-case'
+import { HandleVnpayReturnUseCase } from '../application/handle-vnpay-return.use-case'
 import { VnpayIpnResponseDto, VnpayReturnResponseDto } from './dto/order-response.dto'
-import { OrdersService } from './orders.service'
 
 @ApiTags('payments')
 @Controller('payments')
 export class PaymentsController {
-  constructor(@Inject(OrdersService) private readonly ordersService: OrdersService) {}
+  constructor(
+    @Inject(HandleVnpayReturnUseCase)
+    private readonly handleVnpayReturnUseCase: HandleVnpayReturnUseCase,
+    @Inject(HandleVnpayIpnUseCase)
+    private readonly handleVnpayIpnUseCase: HandleVnpayIpnUseCase,
+  ) {}
 
   @Get('vnpay/return')
   @Public()
@@ -19,7 +25,7 @@ export class PaymentsController {
     @Query() query: Record<string, string | string[] | undefined>,
     @Res() response: Response,
   ): Promise<void> {
-    const result = await this.ordersService.handleVnpayReturn(normalizeQueryRecord(query))
+    const result = await this.handleVnpayReturnUseCase.execute(normalizeQueryRecord(query))
     response.redirect(result.redirectUrl)
   }
 
@@ -31,7 +37,7 @@ export class PaymentsController {
   handleVnpayIpn(
     @Query() query: Record<string, string | string[] | undefined>,
   ): Promise<IpnResponse> {
-    return this.ordersService.handleVnpayIpn(normalizeQueryRecord(query))
+    return this.handleVnpayIpnUseCase.execute(normalizeQueryRecord(query))
   }
 }
 

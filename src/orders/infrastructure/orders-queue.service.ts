@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs'
-import { PlaceOrderMessage } from './orders.types'
+import { PlaceOrderMessage } from '../domain/order.entity'
 
 @Injectable()
 export class OrdersQueueService {

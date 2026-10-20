@@ -4,9 +4,9 @@ import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { EmailTrackingService } from '../mail/email-tracking.service'
 import { SesMailService } from '../mail/ses-mail.service'
-import { OrderStatus } from '../orders/order-status.enum'
-import { PaymentStatus } from '../orders/payment-status.enum'
-import type { Order, OrderItem } from '../orders/orders.types'
+import { OrderStatus } from '../orders/domain/order-status.enum'
+import { PaymentStatus } from '../orders/domain/payment-status.enum'
+import type { Order, OrderItem } from '../orders/domain/order.entity'
 
 export interface OrderShippedNotificationEventDetail {
   orderId?: unknown
