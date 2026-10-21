@@ -2,8 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { randomUUID } from 'crypto'
 import { systemAuditMutationContext } from '../../audit/audit-actor'
 import { ConflictError } from '../../common/domain-error'
-import { InventoryService } from '../../inventory/inventory.service'
-import { ReservedInventoryItem } from '../../inventory/inventory.types'
+import { ReserveInventoryUseCase } from '../../inventory/application/reserve-inventory.use-case'
+import { ReservedInventoryItem } from '../../inventory/domain/inventory.entity'
 import { FindOneProductUseCase } from '../../products/application/find-one-product.use-case'
 import { Product } from '../../products/domain/product.entity'
 import { OrderItem } from '../domain/order.entity'
@@ -48,8 +48,8 @@ export class ReserveOrderCheckoutItemsUseCase {
   constructor(
     @Inject(ORDER_REPOSITORY)
     private readonly orderRepository: OrderRepositoryPort,
-    @Inject(InventoryService)
-    private readonly inventoryService: InventoryService,
+    @Inject(ReserveInventoryUseCase)
+    private readonly reserveInventoryUseCase: ReserveInventoryUseCase,
     @Inject(FindOneProductUseCase)
     private readonly findOneProductUseCase: FindOneProductUseCase,
     @Inject(MarkReservedUseCase)
@@ -68,7 +68,7 @@ export class ReserveOrderCheckoutItemsUseCase {
       for (const item of input.cartItems) {
         const product = await this.findOneProductUseCase.execute(item.productId)
 
-        await this.inventoryService.reserve(item.productId, item.quantity)
+        await this.reserveInventoryUseCase.execute(item.productId, item.quantity)
         reservedItems.push({ productId: item.productId, quantity: item.quantity })
         productSnapshots.push({ item, product })
       }

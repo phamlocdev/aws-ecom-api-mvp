@@ -1,4 +1,4 @@
-import { ProductStatus } from '../products/domain/product-status.enum'
+import { ProductStatus } from '../../products/domain/product-status.enum'
 
 export interface InventoryRecord {
   productId: string

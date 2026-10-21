@@ -1,5 +1,5 @@
 import { AuditMutationContext } from '../../audit/audit-actor'
-import { ReservedInventoryItem } from '../../inventory/inventory.types'
+import { ReservedInventoryItem } from '../../inventory/domain/inventory.entity'
 import { Order, OrderItem } from './order.entity'
 import { OrderStatus } from './order-status.enum'
 

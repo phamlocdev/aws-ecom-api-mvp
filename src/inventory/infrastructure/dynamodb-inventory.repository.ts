@@ -1,6 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConflictError, InvalidInputError, NotFoundError } from '../common/domain-error'
-import { DynamoTablesService } from '../config/dynamo-tables.service'
+import { Inject, Injectable } from '@nestjs/common'
 import {
   BatchGetCommand,
   GetCommand,
@@ -8,27 +6,37 @@ import {
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
+import { ConflictError, NotFoundError } from '../../common/domain-error'
 import {
   AUDIT_ACTOR_ATTRIBUTE_NAMES,
   AUDIT_ACTOR_FIELDS,
-  buildUserAuditMutationContext,
+  AuditMutationContext,
   systemAuditMutationContext,
   toAuditMutationAttributes,
   toAuditMutationExpressionValues,
-} from '../audit/audit-actor'
-import { AuthenticatedUser } from '../auth/auth.types'
-import { DynamoDbService } from '../dynamodb/dynamodb.service'
-import { DEFAULT_PAGE_SIZE } from '../pagination/pagination-query.dto'
-import { CursorScope, PaginatedResponse } from '../pagination/pagination.types'
-import { resolvePaginationState, toPaginatedResponse } from '../pagination/pagination.util'
-import { Product } from '../products/domain/product.entity'
-import { ProductStatus } from '../products/domain/product-status.enum'
-import { InventoryRecord, InventorySummary, ReservedInventoryItem } from './inventory.types'
-import { ListInventoriesQueryDto } from './dto/list-inventories-query.dto'
+} from '../../audit/audit-actor'
+import { DynamoTablesService } from '../../config/dynamo-tables.service'
+import { DynamoDbService } from '../../dynamodb/dynamodb.service'
+import { Product } from '../../products/domain/product.entity'
+import {
+  InventoryRecord,
+  InventorySummary,
+  ReservedInventoryItem,
+} from '../domain/inventory.entity'
+import {
+  InventoryFilters,
+  InventoryRepositoryPort,
+  InventorySummaryPage,
+} from '../domain/inventory.repository.port'
+
+interface InventoryFilterExpression {
+  FilterExpression?: string
+  ExpressionAttributeNames?: Record<string, string>
+  ExpressionAttributeValues?: Record<string, unknown>
+}
 
 @Injectable()
-export class InventoryService {
-  private readonly logger = new Logger(InventoryService.name)
+export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
   private readonly tableName: string
   private readonly productsTableName: string
 
@@ -42,7 +50,7 @@ export class InventoryService {
     this.productsTableName = dynamoTables.products
   }
 
-  async ensureInventoryRecord(productId: string): Promise<InventoryRecord> {
+  async ensureRecord(productId: string): Promise<InventoryRecord> {
     const existing = await this.findOne(productId)
     if (existing) {
       return existing
@@ -83,99 +91,13 @@ export class InventoryService {
     return (response.Item as InventoryRecord | undefined) ?? null
   }
 
-  async findAll(query: ListInventoriesQueryDto): Promise<PaginatedResponse<InventorySummary>> {
-    if (query.productIds && query.productIds.length > 0) {
-      const items = await this.findSummariesByProductIds(query.productIds)
-      return {
-        items,
-        previousCursor: null,
-        nextCursor: null,
-        limit: query.limit ?? DEFAULT_PAGE_SIZE,
-        currentPage: 1,
-      }
-    }
-
-    const filters = normalizeInventoryFilters(query)
-    const cursorScope = toCursorScope(filters)
-    const filterExpression = buildInventoryProductFilterExpression(filters)
-    const pagination = resolvePaginationState('inventories', query, cursorScope)
-    const items: InventorySummary[] = []
-    let scannedCount = 0
-    let lastEvaluatedKey = pagination.startKey ?? undefined
-
-    do {
-      const remainingNeeded = pagination.limit - items.length
-      const response = await this.dynamoDbService.documentClient.send(
-        new ScanCommand({
-          TableName: this.productsTableName,
-          Limit: remainingNeeded,
-          ExclusiveStartKey: lastEvaluatedKey,
-          ...filterExpression,
-        }),
-      )
-
-      const products = (response.Items ?? []) as Product[]
-      const inventoryRecords = await Promise.all(
-        products.map((product) => this.ensureInventoryRecord(product.productId)),
-      )
-
-      items.push(
-        ...products.map((product, index) => toInventorySummary(product, inventoryRecords[index])),
-      )
-      scannedCount += response.ScannedCount ?? 0
-      lastEvaluatedKey = response.LastEvaluatedKey
-    } while (items.length < pagination.limit && lastEvaluatedKey)
-
-    return {
-      ...toPaginatedResponse('inventories', pagination, items, lastEvaluatedKey),
-      scannedCount,
-    }
-  }
-
   async findOneSummary(productId: string): Promise<InventorySummary> {
     const product = await this.findProductOrThrow(productId)
-    const inventory = await this.ensureInventoryRecord(productId)
+    const inventory = await this.ensureRecord(productId)
     return toInventorySummary(product, inventory)
   }
 
-  async updateAvailableQuantity(
-    user: AuthenticatedUser,
-    productId: string,
-    availableQuantity: number,
-  ): Promise<InventorySummary> {
-    if (availableQuantity < 0) {
-      throw new InvalidInputError('availableQuantity must be a non-negative integer.')
-    }
-
-    const product = await this.findProductOrThrow(productId)
-    await this.ensureInventoryRecord(productId)
-    const actor = buildUserAuditMutationContext(user, 'Inventory quantity adjusted')
-
-    const response = await this.dynamoDbService.documentClient.send(
-      new UpdateCommand({
-        TableName: this.tableName,
-        Key: { productId },
-        UpdateExpression: `SET #availableQuantity = :availableQuantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
-        ConditionExpression: 'attribute_exists(#productId)',
-        ExpressionAttributeNames: {
-          '#productId': 'productId',
-          '#availableQuantity': 'availableQuantity',
-          '#updatedAt': 'updatedAt',
-          ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
-        },
-        ExpressionAttributeValues: {
-          ':availableQuantity': availableQuantity,
-          ':updatedAt': new Date().toISOString(),
-          ...toAuditMutationExpressionValues(actor),
-        },
-        ReturnValues: 'ALL_NEW',
-      }),
-    )
-
-    return toInventorySummary(product, response.Attributes as InventoryRecord)
-  }
-
-  private async findSummariesByProductIds(productIds: string[]): Promise<InventorySummary[]> {
+  async findSummariesByProductIds(productIds: string[]): Promise<InventorySummary[]> {
     const dedupedProductIds = [...new Set(productIds)]
     const products = await this.findProductsByIds(dedupedProductIds)
     const inventoryRecords = await this.findOrCreateInventoryRecordsByProductIds(
@@ -192,6 +114,130 @@ export class InventoryService {
         return inventory ? toInventorySummary(product, inventory) : null
       })
       .filter((item): item is InventorySummary => item !== null)
+  }
+
+  async findAllSummaries(
+    filters: InventoryFilters,
+    limit: number,
+    startKey?: Record<string, unknown> | null,
+  ): Promise<InventorySummaryPage> {
+    const filterExpression = buildInventoryProductFilterExpression(filters)
+    const items: InventorySummary[] = []
+    let scannedCount = 0
+    let lastEvaluatedKey = startKey ?? undefined
+
+    do {
+      const remainingNeeded = limit - items.length
+      const response = await this.dynamoDbService.documentClient.send(
+        new ScanCommand({
+          TableName: this.productsTableName,
+          Limit: remainingNeeded,
+          ExclusiveStartKey: lastEvaluatedKey,
+          ...filterExpression,
+        }),
+      )
+
+      const products = (response.Items ?? []) as Product[]
+      const inventoryRecords = await Promise.all(
+        products.map((product) => this.ensureRecord(product.productId)),
+      )
+
+      items.push(
+        ...products.map((product, index) => toInventorySummary(product, inventoryRecords[index])),
+      )
+      scannedCount += response.ScannedCount ?? 0
+      lastEvaluatedKey = response.LastEvaluatedKey
+    } while (items.length < limit && lastEvaluatedKey)
+
+    return { items, lastEvaluatedKey, scannedCount }
+  }
+
+  async updateAvailableQuantity(
+    productId: string,
+    availableQuantity: number,
+    updatedAt: string,
+    audit: AuditMutationContext,
+  ): Promise<InventorySummary> {
+    const product = await this.findProductOrThrow(productId)
+    await this.ensureRecord(productId)
+
+    const response = await this.dynamoDbService.documentClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { productId },
+        UpdateExpression: `SET #availableQuantity = :availableQuantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
+        ConditionExpression: 'attribute_exists(#productId)',
+        ExpressionAttributeNames: {
+          '#productId': 'productId',
+          '#availableQuantity': 'availableQuantity',
+          '#updatedAt': 'updatedAt',
+          ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
+        },
+        ExpressionAttributeValues: {
+          ':availableQuantity': availableQuantity,
+          ':updatedAt': updatedAt,
+          ...toAuditMutationExpressionValues(audit),
+        },
+        ReturnValues: 'ALL_NEW',
+      }),
+    )
+
+    return toInventorySummary(product, response.Attributes as InventoryRecord)
+  }
+
+  async reserve(productId: string, quantity: number, audit: AuditMutationContext): Promise<void> {
+    await this.ensureRecord(productId)
+
+    try {
+      await this.dynamoDbService.documentClient.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: { productId },
+          UpdateExpression: `SET #availableQuantity = #availableQuantity - :quantity, #reservedQuantity = #reservedQuantity + :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
+          ConditionExpression: '#availableQuantity >= :quantity',
+          ExpressionAttributeNames: {
+            '#availableQuantity': 'availableQuantity',
+            '#reservedQuantity': 'reservedQuantity',
+            '#updatedAt': 'updatedAt',
+            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
+          },
+          ExpressionAttributeValues: {
+            ':quantity': quantity,
+            ':updatedAt': new Date().toISOString(),
+            ...toAuditMutationExpressionValues(audit),
+          },
+        }),
+      )
+    } catch (error) {
+      if (isConditionalCheckFailure(error)) {
+        throw new ConflictError(`Insufficient inventory for product ${productId}.`)
+      }
+      throw error
+    }
+  }
+
+  async release(items: ReservedInventoryItem[], audit: AuditMutationContext): Promise<void> {
+    for (const item of items) {
+      await this.dynamoDbService.documentClient.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: { productId: item.productId },
+          UpdateExpression: `SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
+          ConditionExpression: '#reservedQuantity >= :quantity',
+          ExpressionAttributeNames: {
+            '#availableQuantity': 'availableQuantity',
+            '#reservedQuantity': 'reservedQuantity',
+            '#updatedAt': 'updatedAt',
+            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
+          },
+          ExpressionAttributeValues: {
+            ':quantity': item.quantity,
+            ':updatedAt': new Date().toISOString(),
+            ...toAuditMutationExpressionValues(audit),
+          },
+        }),
+      )
+    }
   }
 
   private async findProductOrThrow(productId: string): Promise<Product> {
@@ -274,7 +320,7 @@ export class InventoryService {
     }
 
     const createdRecords = await Promise.all(
-      missingProductIds.map((productId) => this.ensureInventoryRecord(productId)),
+      missingProductIds.map((productId) => this.ensureRecord(productId)),
     )
 
     for (const record of createdRecords) {
@@ -285,69 +331,6 @@ export class InventoryService {
       .map((productId) => inventoryMap.get(productId))
       .filter((inventory): inventory is InventoryRecord => Boolean(inventory))
   }
-
-  async reserve(productId: string, quantity: number): Promise<void> {
-    await this.ensureInventoryRecord(productId)
-    const actor = systemAuditMutationContext('orders-service', 'Inventory reserved for order')
-
-    try {
-      await this.dynamoDbService.documentClient.send(
-        new UpdateCommand({
-          TableName: this.tableName,
-          Key: { productId },
-          UpdateExpression:
-            `SET #availableQuantity = #availableQuantity - :quantity, #reservedQuantity = #reservedQuantity + :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
-          ConditionExpression: '#availableQuantity >= :quantity',
-          ExpressionAttributeNames: {
-            '#availableQuantity': 'availableQuantity',
-            '#reservedQuantity': 'reservedQuantity',
-            '#updatedAt': 'updatedAt',
-            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
-          },
-          ExpressionAttributeValues: {
-            ':quantity': quantity,
-            ':updatedAt': new Date().toISOString(),
-            ...toAuditMutationExpressionValues(actor),
-          },
-        }),
-      )
-      this.logger.log(`Reserved quantity=${quantity} for product ${productId}.`)
-    } catch (error) {
-      if (isConditionalCheckFailure(error)) {
-        this.logger.warn(
-          `Reserve rejected for product ${productId} with quantity=${quantity} due to insufficient inventory.`,
-        )
-        throw new ConflictError(`Insufficient inventory for product ${productId}.`)
-      }
-      throw error
-    }
-  }
-
-  async release(items: ReservedInventoryItem[]): Promise<void> {
-    const actor = systemAuditMutationContext('orders-service', 'Inventory reservation released')
-    for (const item of items) {
-      await this.dynamoDbService.documentClient.send(
-        new UpdateCommand({
-          TableName: this.tableName,
-          Key: { productId: item.productId },
-          UpdateExpression:
-            `SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
-          ConditionExpression: '#reservedQuantity >= :quantity',
-          ExpressionAttributeNames: {
-            '#availableQuantity': 'availableQuantity',
-            '#reservedQuantity': 'reservedQuantity',
-            '#updatedAt': 'updatedAt',
-            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
-          },
-          ExpressionAttributeValues: {
-            ':quantity': item.quantity,
-            ':updatedAt': new Date().toISOString(),
-            ...toAuditMutationExpressionValues(actor),
-          },
-        }),
-      )
-    }
-  }
 }
 
 function isConditionalCheckFailure(error: unknown): boolean {
@@ -357,38 +340,6 @@ function isConditionalCheckFailure(error: unknown): boolean {
     'name' in error &&
     error.name === 'ConditionalCheckFailedException'
   )
-}
-
-interface InventoryFilters {
-  q?: string
-  status?: ProductStatus
-}
-
-interface InventoryFilterExpression {
-  FilterExpression?: string
-  ExpressionAttributeNames?: Record<string, string>
-  ExpressionAttributeValues?: Record<string, unknown>
-}
-
-function normalizeInventoryFilters(query: ListInventoriesQueryDto): InventoryFilters {
-  return {
-    ...(query.q ? { q: query.q } : {}),
-    ...(query.status ? { status: query.status } : {}),
-  }
-}
-
-function toCursorScope(filters: InventoryFilters): CursorScope {
-  const scope: CursorScope = {}
-
-  if (filters.q) {
-    scope.q = filters.q
-  }
-
-  if (filters.status) {
-    scope.status = filters.status
-  }
-
-  return scope
 }
 
 function buildInventoryProductFilterExpression(

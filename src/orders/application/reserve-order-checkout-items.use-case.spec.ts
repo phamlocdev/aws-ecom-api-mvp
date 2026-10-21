@@ -1,5 +1,5 @@
 import { ConflictError } from '../../common/domain-error'
-import { InventoryService } from '../../inventory/inventory.service'
+import { ReserveInventoryUseCase } from '../../inventory/application/reserve-inventory.use-case'
 import { FindOneProductUseCase } from '../../products/application/find-one-product.use-case'
 import { Product } from '../../products/domain/product.entity'
 import { ProductStatus } from '../../products/domain/product-status.enum'
@@ -30,7 +30,7 @@ function createDeps() {
   const repository = {
     createOrderItems: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<Pick<OrderRepositoryPort, 'createOrderItems'>>
-  const inventoryService = { reserve: jest.fn().mockResolvedValue(undefined) }
+  const reserveInventoryUseCase = mockUseCase<ReserveInventoryUseCase>()
   const findOneProductUseCase = mockUseCase<FindOneProductUseCase>()
   findOneProductUseCase.execute.mockResolvedValue(product)
   const markReservedUseCase = mockUseCase<MarkReservedUseCase>()
@@ -40,7 +40,7 @@ function createDeps() {
 
   const useCase = new ReserveOrderCheckoutItemsUseCase(
     repository as unknown as OrderRepositoryPort,
-    inventoryService as unknown as InventoryService,
+    reserveInventoryUseCase,
     findOneProductUseCase,
     markReservedUseCase,
     markFailedUseCase,
@@ -49,7 +49,7 @@ function createDeps() {
 
   return {
     repository,
-    inventoryService,
+    reserveInventoryUseCase,
     findOneProductUseCase,
     markReservedUseCase,
     markFailedUseCase,
@@ -60,14 +60,14 @@ function createDeps() {
 
 describe('ReserveOrderCheckoutItemsUseCase', () => {
   it('reserves inventory, persists order items and marks the order RESERVED (no actorId)', async () => {
-    const { inventoryService, repository, markReservedUseCase, useCase } = createDeps()
+    const { reserveInventoryUseCase, repository, markReservedUseCase, useCase } = createDeps()
 
     const result = await useCase.execute({
       orderId: 'order-1',
       cartItems: [{ productId: 'p1', quantity: 2 }],
     })
 
-    expect(inventoryService.reserve).toHaveBeenCalledWith('p1', 2)
+    expect(reserveInventoryUseCase.execute).toHaveBeenCalledWith('p1', 2)
     expect(repository.createOrderItems).toHaveBeenCalledWith([
       expect.objectContaining({
         orderId: 'order-1',
@@ -98,12 +98,12 @@ describe('ReserveOrderCheckoutItemsUseCase', () => {
 
   it('swallows a ConflictError (insufficient inventory) and releases already-reserved items without rethrowing', async () => {
     const {
-      inventoryService,
+      reserveInventoryUseCase,
       failPendingOrderAndReleaseReservationUseCase,
       markFailedUseCase,
       useCase,
     } = createDeps()
-    inventoryService.reserve
+    reserveInventoryUseCase.execute
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new ConflictError('Insufficient inventory for product p2.'))
 
@@ -126,12 +126,12 @@ describe('ReserveOrderCheckoutItemsUseCase', () => {
 
   it('swallows a ConflictError on the very first item (nothing reserved yet) and marks the order FAILED', async () => {
     const {
-      inventoryService,
+      reserveInventoryUseCase,
       markFailedUseCase,
       failPendingOrderAndReleaseReservationUseCase,
       useCase,
     } = createDeps()
-    inventoryService.reserve.mockRejectedValue(
+    reserveInventoryUseCase.execute.mockRejectedValue(
       new ConflictError('Insufficient inventory for product p1.'),
     )
 
@@ -150,8 +150,8 @@ describe('ReserveOrderCheckoutItemsUseCase', () => {
   })
 
   it('uses a system actor for the failure path when actorId is provided (worker path)', async () => {
-    const { inventoryService, markFailedUseCase, useCase } = createDeps()
-    inventoryService.reserve.mockRejectedValue(
+    const { reserveInventoryUseCase, markFailedUseCase, useCase } = createDeps()
+    reserveInventoryUseCase.execute.mockRejectedValue(
       new ConflictError('Insufficient inventory for product p1.'),
     )
 
@@ -170,8 +170,8 @@ describe('ReserveOrderCheckoutItemsUseCase', () => {
   })
 
   it('rethrows an unexpected (non-ConflictError) error after marking the order FAILED', async () => {
-    const { inventoryService, markFailedUseCase, useCase } = createDeps()
-    inventoryService.reserve.mockRejectedValue(new Error('DynamoDB is unavailable.'))
+    const { reserveInventoryUseCase, markFailedUseCase, useCase } = createDeps()
+    reserveInventoryUseCase.execute.mockRejectedValue(new Error('DynamoDB is unavailable.'))
 
     await expect(
       useCase.execute({ orderId: 'order-1', cartItems: [{ productId: 'p1', quantity: 1 }] }),

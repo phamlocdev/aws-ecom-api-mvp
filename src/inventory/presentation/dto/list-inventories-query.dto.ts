@@ -1,8 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
 import { IsArray, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator'
-import { PaginationQueryDto } from '../../pagination/pagination-query.dto'
-import { ProductStatus } from '../../products/domain/product-status.enum'
+import { PaginationQueryDto } from '../../../pagination/pagination-query.dto'
+import { ProductStatus } from '../../../products/domain/product-status.enum'
 
 const trimString = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value

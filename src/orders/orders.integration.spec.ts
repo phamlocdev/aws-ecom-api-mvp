@@ -24,7 +24,7 @@ import { Cart, CartItem } from '../carts/domain/cart.entity'
 import { GetOwnedCartUseCase } from '../carts/application/get-owned-cart.use-case'
 import { GetCartItemsUseCase } from '../carts/application/get-cart-items.use-case'
 import { MarkCartExpiredUseCase } from '../carts/application/mark-cart-expired.use-case'
-import { InventoryService } from '../inventory/inventory.service'
+import { ReserveInventoryUseCase } from '../inventory/application/reserve-inventory.use-case'
 import { EmailTrackingService } from '../mail/email-tracking.service'
 import { SesMailService } from '../mail/ses-mail.service'
 import { FindOneProductUseCase } from '../products/application/find-one-product.use-case'
@@ -77,7 +77,7 @@ describe('orders use-cases (integration)', () => {
   let getOwnedCartUseCase: jest.Mocked<Pick<GetOwnedCartUseCase, 'execute'>>
   let getCartItemsUseCase: jest.Mocked<Pick<GetCartItemsUseCase, 'execute'>>
   let markCartExpiredUseCase: jest.Mocked<Pick<MarkCartExpiredUseCase, 'execute'>>
-  let inventoryService: jest.Mocked<Pick<InventoryService, 'reserve'>>
+  let reserveInventoryUseCase: jest.Mocked<Pick<ReserveInventoryUseCase, 'execute'>>
   let findOneProductUseCase: jest.Mocked<Pick<FindOneProductUseCase, 'execute'>>
   let findCustomerProfileByUsernameUseCase: jest.Mocked<
     Pick<FindCustomerProfileByUsernameUseCase, 'execute'>
@@ -238,7 +238,7 @@ describe('orders use-cases (integration)', () => {
     getOwnedCartUseCase = { execute: jest.fn() }
     getCartItemsUseCase = { execute: jest.fn() }
     markCartExpiredUseCase = { execute: jest.fn().mockResolvedValue(undefined) }
-    inventoryService = { reserve: jest.fn().mockResolvedValue(undefined) }
+    reserveInventoryUseCase = { execute: jest.fn().mockResolvedValue(undefined) }
     findOneProductUseCase = { execute: jest.fn() }
     findCustomerProfileByUsernameUseCase = { execute: jest.fn() }
     emailTrackingService = {
@@ -291,7 +291,7 @@ describe('orders use-cases (integration)', () => {
 
     reserveOrderCheckoutItemsUseCase = new ReserveOrderCheckoutItemsUseCase(
       repository,
-      inventoryService as unknown as InventoryService,
+      reserveInventoryUseCase as unknown as ReserveInventoryUseCase,
       findOneProductUseCase as unknown as FindOneProductUseCase,
       markReservedUseCase,
       markFailedUseCase,
@@ -407,7 +407,10 @@ describe('orders use-cases (integration)', () => {
         ':status': OrderStatus.RESERVED,
         ':totalAmount': 200000,
       })
-      expect(inventoryService.reserve).toHaveBeenCalledWith(cartItem.productId, cartItem.quantity)
+      expect(reserveInventoryUseCase.execute).toHaveBeenCalledWith(
+        cartItem.productId,
+        cartItem.quantity,
+      )
       expect(markCartExpiredUseCase.execute).toHaveBeenCalledWith(activeCart)
       expect(order.status).toBe(OrderStatus.RESERVED)
     })
@@ -436,7 +439,7 @@ describe('orders use-cases (integration)', () => {
       getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
       getCartItemsUseCase.execute.mockResolvedValue([cartItem, secondCartItem])
       findOneProductUseCase.execute.mockResolvedValue(product)
-      inventoryService.reserve
+      reserveInventoryUseCase.execute
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Insufficient inventory for product p2.'))
       ddbMock.on(PutCommand).resolves({})

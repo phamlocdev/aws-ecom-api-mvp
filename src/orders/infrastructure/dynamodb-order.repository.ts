@@ -15,7 +15,7 @@ import {
 import { ConflictError, InvalidInputError } from '../../common/domain-error'
 import { DynamoTablesService } from '../../config/dynamo-tables.service'
 import { DynamoDbService } from '../../dynamodb/dynamodb.service'
-import { ReservedInventoryItem } from '../../inventory/inventory.types'
+import { ReservedInventoryItem } from '../../inventory/domain/inventory.entity'
 import { Order, OrderItem } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
 import { OrderListFilter, OrderPage, OrderRepositoryPort } from '../domain/order.repository.port'
