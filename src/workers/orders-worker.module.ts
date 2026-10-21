@@ -6,7 +6,7 @@ import { InventoryModule } from '../inventory/inventory.module'
 import { OrdersModule } from '../orders/presentation/orders.module'
 import { ProductsModule } from '../products/presentation/products.module'
 import { validateRuntimeEnv } from '../config/env.validation'
-import { UsersModule } from '../users/users.module'
+import { UsersModule } from '../users/presentation/users.module'
 import { OrdersWorkerService } from './orders-worker.service'
 
 @Module({

@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { IsBoolean, IsEmail, IsIn, IsOptional, IsString } from 'class-validator'
-import { UserAccountStatus } from '../user.types'
+import { UserAccountStatus } from '../../domain/user.entity'
 
 export class UpdateManagedUserDto {
   @ApiPropertyOptional({ example: 'manager@example.com' })

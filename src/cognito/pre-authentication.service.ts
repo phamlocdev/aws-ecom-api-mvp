@@ -3,7 +3,7 @@ import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import type { PreAuthenticationTriggerEvent } from 'aws-lambda'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
-import { UserAccountStatus } from '../users/user.types'
+import { UserAccountStatus } from '../users/domain/user.entity'
 
 type UserAccountRecord = {
   userId: string
@@ -21,7 +21,7 @@ export class PreAuthenticationService {
     @Inject(DynamoTablesService) dynamoTables: DynamoTablesService,
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-  ) {
+  ) {   
     this.userAccountsTableName = dynamoTables.userAccounts
   }
 

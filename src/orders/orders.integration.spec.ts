@@ -30,7 +30,7 @@ import { SesMailService } from '../mail/ses-mail.service'
 import { FindOneProductUseCase } from '../products/application/find-one-product.use-case'
 import { Product } from '../products/domain/product.entity'
 import { ProductStatus } from '../products/domain/product-status.enum'
-import { UsersService } from '../users/users.service'
+import { FindCustomerProfileByUsernameUseCase } from '../users/application/find-customer-profile-by-username.use-case'
 import { OrderStatus } from './domain/order-status.enum'
 import { PaymentStatus } from './domain/payment-status.enum'
 import { Order, OrderItem } from './domain/order.entity'
@@ -60,6 +60,7 @@ import { MarkReservedUseCase } from './application/mark-reserved.use-case'
 import { ReconcileVerifiedGatewayResultUseCase } from './application/reconcile-verified-gateway-result.use-case'
 import { ReleaseExpiredOrderReservationUseCase } from './application/release-expired-order-reservation.use-case'
 import { ResendFailedOrderEmailUseCase } from './application/resend-failed-order-email.use-case'
+import { ReserveOrderCheckoutItemsUseCase } from './application/reserve-order-checkout-items.use-case'
 import { TriggerPaymentUseCase } from './application/trigger-payment.use-case'
 import { UpdateOrderStatusUseCase } from './application/update-order-status.use-case'
 
@@ -78,7 +79,9 @@ describe('orders use-cases (integration)', () => {
   let markCartExpiredUseCase: jest.Mocked<Pick<MarkCartExpiredUseCase, 'execute'>>
   let inventoryService: jest.Mocked<Pick<InventoryService, 'reserve'>>
   let findOneProductUseCase: jest.Mocked<Pick<FindOneProductUseCase, 'execute'>>
-  let usersService: jest.Mocked<Pick<UsersService, 'findCustomerProfileByUsername'>>
+  let findCustomerProfileByUsernameUseCase: jest.Mocked<
+    Pick<FindCustomerProfileByUsernameUseCase, 'execute'>
+  >
   let emailTrackingService: jest.Mocked<
     Pick<
       EmailTrackingService,
@@ -123,6 +126,7 @@ describe('orders use-cases (integration)', () => {
   let expireReservationAndReleaseInventoryIfUnpaidUseCase: ExpireReservationAndReleaseInventoryIfUnpaidUseCase
   let releaseExpiredOrderReservationUseCase: ReleaseExpiredOrderReservationUseCase
   let createOrderRequestUseCase: CreateOrderRequestUseCase
+  let reserveOrderCheckoutItemsUseCase: ReserveOrderCheckoutItemsUseCase
   let markOrderShippedUseCase: MarkOrderShippedUseCase
   let cancelConfirmedPaidOrderUseCase: CancelConfirmedPaidOrderUseCase
   let updateOrderStatusUseCase: UpdateOrderStatusUseCase
@@ -236,7 +240,7 @@ describe('orders use-cases (integration)', () => {
     markCartExpiredUseCase = { execute: jest.fn().mockResolvedValue(undefined) }
     inventoryService = { reserve: jest.fn().mockResolvedValue(undefined) }
     findOneProductUseCase = { execute: jest.fn() }
-    usersService = { findCustomerProfileByUsername: jest.fn() }
+    findCustomerProfileByUsernameUseCase = { execute: jest.fn() }
     emailTrackingService = {
       getStatistics: jest.fn(),
       findByContext: jest.fn(),
@@ -285,17 +289,23 @@ describe('orders use-cases (integration)', () => {
       expireReservationAndReleaseInventoryIfUnpaidUseCase,
     )
 
+    reserveOrderCheckoutItemsUseCase = new ReserveOrderCheckoutItemsUseCase(
+      repository,
+      inventoryService as unknown as InventoryService,
+      findOneProductUseCase as unknown as FindOneProductUseCase,
+      markReservedUseCase,
+      markFailedUseCase,
+      failPendingOrderAndReleaseReservationUseCase,
+    )
+
     createOrderRequestUseCase = new CreateOrderRequestUseCase(
       repository,
       getOwnedCartUseCase as unknown as GetOwnedCartUseCase,
       getCartItemsUseCase as unknown as GetCartItemsUseCase,
       markCartExpiredUseCase as unknown as MarkCartExpiredUseCase,
-      inventoryService as unknown as InventoryService,
-      findOneProductUseCase as unknown as FindOneProductUseCase,
-      usersService as unknown as UsersService,
-      markReservedUseCase,
+      findCustomerProfileByUsernameUseCase as unknown as FindCustomerProfileByUsernameUseCase,
       markFailedUseCase,
-      failPendingOrderAndReleaseReservationUseCase,
+      reserveOrderCheckoutItemsUseCase,
       getOrderByIdUseCase,
     )
 

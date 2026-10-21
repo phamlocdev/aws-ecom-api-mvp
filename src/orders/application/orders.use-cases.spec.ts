@@ -26,7 +26,7 @@ import { SesMailService } from '../../mail/ses-mail.service'
 import { FindOneProductUseCase } from '../../products/application/find-one-product.use-case'
 import { Product } from '../../products/domain/product.entity'
 import { ProductStatus } from '../../products/domain/product-status.enum'
-import { UsersService } from '../../users/users.service'
+import { FindCustomerProfileByUsernameUseCase } from '../../users/application/find-customer-profile-by-username.use-case'
 import { Order, OrderItem } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
 import { OrderRepositoryPort } from '../domain/order.repository.port'
@@ -55,6 +55,7 @@ import { MarkReservedUseCase } from './mark-reserved.use-case'
 import { ReconcileVerifiedGatewayResultUseCase } from './reconcile-verified-gateway-result.use-case'
 import { ReleaseExpiredOrderReservationUseCase } from './release-expired-order-reservation.use-case'
 import { ResendFailedOrderEmailUseCase } from './resend-failed-order-email.use-case'
+import { ReserveOrderCheckoutItemsUseCase } from './reserve-order-checkout-items.use-case'
 import { TriggerPaymentUseCase } from './trigger-payment.use-case'
 import { UpdateOrderStatusUseCase } from './update-order-status.use-case'
 
@@ -986,24 +987,30 @@ describe('CreateOrderRequestUseCase', () => {
     const markCartExpiredUseCase = mockUseCase<MarkCartExpiredUseCase>()
     const inventoryService = { reserve: jest.fn().mockResolvedValue(undefined) }
     const findOneProductUseCase = mockUseCase<FindOneProductUseCase>()
-    const usersService = { findCustomerProfileByUsername: jest.fn() }
+    const findCustomerProfileByUsernameUseCase = mockUseCase<FindCustomerProfileByUsernameUseCase>()
     const markReservedUseCase = mockUseCase<MarkReservedUseCase>()
     const markFailedUseCase = mockUseCase<MarkFailedUseCase>()
     const failPendingOrderAndReleaseReservationUseCase =
       mockUseCase<FailPendingOrderAndReleaseReservationUseCase>()
     const getOrderByIdUseCase = mockUseCase<GetOrderByIdUseCase>()
 
+    const reserveOrderCheckoutItemsUseCase = new ReserveOrderCheckoutItemsUseCase(
+      repository,
+      inventoryService as unknown as InventoryService,
+      findOneProductUseCase,
+      markReservedUseCase,
+      markFailedUseCase,
+      failPendingOrderAndReleaseReservationUseCase,
+    )
+
     const useCase = new CreateOrderRequestUseCase(
       repository,
       getOwnedCartUseCase,
       getCartItemsUseCase,
       markCartExpiredUseCase,
-      inventoryService as unknown as InventoryService,
-      findOneProductUseCase,
-      usersService as unknown as UsersService,
-      markReservedUseCase,
+      findCustomerProfileByUsernameUseCase,
       markFailedUseCase,
-      failPendingOrderAndReleaseReservationUseCase,
+      reserveOrderCheckoutItemsUseCase,
       getOrderByIdUseCase,
     )
 
@@ -1014,11 +1021,12 @@ describe('CreateOrderRequestUseCase', () => {
       markCartExpiredUseCase,
       inventoryService,
       findOneProductUseCase,
-      usersService,
+      findCustomerProfileByUsernameUseCase,
       markReservedUseCase,
       markFailedUseCase,
       failPendingOrderAndReleaseReservationUseCase,
       getOrderByIdUseCase,
+      reserveOrderCheckoutItemsUseCase,
       useCase,
     }
   }
@@ -1119,6 +1127,36 @@ describe('CreateOrderRequestUseCase', () => {
       [{ productId: cartItem.productId, quantity: cartItem.quantity }],
     )
     expect(markCartExpiredUseCase.execute).not.toHaveBeenCalled()
+  })
+
+  it('swallows a ConflictError from insufficient inventory and returns the order marked FAILED, without rethrowing', async () => {
+    const {
+      getOwnedCartUseCase,
+      getCartItemsUseCase,
+      findOneProductUseCase,
+      inventoryService,
+      markFailedUseCase,
+      markCartExpiredUseCase,
+      getOrderByIdUseCase,
+      useCase,
+    } = createDeps()
+    getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
+    getCartItemsUseCase.execute.mockResolvedValue([cartItem])
+    findOneProductUseCase.execute.mockResolvedValue(product)
+    inventoryService.reserve.mockRejectedValue(
+      new ConflictError(`Insufficient inventory for product ${cartItem.productId}.`),
+    )
+    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, status: OrderStatus.FAILED })
+
+    const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
+
+    expect(markFailedUseCase.execute).toHaveBeenCalledWith(
+      expect.any(String),
+      OrderStatus.FAILED,
+      `Insufficient inventory for product ${cartItem.productId}.`,
+    )
+    expect(markCartExpiredUseCase.execute).not.toHaveBeenCalled()
+    expect(result.status).toBe(OrderStatus.FAILED)
   })
 })
 

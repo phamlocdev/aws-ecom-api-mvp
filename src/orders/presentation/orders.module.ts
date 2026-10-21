@@ -3,7 +3,7 @@ import { CartsModule } from '../../carts/presentation/carts.module'
 import { InventoryModule } from '../../inventory/inventory.module'
 import { MailModule } from '../../mail/mail.module'
 import { ProductsModule } from '../../products/presentation/products.module'
-import { UsersModule } from '../../users/users.module'
+import { UsersModule } from '../../users/presentation/users.module'
 import { ORDER_REPOSITORY } from '../domain/order.repository.port'
 import { DynamoDbOrderRepository } from '../infrastructure/dynamodb-order.repository'
 import { OrderEventsPublisher } from '../infrastructure/order-events.publisher'
@@ -31,6 +31,7 @@ import { MarkReservedUseCase } from '../application/mark-reserved.use-case'
 import { ReconcileVerifiedGatewayResultUseCase } from '../application/reconcile-verified-gateway-result.use-case'
 import { ReleaseExpiredOrderReservationUseCase } from '../application/release-expired-order-reservation.use-case'
 import { ResendFailedOrderEmailUseCase } from '../application/resend-failed-order-email.use-case'
+import { ReserveOrderCheckoutItemsUseCase } from '../application/reserve-order-checkout-items.use-case'
 import { TriggerPaymentUseCase } from '../application/trigger-payment.use-case'
 import { UpdateOrderStatusUseCase } from '../application/update-order-status.use-case'
 import { OrdersController } from './orders.controller'
@@ -66,6 +67,7 @@ import { PaymentsController } from './payments.controller'
     ReconcileVerifiedGatewayResultUseCase,
     ReleaseExpiredOrderReservationUseCase,
     ResendFailedOrderEmailUseCase,
+    ReserveOrderCheckoutItemsUseCase,
     TriggerPaymentUseCase,
     UpdateOrderStatusUseCase,
   ],
@@ -80,6 +82,7 @@ import { PaymentsController } from './payments.controller'
     GetOrderByIdUseCase,
     MarkFailedUseCase,
     MarkReservedUseCase,
+    ReserveOrderCheckoutItemsUseCase,
   ],
 })
 export class OrdersModule {}

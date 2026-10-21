@@ -1,5 +1,5 @@
-import { EmailDeliverySummary, EmailType } from '../mail/mail.types'
-import { Permission } from '../auth/permissions'
+import { EmailDeliverySummary, EmailType } from '../../mail/mail.types'
+import { Permission } from '../../auth/permissions'
 
 export type ManagedUser = {
   username: string

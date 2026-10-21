@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsArray, IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator'
-import { ALL_PERMISSIONS, Permission } from '../../auth/permissions'
-import { Role } from '../../auth/roles.enum'
+import { ALL_PERMISSIONS, Permission } from '../../../auth/permissions'
+import { Role } from '../../../auth/roles.enum'
 
 export class CreateManagedUserDto {
   @ApiProperty({ example: 'manager' })
