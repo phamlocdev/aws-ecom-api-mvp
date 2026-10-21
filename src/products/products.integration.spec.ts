@@ -6,7 +6,6 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
-import { BadRequestException } from '@nestjs/common'
 import { ConflictError, InvalidInputError, NotFoundError } from '../common/domain-error'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
@@ -170,7 +169,7 @@ describe('products use-cases (post-refactor baseline)', () => {
             { key: 'products/a/2.webp', sortOrder: 1 },
           ],
         }),
-      ).rejects.toBeInstanceOf(BadRequestException)
+      ).rejects.toBeInstanceOf(InvalidInputError)
     })
   })
 

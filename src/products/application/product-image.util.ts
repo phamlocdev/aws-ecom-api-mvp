@@ -1,4 +1,5 @@
-import { BadRequestException, Logger } from '@nestjs/common'
+import { Logger } from '@nestjs/common'
+import { InvalidInputError } from '../../common/domain-error'
 import { UploadService } from '../../upload/upload.service'
 import { Product, ProductImage } from '../domain/product.entity'
 
@@ -35,12 +36,12 @@ export async function prepareProductImages(
 
   const maxImageCount = uploadService.getProductImageMaxCount()
   if (images.length > maxImageCount) {
-    throw new BadRequestException(`Product images cannot exceed ${maxImageCount} files.`)
+    throw new InvalidInputError(`Product images cannot exceed ${maxImageCount} files.`)
   }
 
   const duplicateKey = findDuplicate(images.map((image) => image.key))
   if (duplicateKey) {
-    throw new BadRequestException(`Duplicate product image key: ${duplicateKey}`)
+    throw new InvalidInputError(`Duplicate product image key: ${duplicateKey}`)
   }
 
   const normalizedImages = images.map((image) => ({
@@ -52,7 +53,7 @@ export async function prepareProductImages(
 
   const primaryCount = normalizedImages.filter((image) => image.isPrimary).length
   if (primaryCount > 1) {
-    throw new BadRequestException('Only one product image can be primary.')
+    throw new InvalidInputError('Only one product image can be primary.')
   }
   if (normalizedImages.length > 0 && primaryCount === 0) {
     normalizedImages[0].isPrimary = true

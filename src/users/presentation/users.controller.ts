@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -27,6 +26,7 @@ import { Permission } from '../../auth/permissions'
 import { RequirePermissions } from '../../auth/permissions.decorator'
 import { Role } from '../../auth/roles.enum'
 import { Roles } from '../../auth/roles.decorator'
+import { ForbiddenDomainError } from '../../common/domain-error'
 import { EmailStatisticsQueryDto } from '../../mail/dto/email-statistics-query.dto'
 import { ResendEmailRecipientDto } from '../../mail/dto/resend-email-recipient.dto'
 import { EmailDeliveryStatistics } from '../../mail/mail.types'
@@ -97,7 +97,7 @@ export class UsersController {
   ): Promise<ManagedUser[] | EmailDeliveryStatistics> {
     if (query.emailStatistics === 'true') {
       if (!request.user?.groups.includes(Role.ADMIN)) {
-        throw new ForbiddenException('You do not have permission to view email statistics.')
+        throw new ForbiddenDomainError('You do not have permission to view email statistics.')
       }
       return this.getWelcomeEmailStatisticsUseCase.execute()
     }
@@ -308,6 +308,6 @@ function assertNotSelfMutation(
   message: string,
 ): void {
   if (request.user?.sub === userId) {
-    throw new ForbiddenException(message)
+    throw new ForbiddenDomainError(message)
   }
 }

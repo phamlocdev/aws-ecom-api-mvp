@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
   DeleteObjectCommand,
@@ -11,6 +11,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'crypto'
 import { AuthenticatedUser } from '../auth/auth.types'
 import { Role } from '../auth/roles.enum'
+import { ForbiddenDomainError, InvalidInputError } from '../common/domain-error'
 import {
   PresignUploadFileDto,
   PresignUploadRequestDto,
@@ -81,7 +82,7 @@ export class UploadService {
 
     if (dto.target === UploadTarget.PRODUCT_IMAGE) {
       if (!user.groups.includes(Role.MANAGER) && !user.groups.includes(Role.ADMIN)) {
-        throw new ForbiddenException('Only managers and admins can upload product images.')
+        throw new ForbiddenDomainError('Only managers and admins can upload product images.')
       }
 
       this.validateProductImageFiles(dto.files)
@@ -94,7 +95,7 @@ export class UploadService {
       )
     }
 
-    throw new BadRequestException(`Unsupported upload target: ${dto.target}`)
+    throw new InvalidInputError(`Unsupported upload target: ${dto.target}`)
   }
 
   private async createPresignedPosts(
@@ -142,7 +143,7 @@ export class UploadService {
         )
       } catch (error) {
         if (isS3NotFound(error)) {
-          throw new BadRequestException(`Uploaded media object does not exist: ${key}`)
+          throw new InvalidInputError(`Uploaded media object does not exist: ${key}`)
         }
         throw error
       }
@@ -193,12 +194,12 @@ export class UploadService {
 
   private validateAvatarFiles(files: PresignUploadFileDto[]): void {
     if (files.length !== 1) {
-      throw new BadRequestException('Avatar upload requires exactly one file.')
+      throw new InvalidInputError('Avatar upload requires exactly one file.')
     }
 
     const [file] = files
     if (file.sizeBytes > this.uploadMaxFileSizeBytes) {
-      throw new BadRequestException(
+      throw new InvalidInputError(
         `File ${file.fileName} exceeds the ${this.uploadMaxFileSizeBytes} byte limit.`,
       )
     }
@@ -206,14 +207,14 @@ export class UploadService {
 
   private validateProductImageFiles(files: PresignUploadFileDto[]): void {
     if (files.length > this.productImageMaxCount) {
-      throw new BadRequestException(
+      throw new InvalidInputError(
         `Product images cannot exceed ${this.productImageMaxCount} files.`,
       )
     }
 
     const oversizedFile = files.find((file) => file.sizeBytes > this.uploadMaxFileSizeBytes)
     if (oversizedFile) {
-      throw new BadRequestException(
+      throw new InvalidInputError(
         `File ${oversizedFile.fileName} exceeds the ${this.uploadMaxFileSizeBytes} byte limit.`,
       )
     }

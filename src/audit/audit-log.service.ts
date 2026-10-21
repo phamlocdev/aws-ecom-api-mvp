@@ -1,8 +1,9 @@
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { unmarshall } from '@aws-sdk/util-dynamodb'
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { AttributeValue } from '@aws-sdk/client-dynamodb'
 import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda'
+import { InvalidInputError } from '../common/domain-error'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 
@@ -342,7 +343,7 @@ function parseAuditEntityType(value: unknown): AuditEntityType {
   if (typeof value === 'string' && AUDIT_ENTITY_TYPES.includes(value as AuditEntityType)) {
     return value as AuditEntityType
   }
-  throw new BadRequestException(`Unsupported audit entityType: ${String(value ?? '')}`)
+  throw new InvalidInputError(`Unsupported audit entityType: ${String(value ?? '')}`)
 }
 
 function isAuditEventName(value: unknown): value is AuditEventName {
@@ -736,6 +737,6 @@ function decodeCursor(value: string | undefined): Record<string, unknown> | unde
   try {
     return JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<string, unknown>
   } catch {
-    throw new BadRequestException('cursor is invalid.')
+    throw new InvalidInputError('cursor is invalid.')
   }
 }

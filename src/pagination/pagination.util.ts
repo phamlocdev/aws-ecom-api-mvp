@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common'
+import { InvalidInputError } from '../common/domain-error'
 import {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
@@ -34,13 +34,13 @@ export function resolvePaginationState(
 
   const payload = decodeCursor(query.cursor)
   if (payload.resource !== resource) {
-    throw new BadRequestException('Cursor does not belong to this resource.')
+    throw new InvalidInputError('Cursor does not belong to this resource.')
   }
   if (payload.limit !== limit) {
-    throw new BadRequestException('Cursor limit does not match the requested limit.')
+    throw new InvalidInputError('Cursor limit does not match the requested limit.')
   }
   if (!scopesMatch(payload.scope ?? {}, scope)) {
-    throw new BadRequestException('Cursor filters do not match the requested filters.')
+    throw new InvalidInputError('Cursor filters do not match the requested filters.')
   }
 
   return {
@@ -112,10 +112,10 @@ function decodeCursor(cursor: string): CursorPayload {
       return parsed
     }
   } catch {
-    // Fall through to the common BadRequestException below.
+    // Fall through to the common InvalidInputError below.
   }
 
-  throw new BadRequestException('Cursor is malformed.')
+  throw new InvalidInputError('Cursor is malformed.')
 }
 
 function isCursorPayload(value: unknown): value is CursorPayload {
