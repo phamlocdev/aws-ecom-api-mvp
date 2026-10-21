@@ -36,7 +36,7 @@ export class OrderNotificationConstruct extends Construct {
 
     this.orderNotificationWorker = new nodejs.NodejsFunction(this, 'Worker', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('order-notification-worker.ts'),
+      entry: sourceEntryPath('workers', 'order-notification-worker.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
@@ -59,7 +59,7 @@ export class OrderNotificationConstruct extends Construct {
 
     this.analyticsDemoWorker = new nodejs.NodejsFunction(this, 'AnalyticsDemoWorker', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('order-shipped-analytics-demo-worker.ts'),
+      entry: sourceEntryPath('workers', 'order-shipped-analytics-demo-worker.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 128,
@@ -73,7 +73,7 @@ export class OrderNotificationConstruct extends Construct {
 
     this.fulfillmentDemoWorker = new nodejs.NodejsFunction(this, 'FulfillmentDemoWorker', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('order-shipped-fulfillment-demo-worker.ts'),
+      entry: sourceEntryPath('workers', 'order-shipped-fulfillment-demo-worker.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 128,
@@ -90,7 +90,7 @@ export class OrderNotificationConstruct extends Construct {
       'CancellationInventoryDemoWorker',
       {
         runtime: lambda.Runtime.NODEJS_24_X,
-        entry: sourceEntryPath('order-cancelled-inventory-demo-worker.ts'),
+        entry: sourceEntryPath('workers', 'order-cancelled-inventory-demo-worker.ts'),
         handler: 'handler',
         timeout: cdk.Duration.seconds(30),
         memorySize: 128,
@@ -108,7 +108,7 @@ export class OrderNotificationConstruct extends Construct {
       'CancellationAccountingDemoWorker',
       {
         runtime: lambda.Runtime.NODEJS_24_X,
-        entry: sourceEntryPath('order-cancelled-accounting-demo-worker.ts'),
+        entry: sourceEntryPath('workers', 'order-cancelled-accounting-demo-worker.ts'),
         handler: 'handler',
         timeout: cdk.Duration.seconds(30),
         memorySize: 128,

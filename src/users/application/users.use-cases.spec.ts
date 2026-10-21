@@ -26,7 +26,7 @@ import { UpdateUserPermissionsUseCase } from './update-user-permissions.use-case
 // CognitoUserPort/UserAccountRepositoryPort, no AWS SDK involved. See
 // docs/refactor/PLAN.md. External module services (EmailTrackingService,
 // SesMailService, UploadService) are injected directly (same pattern as
-// orders use-cases injecting InventoryService), so they are mocked with
+// orders use-cases injecting ReserveInventoryUseCase), so they are mocked with
 // plain jest.fn() objects here too.
 
 const actor: AuthenticatedUser = {
@@ -96,6 +96,8 @@ function createUserAccountRepositoryMock(): jest.Mocked<UserAccountRepositoryPor
     findById: jest.fn().mockResolvedValue(storedAccount),
     save: jest.fn().mockResolvedValue(undefined),
     updateLoginContext: jest.fn().mockResolvedValue(undefined),
+    recordAuthenticationLogin: jest.fn().mockResolvedValue(undefined),
+    insertLoginAudit: jest.fn().mockResolvedValue(undefined),
     findLatestLoginAudit: jest.fn().mockResolvedValue(undefined),
     updateLoginAuditContext: jest.fn().mockResolvedValue(undefined),
     queryLoginAudit: jest.fn().mockResolvedValue({ items: [] }),

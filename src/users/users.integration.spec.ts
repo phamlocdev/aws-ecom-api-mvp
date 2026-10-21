@@ -522,4 +522,70 @@ describe('users use-cases (integration)', () => {
       expect(putCalls[putCalls.length - 1].args[0].input.Item).toMatchObject({ name: 'New Name' })
     })
   })
+
+  // These 2 port methods were added when refactoring the Cognito
+  // PostAuthentication trigger (src/cognito/post-authentication.service.ts)
+  // to stop hand-rolling DynamoDB commands against the userAccounts/
+  // userLoginAudit tables (docs/refactor/PLAN.md Giai đoạn 4).
+  describe('DynamoDbUserAccountRepository.recordAuthenticationLogin / insertLoginAudit', () => {
+    it('bootstraps missing account fields via if_not_exists and bumps lastLoginAt/loginCount', async () => {
+      ddbMock.on(UpdateCommand).resolves({})
+
+      await userAccountRepository.recordAuthenticationLogin('customer-1', {
+        username: 'customer',
+        email: 'customer@example.com',
+        passwordStatus: 'SET',
+        loginAt: '2026-01-02T00:00:00.000Z',
+      })
+
+      const updateCalls = ddbMock.commandCalls(UpdateCommand)
+      expect(updateCalls).toHaveLength(1)
+      const input = updateCalls[0].args[0].input
+      expect(input.UpdateExpression).toContain(
+        '#loginCount = if_not_exists(#loginCount, :zero) + :one',
+      )
+      expect(input.ExpressionAttributeValues).toMatchObject({
+        ':username': 'customer',
+        ':email': 'customer@example.com',
+        ':passwordStatus': 'SET',
+        ':loginAt': '2026-01-02T00:00:00.000Z',
+      })
+    })
+
+    it('defaults email to an empty string when not provided', async () => {
+      ddbMock.on(UpdateCommand).resolves({})
+
+      await userAccountRepository.recordAuthenticationLogin('customer-1', {
+        username: 'customer',
+        passwordStatus: 'REQUIRED',
+        loginAt: '2026-01-02T00:00:00.000Z',
+      })
+
+      const input = ddbMock.commandCalls(UpdateCommand)[0].args[0].input
+      expect(input.ExpressionAttributeValues).toMatchObject({ ':email': '' })
+    })
+
+    it('inserts a new immutable login-audit row', async () => {
+      ddbMock.on(PutCommand).resolves({})
+
+      await userAccountRepository.insertLoginAudit({
+        userId: 'customer-1',
+        loginAt: '2026-01-02T00:00:00.000Z',
+        loginId: 'login-1',
+        username: 'customer',
+        userPoolId: 'pool-1',
+        triggerSource: 'PostAuthentication_Authentication',
+        createdAt: '2026-01-02T00:00:00.000Z',
+        expiresAt: 1234567890,
+      })
+
+      const putCalls = ddbMock.commandCalls(PutCommand)
+      expect(putCalls).toHaveLength(1)
+      expect(putCalls[0].args[0].input.Item).toMatchObject({
+        userId: 'customer-1',
+        loginId: 'login-1',
+        triggerSource: 'PostAuthentication_Authentication',
+      })
+    })
+  })
 })

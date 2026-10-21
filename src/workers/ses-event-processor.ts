@@ -1,6 +1,6 @@
 import { SNSEvent } from 'aws-lambda'
-import { SesEventProcessorService } from './mail/ses-event-processor.service'
-import { createSesEventProcessorApp } from './worker.bootstrap'
+import { SesEventProcessorService } from '../mail/ses-event-processor.service'
+import { createSesEventProcessorApp } from '../worker.bootstrap'
 
 let eventProcessorServicePromise: Promise<SesEventProcessorService>
 

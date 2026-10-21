@@ -60,7 +60,7 @@ export class OrdersWorkersConstruct extends Construct {
 
     this.placeOrderWorker = new nodejs.NodejsFunction(this, 'PlaceOrderWorker', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('order-worker.ts'),
+      entry: sourceEntryPath('workers', 'order-worker.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,
@@ -72,7 +72,7 @@ export class OrdersWorkersConstruct extends Construct {
 
     this.reservationExpiryPoller = new nodejs.NodejsFunction(this, 'ReservationExpiryPoller', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('order-expiry-poller.ts'),
+      entry: sourceEntryPath('workers', 'order-expiry-poller.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,

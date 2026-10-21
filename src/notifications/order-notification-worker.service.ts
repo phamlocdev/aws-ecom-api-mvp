@@ -1,12 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
-import { DynamoTablesService } from '../config/dynamo-tables.service'
-import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { EmailTrackingService } from '../mail/email-tracking.service'
 import { SesMailService } from '../mail/ses-mail.service'
 import { OrderStatus } from '../orders/domain/order-status.enum'
 import { PaymentStatus } from '../orders/domain/payment-status.enum'
-import type { Order, OrderItem } from '../orders/domain/order.entity'
+import { ORDER_REPOSITORY, OrderRepositoryPort } from '../orders/domain/order.repository.port'
 
 export interface OrderShippedNotificationEventDetail {
   orderId?: unknown
@@ -21,22 +18,15 @@ export interface OrderCancelledNotificationEventDetail {
 @Injectable()
 export class OrderNotificationWorkerService {
   private readonly logger = new Logger(OrderNotificationWorkerService.name)
-  private readonly ordersTableName: string
-  private readonly orderItemsTableName: string
 
   constructor(
-    @Inject(DynamoDbService)
-    private readonly dynamoDbService: DynamoDbService,
+    @Inject(ORDER_REPOSITORY)
+    private readonly orderRepository: OrderRepositoryPort,
     @Inject(EmailTrackingService)
     private readonly emailTrackingService: EmailTrackingService,
     @Inject(SesMailService)
     private readonly sesMailService: SesMailService,
-    @Inject(DynamoTablesService)
-    dynamoTables: DynamoTablesService,
-  ) {
-    this.ordersTableName = dynamoTables.orders
-    this.orderItemsTableName = dynamoTables.orderItems
-  }
+  ) {}
 
   async handleOrderShippedEvent(detail: OrderShippedNotificationEventDetail): Promise<void> {
     this.logger.log(`Received OrderShipped event detail: ${JSON.stringify(detail)}.`)
@@ -50,7 +40,7 @@ export class OrderNotificationWorkerService {
       return
     }
 
-    const order = await this.findOrder(detail.orderId)
+    const order = await this.orderRepository.findById(detail.orderId)
     if (!order) {
       this.logger.warn(
         `Skipped shipped notification because order ${detail.orderId} was not found.`,
@@ -75,7 +65,7 @@ export class OrderNotificationWorkerService {
       return
     }
 
-    const items = await this.findOrderItems(order.orderId)
+    const items = await this.orderRepository.findOrderItems(order.orderId)
     const result = await this.sesMailService.sendShippedOrderNotificationEmail({
       order,
       items,
@@ -107,7 +97,7 @@ export class OrderNotificationWorkerService {
       return
     }
 
-    const order = await this.findOrder(detail.orderId)
+    const order = await this.orderRepository.findById(detail.orderId)
     if (!order) {
       this.logger.warn(
         `Skipped cancelled notification because order ${detail.orderId} was not found.`,
@@ -132,7 +122,7 @@ export class OrderNotificationWorkerService {
       return
     }
 
-    const items = await this.findOrderItems(order.orderId)
+    const items = await this.orderRepository.findOrderItems(order.orderId)
     const result = await this.sesMailService.sendCancelledOrderNotificationEmail({
       order,
       items,
@@ -156,29 +146,6 @@ export class OrderNotificationWorkerService {
     )
   }
 
-  private async findOrder(orderId: string): Promise<Order | undefined> {
-    const response = await this.dynamoDbService.documentClient.send(
-      new GetCommand({
-        TableName: this.ordersTableName,
-        Key: { orderId },
-      }),
-    )
-
-    return response.Item as Order | undefined
-  }
-
-  private async findOrderItems(orderId: string): Promise<OrderItem[]> {
-    const response = await this.dynamoDbService.documentClient.send(
-      new QueryCommand({
-        TableName: this.orderItemsTableName,
-        KeyConditionExpression: '#orderId = :orderId',
-        ExpressionAttributeNames: { '#orderId': 'orderId' },
-        ExpressionAttributeValues: { ':orderId': orderId },
-      }),
-    )
-
-    return (response.Items ?? []) as OrderItem[]
-  }
 }
 
 function isNonEmptyString(value: unknown): value is string {

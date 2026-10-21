@@ -1,7 +1,7 @@
 import { ScheduledEvent } from 'aws-lambda'
 import { Logger } from '@nestjs/common'
-import { OrdersWorkerService } from './workers/orders-worker.service'
-import { createOrdersWorkerApp } from './worker.bootstrap'
+import { OrdersWorkerService } from './orders-worker.service'
+import { createOrdersWorkerApp } from '../worker.bootstrap'
 
 let workerServicePromise: Promise<OrdersWorkerService>
 const logger = new Logger('OrderExpiryPoller')

@@ -1,6 +1,6 @@
 import type { EventBridgeEvent, SQSEvent, SQSBatchResponse } from 'aws-lambda'
-import { handleEventBridgeSqsBatch } from './event-consumers/eventbridge-sqs-batch'
-import { runIdempotentEventConsumer } from './event-consumers/event-consumer-idempotency'
+import { handleEventBridgeSqsBatch } from '../event-consumers/eventbridge-sqs-batch'
+import { runIdempotentEventConsumer } from '../event-consumers/event-consumer-idempotency'
 
 interface OrderShippedEventDetail {
   orderId?: unknown
@@ -10,13 +10,13 @@ interface OrderShippedEventDetail {
 async function handleEventBridgeEvent(
   event: EventBridgeEvent<'OrderShipped', OrderShippedEventDetail>,
 ): Promise<void> {
-  const worker = 'order-shipped-fulfillment-demo-worker'
+  const worker = 'order-shipped-analytics-demo-worker'
   const orderId = event.detail?.orderId
   if (!isNonEmptyString(orderId)) {
     console.warn(
       JSON.stringify({
         worker,
-        message: 'Skipped invalid OrderShipped fulfillment event detail.',
+        message: 'Skipped invalid OrderShipped analytics event detail.',
         eventId: event.id,
         detail: event.detail,
       }),
@@ -24,7 +24,7 @@ async function handleEventBridgeEvent(
     return
   }
 
-  const idempotencyKey = `ORDER#${orderId}#FULFILLMENT_ORDER_SHIPPED`
+  const idempotencyKey = `ORDER#${orderId}#ANALYTICS_ORDER_SHIPPED`
   await runIdempotentEventConsumer(
     {
       idempotencyKey,
@@ -40,7 +40,7 @@ async function handleEventBridgeEvent(
       console.log(
         JSON.stringify({
           worker,
-          message: 'Demo fulfillment target received OrderShipped event.',
+          message: 'Demo analytics target received OrderShipped event.',
           idempotencyKey,
           eventId: event.id,
           detailType: event['detail-type'],
@@ -68,7 +68,7 @@ function assertDemoWorkerNotForcedToFail(worker: string): void {
 export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   return handleEventBridgeSqsBatch(
     event,
-    'order-shipped-fulfillment-demo-worker',
+    'order-shipped-analytics-demo-worker',
     handleEventBridgeEvent,
   )
 }

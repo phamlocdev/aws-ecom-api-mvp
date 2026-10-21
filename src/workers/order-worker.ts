@@ -1,6 +1,6 @@
 import { SQSEvent, SQSBatchResponse } from 'aws-lambda'
-import { OrdersWorkerService } from './workers/orders-worker.service'
-import { createOrdersWorkerApp } from './worker.bootstrap'
+import { OrdersWorkerService } from './orders-worker.service'
+import { createOrdersWorkerApp } from '../worker.bootstrap'
 
 let workerServicePromise: Promise<OrdersWorkerService>
 

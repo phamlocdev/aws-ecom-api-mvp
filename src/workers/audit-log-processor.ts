@@ -1,6 +1,6 @@
 import { SQSEvent, SQSBatchResponse } from 'aws-lambda'
-import { AuditLogService } from './audit/audit-log.service'
-import { createOrderAuditLogProcessorApp } from './worker.bootstrap'
+import { AuditLogService } from '../audit/audit-log.service'
+import { createOrderAuditLogProcessorApp } from '../worker.bootstrap'
 
 let processorServicePromise: Promise<AuditLogService>
 

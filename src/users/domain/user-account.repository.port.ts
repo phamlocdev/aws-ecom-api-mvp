@@ -1,4 +1,4 @@
-import { UserAccount, UserLoginAudit } from './user.entity'
+import { UserAccount, UserLoginAudit, UserPasswordStatus } from './user.entity'
 
 export const USER_ACCOUNT_REPOSITORY = Symbol('USER_ACCOUNT_REPOSITORY')
 
@@ -6,6 +6,13 @@ export interface LoginContextFields {
   updatedAt: string
   lastLoginIp?: string
   lastLoginUserAgent?: string
+}
+
+export interface AuthenticationLoginFields {
+  username: string
+  email?: string
+  passwordStatus: UserPasswordStatus
+  loginAt: string
 }
 
 export interface LoginAuditContextFields {
@@ -31,6 +38,18 @@ export interface UserAccountRepositoryPort {
   save(account: UserAccount): Promise<void>
 
   updateLoginContext(userId: string, fields: LoginContextFields): Promise<void>
+
+  /**
+   * Called from the Cognito PostAuthentication trigger on every successful
+   * sign-in. Bootstraps missing account fields via if_not_exists (status,
+   * passwordStatus, permissions, createdAt) and always bumps lastLoginAt/
+   * loginCount. Distinct from `updateLoginContext`, which only records
+   * ip/userAgent on an already-existing account from the HTTP path.
+   */
+  recordAuthenticationLogin(userId: string, fields: AuthenticationLoginFields): Promise<void>
+
+  /** Inserts a new immutable login-audit row (one per successful sign-in). */
+  insertLoginAudit(entry: UserLoginAudit): Promise<void>
 
   findLatestLoginAudit(userId: string): Promise<UserLoginAudit | undefined>
 

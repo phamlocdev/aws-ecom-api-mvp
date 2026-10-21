@@ -4,6 +4,7 @@ import { DynamoTablesService } from '../../config/dynamo-tables.service'
 import { DynamoDbService } from '../../dynamodb/dynamodb.service'
 import { UserAccount, UserLoginAudit } from '../domain/user.entity'
 import {
+  AuthenticationLoginFields,
   LoginAuditContextFields,
   LoginAuditQueryResult,
   LoginContextFields,
@@ -69,6 +70,59 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
         UpdateExpression: `SET ${setExpressions.join(', ')}`,
         ExpressionAttributeNames: expressionAttributeNames,
         ExpressionAttributeValues: expressionAttributeValues,
+      }),
+    )
+  }
+
+  async recordAuthenticationLogin(
+    userId: string,
+    fields: AuthenticationLoginFields,
+  ): Promise<void> {
+    await this.dynamoDbService.documentClient.send(
+      new UpdateCommand({
+        TableName: this.userAccountsTableName,
+        Key: { userId },
+        UpdateExpression: [
+          'SET #username = if_not_exists(#username, :username)',
+          '#email = if_not_exists(#email, :email)',
+          '#status = if_not_exists(#status, :active)',
+          '#passwordStatus = if_not_exists(#passwordStatus, :passwordStatus)',
+          '#permissions = if_not_exists(#permissions, :emptyPermissions)',
+          '#createdAt = if_not_exists(#createdAt, :loginAt)',
+          '#lastLoginAt = :loginAt',
+          '#loginCount = if_not_exists(#loginCount, :zero) + :one',
+          '#updatedAt = :loginAt',
+        ].join(', '),
+        ExpressionAttributeNames: {
+          '#username': 'username',
+          '#email': 'email',
+          '#status': 'status',
+          '#passwordStatus': 'passwordStatus',
+          '#permissions': 'permissions',
+          '#createdAt': 'createdAt',
+          '#lastLoginAt': 'lastLoginAt',
+          '#loginCount': 'loginCount',
+          '#updatedAt': 'updatedAt',
+        },
+        ExpressionAttributeValues: {
+          ':username': fields.username,
+          ':email': fields.email ?? '',
+          ':active': 'ACTIVE',
+          ':passwordStatus': fields.passwordStatus,
+          ':emptyPermissions': [],
+          ':loginAt': fields.loginAt,
+          ':zero': 0,
+          ':one': 1,
+        },
+      }),
+    )
+  }
+
+  async insertLoginAudit(entry: UserLoginAudit): Promise<void> {
+    await this.dynamoDbService.documentClient.send(
+      new PutCommand({
+        TableName: this.userLoginAuditTableName,
+        Item: entry,
       }),
     )
   }

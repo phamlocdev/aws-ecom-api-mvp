@@ -1,26 +1,22 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'crypto'
 import type { PostAuthenticationTriggerEvent } from 'aws-lambda'
-import { DynamoTablesService } from '../config/dynamo-tables.service'
-import { DynamoDbService } from '../dynamodb/dynamodb.service'
+import {
+  USER_ACCOUNT_REPOSITORY,
+  UserAccountRepositoryPort,
+} from '../users/domain/user-account.repository.port'
+import { isGoogleFederatedUsername } from '../users/domain/user.rules'
 
 const AUDIT_RETENTION_SECONDS = 90 * 24 * 60 * 60
 
 @Injectable()
 export class PostAuthenticationService {
   private readonly logger = new Logger(PostAuthenticationService.name)
-  private readonly userAccountsTableName: string
-  private readonly userLoginAuditTableName: string
 
   constructor(
-    @Inject(DynamoTablesService) dynamoTables: DynamoTablesService,
-    @Inject(DynamoDbService)
-    private readonly dynamoDbService: DynamoDbService,
-  ) {
-    this.userAccountsTableName = dynamoTables.userAccounts
-    this.userLoginAuditTableName = dynamoTables.userLoginAudit
-  }
+    @Inject(USER_ACCOUNT_REPOSITORY)
+    private readonly userAccountRepository: UserAccountRepositoryPort,
+  ) {}
 
   async handle(event: PostAuthenticationTriggerEvent): Promise<PostAuthenticationTriggerEvent> {
     const userId = event.request.userAttributes.sub
@@ -51,44 +47,12 @@ export class PostAuthenticationService {
     loginAt: string,
   ): Promise<void> {
     try {
-      await this.dynamoDbService.documentClient.send(
-        new UpdateCommand({
-          TableName: this.userAccountsTableName,
-          Key: { userId },
-          UpdateExpression: [
-            'SET #username = if_not_exists(#username, :username)',
-            '#email = if_not_exists(#email, :email)',
-            '#status = if_not_exists(#status, :active)',
-            '#passwordStatus = if_not_exists(#passwordStatus, :passwordStatus)',
-            '#permissions = if_not_exists(#permissions, :emptyPermissions)',
-            '#createdAt = if_not_exists(#createdAt, :loginAt)',
-            '#lastLoginAt = :loginAt',
-            '#loginCount = if_not_exists(#loginCount, :zero) + :one',
-            '#updatedAt = :loginAt',
-          ].join(', '),
-          ExpressionAttributeNames: {
-            '#username': 'username',
-            '#email': 'email',
-            '#status': 'status',
-            '#passwordStatus': 'passwordStatus',
-            '#permissions': 'permissions',
-            '#createdAt': 'createdAt',
-            '#lastLoginAt': 'lastLoginAt',
-            '#loginCount': 'loginCount',
-            '#updatedAt': 'updatedAt',
-          },
-          ExpressionAttributeValues: {
-            ':username': event.userName,
-            ':email': event.request.userAttributes.email ?? '',
-            ':active': 'ACTIVE',
-            ':passwordStatus': isGoogleFederatedUsername(event.userName) ? 'REQUIRED' : 'SET',
-            ':emptyPermissions': [],
-            ':loginAt': loginAt,
-            ':zero': 0,
-            ':one': 1,
-          },
-        }),
-      )
+      await this.userAccountRepository.recordAuthenticationLogin(userId, {
+        username: event.userName,
+        email: event.request.userAttributes.email,
+        passwordStatus: isGoogleFederatedUsername(event.userName) ? 'REQUIRED' : 'SET',
+        loginAt,
+      })
 
       this.logger.log(
         JSON.stringify({
@@ -122,26 +86,21 @@ export class PostAuthenticationService {
     expiresAt: number,
   ): Promise<void> {
     try {
-      await this.dynamoDbService.documentClient.send(
-        new PutCommand({
-          TableName: this.userLoginAuditTableName,
-          Item: {
-            userId,
-            loginAt,
-            loginId: randomUUID(),
-            username: event.userName,
-            ...(event.request.userAttributes.email
-              ? { email: event.request.userAttributes.email }
-              : {}),
-            userPoolId: event.userPoolId,
-            clientId: event.callerContext.clientId,
-            triggerSource: event.triggerSource,
-            newDeviceUsed: event.request.newDeviceUsed,
-            createdAt: loginAt,
-            expiresAt,
-          },
-        }),
-      )
+      await this.userAccountRepository.insertLoginAudit({
+        userId,
+        loginAt,
+        loginId: randomUUID(),
+        username: event.userName,
+        ...(event.request.userAttributes.email
+          ? { email: event.request.userAttributes.email }
+          : {}),
+        userPoolId: event.userPoolId,
+        clientId: event.callerContext.clientId,
+        triggerSource: event.triggerSource,
+        newDeviceUsed: event.request.newDeviceUsed,
+        createdAt: loginAt,
+        expiresAt,
+      })
       this.logger.log(
         JSON.stringify({
           action: 'login-audit-written',
@@ -168,8 +127,4 @@ export class PostAuthenticationService {
       throw error
     }
   }
-}
-
-function isGoogleFederatedUsername(username: string | undefined): boolean {
-  return Boolean(username?.toLowerCase().startsWith('google_'))
 }

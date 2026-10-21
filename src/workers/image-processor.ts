@@ -1,7 +1,7 @@
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import type { S3Event, S3Handler } from 'aws-lambda'
 import sharp from 'sharp'
-import { createS3Client, getS3Settings } from './upload/s3.config'
+import { createS3Client, getS3Settings } from '../upload/s3.config'
 
 const PROCESSED_METADATA_KEY = 'image-processed'
 const PROCESSED_METADATA_VALUE = 'true'

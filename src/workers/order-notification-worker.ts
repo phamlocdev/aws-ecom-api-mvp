@@ -1,7 +1,7 @@
 import type { EventBridgeEvent, SQSEvent, SQSBatchResponse } from 'aws-lambda'
-import { handleEventBridgeSqsBatch } from './event-consumers/eventbridge-sqs-batch'
-import { OrderNotificationWorkerService } from './notifications/order-notification-worker.service'
-import { createOrderNotificationWorkerApp } from './worker.bootstrap'
+import { handleEventBridgeSqsBatch } from '../event-consumers/eventbridge-sqs-batch'
+import { OrderNotificationWorkerService } from '../notifications/order-notification-worker.service'
+import { createOrderNotificationWorkerApp } from '../worker.bootstrap'
 
 interface OrderShippedEventDetail {
   orderId?: unknown

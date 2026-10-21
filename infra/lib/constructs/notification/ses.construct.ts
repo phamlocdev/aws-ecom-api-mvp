@@ -61,7 +61,7 @@ export class SesConstruct extends Construct {
     this.eventTopic = new sns.Topic(this, 'SesEventsTopic')
     this.eventProcessor = new nodejs.NodejsFunction(this, 'SesEventProcessor', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('ses-event-processor.ts'),
+      entry: sourceEntryPath('workers', 'ses-event-processor.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,

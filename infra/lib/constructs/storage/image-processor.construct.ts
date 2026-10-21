@@ -18,7 +18,7 @@ export class ImageProcessorConstruct extends Construct {
     this.handler = new nodejs.NodejsFunction(this, 'Handler', {
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.X86_64,
-      entry: sourceEntryPath('image-processor.ts'),
+      entry: sourceEntryPath('workers', 'image-processor.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 1024,

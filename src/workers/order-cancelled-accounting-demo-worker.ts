@@ -1,6 +1,6 @@
 import type { EventBridgeEvent, SQSEvent, SQSBatchResponse } from 'aws-lambda'
-import { handleEventBridgeSqsBatch } from './event-consumers/eventbridge-sqs-batch'
-import { runIdempotentEventConsumer } from './event-consumers/event-consumer-idempotency'
+import { handleEventBridgeSqsBatch } from '../event-consumers/eventbridge-sqs-batch'
+import { runIdempotentEventConsumer } from '../event-consumers/event-consumer-idempotency'
 
 interface OrderCancelledEventDetail {
   orderId?: unknown
@@ -10,13 +10,13 @@ interface OrderCancelledEventDetail {
 async function handleEventBridgeEvent(
   event: EventBridgeEvent<'OrderCancelled', OrderCancelledEventDetail>,
 ): Promise<void> {
-  const worker = 'order-cancelled-inventory-demo-worker'
+  const worker = 'order-cancelled-accounting-demo-worker'
   const orderId = event.detail?.orderId
   if (!isNonEmptyString(orderId)) {
     console.warn(
       JSON.stringify({
         worker,
-        message: 'Skipped invalid OrderCancelled inventory event detail.',
+        message: 'Skipped invalid OrderCancelled accounting event detail.',
         eventId: event.id,
         detail: event.detail,
       }),
@@ -24,7 +24,7 @@ async function handleEventBridgeEvent(
     return
   }
 
-  const idempotencyKey = `ORDER#${orderId}#INVENTORY_ORDER_CANCELLED`
+  const idempotencyKey = `ORDER#${orderId}#ACCOUNTING_ORDER_CANCELLED`
   await runIdempotentEventConsumer(
     {
       idempotencyKey,
@@ -40,7 +40,7 @@ async function handleEventBridgeEvent(
       console.log(
         JSON.stringify({
           worker,
-          message: 'Demo inventory target received OrderCancelled event.',
+          message: 'Demo accounting target received OrderCancelled event.',
           idempotencyKey,
           eventId: event.id,
           detailType: event['detail-type'],
@@ -68,7 +68,7 @@ function assertDemoWorkerNotForcedToFail(worker: string): void {
 export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   return handleEventBridgeSqsBatch(
     event,
-    'order-cancelled-inventory-demo-worker',
+    'order-cancelled-accounting-demo-worker',
     handleEventBridgeEvent,
   )
 }

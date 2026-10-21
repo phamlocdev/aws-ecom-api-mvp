@@ -44,7 +44,7 @@ export class AuditLogConstruct extends Construct {
 
     this.auditLogProcessor = new nodejs.NodejsFunction(this, 'Processor', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('audit-log-processor.ts'),
+      entry: sourceEntryPath('workers', 'audit-log-processor.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,

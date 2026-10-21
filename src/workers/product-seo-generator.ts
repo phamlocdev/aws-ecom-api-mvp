@@ -6,8 +6,11 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
-import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb'
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 import { EventBridgeEvent } from 'aws-lambda'
+import { DynamoDbService } from '../dynamodb/dynamodb.service'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
+import { DynamoDbProductRepository } from '../products/infrastructure/dynamodb-product.repository'
 import { ProductSeoData, renderProductSeoHtml } from './product-seo-renderer'
 
 type ProductEventDetailType = 'ProductCreated' | 'ProductUpdated' | 'ProductDeleted'
@@ -27,6 +30,16 @@ const templateKey = process.env.PRODUCT_TEMPLATE_KEY ?? 'products/__template/ind
 const s3Client = new S3Client({ region })
 const dynamoDbDocumentClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region }))
 const cloudFrontClient = new CloudFrontClient({ region: 'us-east-1' })
+
+// Reuses the canonical Infrastructure adapter (same table wiring/query shape
+// as the HTTP products API) instead of hand-rolling a GetCommand here, per
+// docs/refactor/PLAN.md Giai đoạn 4. This Lambda otherwise avoids booting a
+// full NestJS application context, so the repository is constructed with a
+// minimal stand-in for DynamoDbService/DynamoTablesService rather than DI.
+const productRepository = new DynamoDbProductRepository(
+  { documentClient: dynamoDbDocumentClient } as unknown as DynamoDbService,
+  { products: productsTable } as unknown as DynamoTablesService,
+)
 
 export async function handler(
   event: EventBridgeEvent<ProductEventDetailType, ProductEventDetail>,
@@ -93,19 +106,14 @@ export async function handler(
 
 async function getProduct(productId: string): Promise<ProductSeoData> {
   console.log(`Loading product ${productId} from table ${productsTable}.`)
-  const response = await dynamoDbDocumentClient.send(
-    new GetCommand({
-      TableName: productsTable,
-      Key: { productId },
-    }),
-  )
+  const product = await productRepository.findOne(productId)
 
-  if (!response.Item) {
+  if (!product) {
     throw new Error(`Product ${productId} was not found.`)
   }
 
   console.log(`Loaded product ${productId} from table ${productsTable}.`)
-  return response.Item as ProductSeoData
+  return product
 }
 
 async function getTemplate(): Promise<string> {
