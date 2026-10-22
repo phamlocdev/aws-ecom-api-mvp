@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common'
+import { ConflictException, Inject, Injectable } from '@nestjs/common'
 import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { ConflictError, NotFoundError } from '../../common/domain-error'
 import {
@@ -42,6 +42,7 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
         throw new ConflictError(`Category ${category.categoryId} already exists.`)
+        // throw new ConflictException(`Category ${category.categoryId} already exists.`)
       }
       throw error
     }
