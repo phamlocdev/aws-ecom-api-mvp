@@ -34,14 +34,14 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
       }),
     )
 
-    return (response.Item as UserAccount | undefined) ?? null
+    return response.Item ? UserAccount.fromRecord(response.Item) : null
   }
 
   async save(account: UserAccount): Promise<void> {
     await this.dynamoDbService.documentClient.send(
       new PutCommand({
         TableName: this.userAccountsTableName,
-        Item: account,
+        Item: { ...account },
       }),
     )
   }
@@ -122,7 +122,7 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
     await this.dynamoDbService.documentClient.send(
       new PutCommand({
         TableName: this.userLoginAuditTableName,
-        Item: entry,
+        Item: { ...entry },
       }),
     )
   }
@@ -139,7 +139,7 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
       }),
     )
 
-    return response.Items?.[0] as UserLoginAudit | undefined
+    return response.Items?.[0] ? UserLoginAudit.fromRecord(response.Items[0]) : undefined
   }
 
   async updateLoginAuditContext(
@@ -192,7 +192,7 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
     )
 
     return {
-      items: (response.Items ?? []) as UserLoginAudit[],
+      items: (response.Items ?? []).map(UserLoginAudit.fromRecord),
       lastEvaluatedKey: response.LastEvaluatedKey as Record<string, unknown> | undefined,
     }
   }

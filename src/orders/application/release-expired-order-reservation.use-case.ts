@@ -3,7 +3,6 @@ import { ExpireReservationAndReleaseInventoryIfUnpaidUseCase } from './expire-re
 import { FindOrderItemsUseCase } from './find-order-items.use-case'
 import { Order } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
-import { isOrderPaymentExpired } from '../domain/order.rules'
 
 @Injectable()
 export class ReleaseExpiredOrderReservationUseCase {
@@ -15,7 +14,7 @@ export class ReleaseExpiredOrderReservationUseCase {
   ) {}
 
   async execute(order: Order): Promise<void> {
-    if (order.status !== OrderStatus.RESERVED || !isOrderPaymentExpired(order)) {
+    if (order.status !== OrderStatus.RESERVED || !order.isPaymentExpired()) {
       return
     }
 

@@ -85,7 +85,7 @@ const adminUser: AuthenticatedUser = {
   clientId: 'test-client',
 }
 
-const baseOrder: Order = {
+const baseOrder = Order.fromRecord({
   orderId: 'order-1',
   customerId: customerUser.sub,
   customerEmail: customerUser.email,
@@ -99,9 +99,9 @@ const baseOrder: Order = {
   updatedAt: '2026-01-01T00:00:00.000Z',
   totalAmount: 200000,
   paymentExpiresAt: Math.floor(Date.now() / 1000) + 3600,
-}
+})
 
-const baseOrderItem: OrderItem = {
+const baseOrderItem = OrderItem.fromRecord({
   orderId: baseOrder.orderId,
   lineId: '001-abcdefgh',
   productId: 'p1',
@@ -110,7 +110,7 @@ const baseOrderItem: OrderItem = {
   quantity: 2,
   lineTotal: 200000,
   createdAt: '2026-01-01T00:00:00.000Z',
-}
+})
 
 function createOrderRepositoryMock(): jest.Mocked<OrderRepositoryPort> {
   return {
@@ -401,7 +401,7 @@ describe('ReleaseExpiredOrderReservationUseCase', () => {
     const expireUseCase = mockUseCase<ExpireReservationAndReleaseInventoryIfUnpaidUseCase>()
     const useCase = new ReleaseExpiredOrderReservationUseCase(findOrderItemsUseCase, expireUseCase)
 
-    await useCase.execute({ ...baseOrder, status: OrderStatus.CONFIRMED })
+    await useCase.execute(Order.fromRecord({ ...baseOrder, status: OrderStatus.CONFIRMED }))
 
     expect(findOrderItemsUseCase.execute).not.toHaveBeenCalled()
     expect(expireUseCase.execute).not.toHaveBeenCalled()
@@ -411,7 +411,7 @@ describe('ReleaseExpiredOrderReservationUseCase', () => {
     const findOrderItemsUseCase = mockUseCase<FindOrderItemsUseCase>()
     findOrderItemsUseCase.execute.mockResolvedValue([])
     const expireUseCase = mockUseCase<ExpireReservationAndReleaseInventoryIfUnpaidUseCase>()
-    const expiredOrder = { ...baseOrder, paymentExpiresAt: Math.floor(Date.now() / 1000) - 10 }
+    const expiredOrder = Order.fromRecord({ ...baseOrder, paymentExpiresAt: Math.floor(Date.now() / 1000) - 10 })
     const useCase = new ReleaseExpiredOrderReservationUseCase(findOrderItemsUseCase, expireUseCase)
 
     await useCase.execute(expiredOrder)
@@ -423,7 +423,7 @@ describe('ReleaseExpiredOrderReservationUseCase', () => {
     const findOrderItemsUseCase = mockUseCase<FindOrderItemsUseCase>()
     findOrderItemsUseCase.execute.mockResolvedValue([baseOrderItem])
     const expireUseCase = mockUseCase<ExpireReservationAndReleaseInventoryIfUnpaidUseCase>()
-    const expiredOrder = { ...baseOrder, paymentExpiresAt: Math.floor(Date.now() / 1000) - 10 }
+    const expiredOrder = Order.fromRecord({ ...baseOrder, paymentExpiresAt: Math.floor(Date.now() / 1000) - 10 })
     const useCase = new ReleaseExpiredOrderReservationUseCase(findOrderItemsUseCase, expireUseCase)
 
     await useCase.execute(expiredOrder)
@@ -476,7 +476,7 @@ describe('FindOneOrderUseCase', () => {
 
   it('throws ForbiddenDomainError when a customer requests another customer order', async () => {
     const repository = createOrderRepositoryMock()
-    repository.findById.mockResolvedValue({ ...baseOrder, customerId: 'someone-else' })
+    repository.findById.mockResolvedValue(Order.fromRecord({ ...baseOrder, customerId: 'someone-else' }))
     const useCase = new FindOneOrderUseCase(repository)
 
     await expect(useCase.execute(customerUser, baseOrder.orderId)).rejects.toBeInstanceOf(
@@ -644,7 +644,7 @@ describe('MarkOrderShippedUseCase', () => {
   it('is a no-op when the order is already SHIPPED', async () => {
     const repository = createOrderRepositoryMock()
     const getOrderByIdUseCase = mockUseCase<GetOrderByIdUseCase>()
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, status: OrderStatus.SHIPPED })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.SHIPPED }))
     const publisher = createEventsPublisherMock()
     const useCase = new MarkOrderShippedUseCase(repository, getOrderByIdUseCase, publisher)
 
@@ -668,12 +668,12 @@ describe('MarkOrderShippedUseCase', () => {
 
   it('marks the order shipped and publishes the shipped event', async () => {
     const repository = createOrderRepositoryMock()
-    const confirmedPaidOrder = {
+    const confirmedPaidOrder = Order.fromRecord({
       ...baseOrder,
       status: OrderStatus.CONFIRMED,
       paymentStatus: PaymentStatus.PAID,
-    }
-    const shippedOrder = { ...confirmedPaidOrder, status: OrderStatus.SHIPPED }
+    })
+    const shippedOrder = Order.fromRecord({ ...confirmedPaidOrder, status: OrderStatus.SHIPPED })
     const getOrderByIdUseCase = mockUseCase<GetOrderByIdUseCase>()
     getOrderByIdUseCase.execute
       .mockResolvedValueOnce(confirmedPaidOrder)
@@ -699,11 +699,11 @@ describe('MarkOrderShippedUseCase', () => {
     repository.markShipped.mockRejectedValue(
       new ConflictError('Order cannot be marked as shipped.'),
     )
-    const confirmedPaidOrder = {
+    const confirmedPaidOrder = Order.fromRecord({
       ...baseOrder,
       status: OrderStatus.CONFIRMED,
       paymentStatus: PaymentStatus.PAID,
-    }
+    })
     const getOrderByIdUseCase = mockUseCase<GetOrderByIdUseCase>()
     getOrderByIdUseCase.execute.mockResolvedValue(confirmedPaidOrder)
     const publisher = createEventsPublisherMock()
@@ -724,7 +724,7 @@ describe('CancelConfirmedPaidOrderUseCase', () => {
   it('is a no-op when the order is already CANCELLED', async () => {
     const repository = createOrderRepositoryMock()
     const getOrderByIdUseCase = mockUseCase<GetOrderByIdUseCase>()
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, status: OrderStatus.CANCELLED })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.CANCELLED }))
     const findOrderItemsUseCase = mockUseCase<FindOrderItemsUseCase>()
     const publisher = createEventsPublisherMock()
     const useCase = new CancelConfirmedPaidOrderUseCase(
@@ -759,12 +759,12 @@ describe('CancelConfirmedPaidOrderUseCase', () => {
 
   it('cancels the order, releases inventory and publishes the cancelled event', async () => {
     const repository = createOrderRepositoryMock()
-    const confirmedPaidOrder = {
+    const confirmedPaidOrder = Order.fromRecord({
       ...baseOrder,
       status: OrderStatus.CONFIRMED,
       paymentStatus: PaymentStatus.PAID,
-    }
-    const cancelledOrder = { ...confirmedPaidOrder, status: OrderStatus.CANCELLED }
+    })
+    const cancelledOrder = Order.fromRecord({ ...confirmedPaidOrder, status: OrderStatus.CANCELLED })
     const getOrderByIdUseCase = mockUseCase<GetOrderByIdUseCase>()
     getOrderByIdUseCase.execute
       .mockResolvedValueOnce(confirmedPaidOrder)
@@ -866,7 +866,7 @@ describe('TriggerPaymentUseCase', () => {
 
   it('throws ForbiddenDomainError when a different customer requests payment', async () => {
     const { getOrderByIdUseCase, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, customerId: 'someone-else' })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, customerId: 'someone-else' }))
 
     await expect(
       useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
@@ -875,7 +875,7 @@ describe('TriggerPaymentUseCase', () => {
 
   it('throws InvalidInputError when the order is not RESERVED', async () => {
     const { getOrderByIdUseCase, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, status: OrderStatus.PENDING })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.PENDING }))
 
     await expect(
       useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
@@ -884,10 +884,10 @@ describe('TriggerPaymentUseCase', () => {
 
   it('throws InvalidInputError when the order is already paid', async () => {
     const { getOrderByIdUseCase, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({
       ...baseOrder,
       paymentStatus: PaymentStatus.PAID,
-    })
+    }))
 
     await expect(
       useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
@@ -896,7 +896,7 @@ describe('TriggerPaymentUseCase', () => {
 
   it('throws InvalidInputError when the order has no payable amount', async () => {
     const { getOrderByIdUseCase, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, totalAmount: undefined })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, totalAmount: undefined }))
 
     await expect(
       useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
@@ -905,7 +905,7 @@ describe('TriggerPaymentUseCase', () => {
 
   it('releases the reservation and throws ConflictError when the payment window has expired', async () => {
     const { getOrderByIdUseCase, releaseExpiredOrderReservationUseCase, useCase } = createDeps()
-    const expiredOrder = { ...baseOrder, paymentExpiresAt: Math.floor(Date.now() / 1000) - 10 }
+    const expiredOrder = Order.fromRecord({ ...baseOrder, paymentExpiresAt: Math.floor(Date.now() / 1000) - 10 })
     getOrderByIdUseCase.execute.mockResolvedValue(expiredOrder)
 
     await expect(
@@ -936,10 +936,10 @@ describe('TriggerPaymentUseCase', () => {
       createDeps()
     getOrderByIdUseCase.execute.mockResolvedValueOnce(baseOrder)
     repository.startPayment.mockRejectedValue(new ConflictError('conflict'))
-    const expiredLatestOrder = {
+    const expiredLatestOrder = Order.fromRecord({
       ...baseOrder,
       paymentExpiresAt: Math.floor(Date.now() / 1000) - 10,
-    }
+    })
     getOrderByIdUseCase.execute.mockResolvedValueOnce(expiredLatestOrder)
 
     await expect(
@@ -950,14 +950,14 @@ describe('TriggerPaymentUseCase', () => {
 })
 
 describe('CreateOrderRequestUseCase', () => {
-  const activeCart: Cart = {
+  const activeCart = Cart.fromRecord({
     customerId: customerUser.sub,
     cartId: 'cart-1',
     status: CartStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
-  }
+  })
 
   const cartItem: CartItem = {
     cartId: activeCart.cartId,
@@ -968,7 +968,7 @@ describe('CreateOrderRequestUseCase', () => {
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
 
-  const product: Product = {
+  const product = Product.fromRecord({
     productId: 'p1',
     name: 'Headphones',
     description: 'Wireless headphones',
@@ -978,7 +978,7 @@ describe('CreateOrderRequestUseCase', () => {
     status: ProductStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
-  }
+  })
 
   function createDeps() {
     const repository = createOrderRepositoryMock()
@@ -1033,10 +1033,7 @@ describe('CreateOrderRequestUseCase', () => {
 
   it('throws InvalidInputError when the cart has expired', async () => {
     const { getOwnedCartUseCase, useCase } = createDeps()
-    getOwnedCartUseCase.execute.mockResolvedValue({
-      ...activeCart,
-      status: CartStatus.EXPIRED,
-    })
+    getOwnedCartUseCase.execute.mockResolvedValue(Cart.fromRecord({ ...activeCart, status: CartStatus.EXPIRED }))
 
     await expect(
       useCase.execute(customerUser, { cartId: activeCart.cartId }),
@@ -1054,7 +1051,7 @@ describe('CreateOrderRequestUseCase', () => {
     } = createDeps()
     getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
     getCartItemsUseCase.execute.mockResolvedValue([])
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, status: OrderStatus.FAILED })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.FAILED }))
 
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
@@ -1082,7 +1079,7 @@ describe('CreateOrderRequestUseCase', () => {
     getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
     getCartItemsUseCase.execute.mockResolvedValue([cartItem])
     findOneProductUseCase.execute.mockResolvedValue(product)
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, status: OrderStatus.RESERVED })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.RESERVED }))
 
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
@@ -1149,7 +1146,7 @@ describe('CreateOrderRequestUseCase', () => {
     reserveInventoryUseCase.execute.mockRejectedValue(
       new ConflictError(`Insufficient inventory for product ${cartItem.productId}.`),
     )
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, status: OrderStatus.FAILED })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.FAILED }))
 
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
@@ -1222,18 +1219,18 @@ describe('ReconcileVerifiedGatewayResultUseCase', () => {
 
   it('returns IpnInvalidAmount on an amount mismatch', async () => {
     const { getOrderByIdUseCase, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({ ...baseOrder, totalAmount: 1 })
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({ ...baseOrder, totalAmount: 1 }))
 
     await expect(useCase.execute(verify, 'ipn')).resolves.toBe(IpnInvalidAmount)
   })
 
   it('returns InpOrderAlreadyConfirmed and best-effort sends the confirmation email when already paid', async () => {
     const { getOrderByIdUseCase, sesMailService, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({
       ...baseOrder,
       status: OrderStatus.CONFIRMED,
       paymentStatus: PaymentStatus.PAID,
-    })
+    }))
 
     await expect(useCase.execute(verify, 'ipn')).resolves.toBe(InpOrderAlreadyConfirmed)
     expect(sesMailService.sendOrderConfirmationEmail).toHaveBeenCalled()
@@ -1241,26 +1238,26 @@ describe('ReconcileVerifiedGatewayResultUseCase', () => {
 
   it('returns IpnSuccess for a duplicate auto-refund notification', async () => {
     const { getOrderByIdUseCase, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({
       ...baseOrder,
       status: OrderStatus.EXPIRED,
       paymentStatus: PaymentStatus.FAILED,
       paymentTransactionId: '123456',
       paymentFailureReason:
         'Payment arrived after reservation expiry. Amount refunded automatically.',
-    })
+    }))
 
     await expect(useCase.execute(verify, 'ipn')).resolves.toBe(IpnSuccess)
   })
 
   it('delegates failed verifications to the payment-failed flow', async () => {
     const { getOrderByIdUseCase, markPaymentFailedUseCase, useCase } = createDeps()
-    getOrderByIdUseCase.execute.mockResolvedValue({
+    getOrderByIdUseCase.execute.mockResolvedValue(Order.fromRecord({
       ...baseOrder,
       status: OrderStatus.RESERVED,
       paymentStatus: PaymentStatus.PROCESSING,
       paymentAttemptId: 'attempt-1',
-    })
+    }))
 
     const result = await useCase.execute({ ...verify, isSuccess: false }, 'ipn')
 
@@ -1276,17 +1273,19 @@ describe('ReconcileVerifiedGatewayResultUseCase', () => {
   it('confirms the payment and sends the confirmation email on a successful reconciliation', async () => {
     const { getOrderByIdUseCase, markPaymentSucceededUseCase, sesMailService, useCase } =
       createDeps()
-    const reservedOrder = {
+    const reservedOrder = Order.fromRecord({
       ...baseOrder,
       status: OrderStatus.RESERVED,
       paymentStatus: PaymentStatus.PROCESSING,
       paymentAttemptId: 'attempt-1',
-    }
-    getOrderByIdUseCase.execute.mockResolvedValueOnce(reservedOrder).mockResolvedValueOnce({
-      ...reservedOrder,
-      status: OrderStatus.CONFIRMED,
-      paymentStatus: PaymentStatus.PAID,
     })
+    getOrderByIdUseCase.execute.mockResolvedValueOnce(reservedOrder).mockResolvedValueOnce(
+      Order.fromRecord({
+        ...reservedOrder,
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.PAID,
+      }),
+    )
 
     const result = await useCase.execute(verify, 'ipn')
 

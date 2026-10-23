@@ -16,9 +16,6 @@ export class FindOneCartUseCase {
   async execute(user: AuthenticatedUser, cartId: string): Promise<CartDetails> {
     const cart = await this.getOwnedCartUseCase.execute(user.sub, cartId)
     const items = await this.getCartItemsUseCase.execute(cartId)
-    return {
-      ...cart,
-      items,
-    }
+    return CartDetails.fromParts(cart, items)
   }
 }

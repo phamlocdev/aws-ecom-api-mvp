@@ -17,7 +17,7 @@ import {
   isRetryableEmailFailureReason,
   isRetryableEmailTracking,
 } from './email-tracking.service'
-import type { EmailTracking } from './mail.types'
+import type { EmailTracking } from './domain/email-tracking.entity'
 
 // ---------------------------------------------------------------------------
 // Pure function tests
@@ -84,6 +84,7 @@ describe('isRetryableEmailTracking', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       status: 'PENDING',
+      isRetryable: false,
       ...overrides,
     }
   }
@@ -296,9 +297,15 @@ describe('EmailTrackingService', () => {
       ddbMock.on(GetCommand).resolves({
         Item: {
           emailId: existingId,
+          emailType: 'ORDER_CONFIRMATION',
+          recipientEmail: 'user@example.com',
           status: 'SENT',
-          updatedAt: new Date().toISOString(),
+          contextType: 'ORDER',
+          contextId: 'order-1',
+          contextKey: 'ORDER#order-1',
           attemptNumber: 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         } as Partial<EmailTracking>,
       })
 
@@ -328,11 +335,15 @@ describe('EmailTrackingService', () => {
       ddbMock.on(QueryCommand).resolves({
         Items: [
           {
+            emailId: 'email-sent-1',
             emailType: 'ORDER_CONFIRMATION',
-            status: 'SENT',
-            contextKey: 'ORDER#order-1',
             recipientEmail: 'user@example.com',
+            status: 'SENT',
+            contextType: 'ORDER',
+            contextId: 'order-1',
+            contextKey: 'ORDER#order-1',
             attemptNumber: 1,
+            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           } as Partial<EmailTracking>,
         ],
@@ -347,11 +358,15 @@ describe('EmailTrackingService', () => {
       ddbMock.on(QueryCommand).resolves({
         Items: [
           {
+            emailId: 'email-failed-1',
             emailType: 'ORDER_CONFIRMATION',
-            status: 'FAILED',
-            contextKey: 'ORDER#order-1',
             recipientEmail: 'user@example.com',
+            status: 'FAILED',
+            contextType: 'ORDER',
+            contextId: 'order-1',
+            contextKey: 'ORDER#order-1',
             attemptNumber: 1,
+            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           } as Partial<EmailTracking>,
         ],

@@ -2,31 +2,33 @@
 
 > File này là trạng thái SỐNG — luôn đọc file này trước khi bắt đầu bất kỳ công việc refactor nào, và CẬP NHẬT lại trước khi kết thúc phiên. Kiến trúc đích và các giai đoạn xem ở [PLAN.md](./PLAN.md).
 
-Cập nhật lần cuối: 2026-10-21
+Cập nhật lần cuối: 2026-10-23
 
 ## Trạng thái tổng quan
 
-| Giai đoạn | Trạng thái | Ghi chú |
-|---|---|---|
-| 0 — Safety net (Jest + baseline test + ESLint) | ✅ Xong | Xem chi tiết bên dưới |
-| 1 — Dọn hạ tầng dùng chung | ✅ Xong | Xem chi tiết bên dưới |
-| 2 — Module mẫu (pilot) | ✅ Xong | Module mẫu: `categories`. Pattern tham chiếu xem bên dưới |
-| 3 — Nhân rộng các module | ✅ Xong | `products`, `carts`, `users`/`auth`, `orders`, `inventory` đều xong. Xem ghi chú quan trọng về 1 bug phát hiện khi audit `orders` |
-| 4 — Dọn Lambda worker | 🔶 Một phần | Đã loại bỏ trùng lặp DynamoDB access + di chuyển file worker vào `src/workers/`. Xem chi tiết bên dưới |
-| 5 — CI | ☐ Chưa bắt đầu | |
+| Giai đoạn                                      | Trạng thái     | Ghi chú                                                                                                                           |
+| ---------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 0 — Safety net (Jest + baseline test + ESLint) | ✅ Xong        | Xem chi tiết bên dưới                                                                                                             |
+| 1 — Dọn hạ tầng dùng chung                     | ✅ Xong        | Xem chi tiết bên dưới                                                                                                             |
+| 2 — Module mẫu (pilot)                         | ✅ Xong        | Module mẫu: `categories`. Pattern tham chiếu xem bên dưới                                                                         |
+| 3 — Nhân rộng các module                       | ✅ Xong        | `products`, `carts`, `users`/`auth`, `orders`, `inventory` đều xong. Xem ghi chú quan trọng về 1 bug phát hiện khi audit `orders` |
+| 4 — Dọn Lambda worker                          | 🔶 Một phần    | Đã loại bỏ trùng lặp DynamoDB access + di chuyển file worker vào `src/workers/`. Xem chi tiết bên dưới                            |
+| 5 — CI                                         | ☐ Chưa bắt đầu |                                                                                                                                   |
+| 6 — Zod schema validation                      | ✅ Xong        | Tất cả entity `fromRecord()` đều dùng Zod parse. Xem chi tiết bên dưới                                                            |
+| 7 — Rich Domain Model                          | 🔶 Một phần (Phase A xong) | Xem `docs/refactor/RICH_DOMAIN_MODEL_PLAN.md` và bảng tracking Giai đoạn 7 bên dưới             |
 
 ## Trạng thái từng module (Giai đoạn 3)
 
 Cột **Baseline test** = test được viết TRƯỚC khi sửa code của module (bước 0 trong PLAN.md Giai đoạn 3), dùng để xác nhận hành vi không đổi sau refactor. Bắt buộc phải ✅ cột này trước khi bắt đầu các cột Domain/Application/Infrastructure/Presentation.
 
-| Module | Trạng thái | Baseline test | Domain | Application (use-cases) | Infrastructure (repo adapter) | Presentation | Test use-case | Ghi chú |
-|---|---|---|---|---|---|---|---|---|
-| categories | ✅ Xong (module mẫu) | 🔶 unit test use-case (mock port), chưa có e2e/baseline trước-refactor vì đây là module mẫu đầu tiên | ✅ | ✅ | ✅ | ✅ | ✅ 11 test case | Module mẫu Giai đoạn 2. Behavior HTTP giữ nguyên (strangler) |
-| inventory | ✅ Xong | ✅ `inventory.integration.spec.ts` (viết lại từ baseline gốc `inventory.service.spec.ts`, chạy qua use-case + `DynamoDbInventoryRepository` thay vì service cũ) | ✅ | ✅ | ✅ | ✅ | ✅ 8 test case (`application/inventory.use-cases.spec.ts`) | 5 use-case: find-all/find-one/update-quantity/reserve/release. `reserve`/`release` vốn chỉ dùng nội bộ lẫn cross-module (`orders`) — export `ReserveInventoryUseCase`/`ReleaseInventoryUseCase` từ `InventoryModule` thay vì export nguyên service, giống pattern `FindOneProductUseCase`/3 use-case cart. Infrastructure đọc cả bảng `inventory` lẫn `products` để join thành `InventorySummary` (giữ nguyên hành vi gốc) |
-| products | ✅ Xong | ✅ `products.integration.spec.ts` (viết lại từ baseline gốc, chạy qua use-case + `DynamoDbProductRepository` thay vì service cũ) | ✅ | ✅ | ✅ | ✅ | ✅ 20 test case | 6 use-case: create/find-all/find-one/find-for-response/update/delete. `find-one` dùng lại cho cả nội bộ (orders, orders-worker) lẫn `find-for-response` (enrich ảnh) cho controller |
-| carts | ✅ Xong | ✅ `carts.integration.spec.ts` (viết lại từ baseline gốc, chạy qua use-case + `DynamoDbCartRepository` thay vì service cũ) | ✅ | ✅ | ✅ | ✅ | ✅ 23 test case | 9 use-case (1 method cũ = 1 use-case, kể cả 3 method vốn chỉ dùng nội bộ/cross-module: `GetOwnedCartUseCase`, `GetCartItemsUseCase`, `MarkCartExpiredUseCase` — export cho `orders`/`orders-worker`). Business rule "cart hết hạn" (`deriveCartStatus`/`ensureCartUsable`) đưa xuống `domain/cart.rules.ts` vì là pure function chỉ phụ thuộc entity |
-| users / auth | ✅ Xong (`users`) · `auth` giữ nguyên (cross-cutting) | ✅ 17 test `src/auth/*.spec.ts` (`roles.guard`/`jwt-auth.guard`/`permissions.guard`, viết ở phiên trước) + `users.integration.spec.ts` viết trực tiếp hậu-refactor (xem ghi chú) | ✅ (`users`) | ✅ (`users`) | ✅ (`users`) | ✅ (`users`) | ✅ 38 test case (`users`) | `auth` (JwtAuthGuard/RolesGuard/PermissionsGuard/decorator) là framework code dùng global qua `APP_GUARD`, KHÔNG tách domain/application/infra — chỉ cần baseline test (đã có từ phiên trước), không đổi code. `users` tách thành 2 port (Cognito + DynamoDB) — xem nhật ký bên dưới |
-| orders | ✅ Xong | ✅ `orders.integration.spec.ts` + `application/orders.use-cases.spec.ts` + `reserve-order-checkout-items.use-case.spec.ts` | ✅ | ✅ | ✅ | ✅ | ✅ (gộp trong các file trên) | Đã refactor xong (phát hiện lại khi audit ngày 2026-10-20, xem nhật ký) — 22 use-case, 2 controller (`orders`, `payments`). Đã phát hiện VÀ SỬA 1 bug tiền-refactor (`ConflictException` thay vì `ConflictError` khi bắt lỗi reserve inventory) bằng cách tách `ReserveOrderCheckoutItemsUseCase` dùng chung giữa HTTP checkout và SQS worker — xem nhật ký |
+| Module       | Trạng thái                                            | Baseline test                                                                                                                                                                    | Domain       | Application (use-cases) | Infrastructure (repo adapter) | Presentation | Test use-case                                              | Ghi chú                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------- | ----------------------------- | ------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| categories   | ✅ Xong (module mẫu)                                  | 🔶 unit test use-case (mock port), chưa có e2e/baseline trước-refactor vì đây là module mẫu đầu tiên                                                                             | ✅           | ✅                      | ✅                            | ✅           | ✅ 11 test case                                            | Module mẫu Giai đoạn 2. Behavior HTTP giữ nguyên (strangler)                                                                                                                                                                                                                                                                                                                                                               |
+| inventory    | ✅ Xong                                               | ✅ `inventory.integration.spec.ts` (viết lại từ baseline gốc `inventory.service.spec.ts`, chạy qua use-case + `DynamoDbInventoryRepository` thay vì service cũ)                  | ✅           | ✅                      | ✅                            | ✅           | ✅ 8 test case (`application/inventory.use-cases.spec.ts`) | 5 use-case: find-all/find-one/update-quantity/reserve/release. `reserve`/`release` vốn chỉ dùng nội bộ lẫn cross-module (`orders`) — export `ReserveInventoryUseCase`/`ReleaseInventoryUseCase` từ `InventoryModule` thay vì export nguyên service, giống pattern `FindOneProductUseCase`/3 use-case cart. Infrastructure đọc cả bảng `inventory` lẫn `products` để join thành `InventorySummary` (giữ nguyên hành vi gốc) |
+| products     | ✅ Xong                                               | ✅ `products.integration.spec.ts` (viết lại từ baseline gốc, chạy qua use-case + `DynamoDbProductRepository` thay vì service cũ)                                                 | ✅           | ✅                      | ✅                            | ✅           | ✅ 20 test case                                            | 6 use-case: create/find-all/find-one/find-for-response/update/delete. `find-one` dùng lại cho cả nội bộ (orders, orders-worker) lẫn `find-for-response` (enrich ảnh) cho controller                                                                                                                                                                                                                                        |
+| carts        | ✅ Xong                                               | ✅ `carts.integration.spec.ts` (viết lại từ baseline gốc, chạy qua use-case + `DynamoDbCartRepository` thay vì service cũ)                                                       | ✅           | ✅                      | ✅                            | ✅           | ✅ 23 test case                                            | 9 use-case (1 method cũ = 1 use-case, kể cả 3 method vốn chỉ dùng nội bộ/cross-module: `GetOwnedCartUseCase`, `GetCartItemsUseCase`, `MarkCartExpiredUseCase` — export cho `orders`/`orders-worker`). Business rule "cart hết hạn" (`deriveCartStatus`/`ensureCartUsable`) đưa xuống `domain/cart.rules.ts` vì là pure function chỉ phụ thuộc entity                                                                       |
+| users / auth | ✅ Xong (`users`) · `auth` giữ nguyên (cross-cutting) | ✅ 17 test `src/auth/*.spec.ts` (`roles.guard`/`jwt-auth.guard`/`permissions.guard`, viết ở phiên trước) + `users.integration.spec.ts` viết trực tiếp hậu-refactor (xem ghi chú) | ✅ (`users`) | ✅ (`users`)            | ✅ (`users`)                  | ✅ (`users`) | ✅ 38 test case (`users`)                                  | `auth` (JwtAuthGuard/RolesGuard/PermissionsGuard/decorator) là framework code dùng global qua `APP_GUARD`, KHÔNG tách domain/application/infra — chỉ cần baseline test (đã có từ phiên trước), không đổi code. `users` tách thành 2 port (Cognito + DynamoDB) — xem nhật ký bên dưới                                                                                                                                       |
+| orders       | ✅ Xong                                               | ✅ `orders.integration.spec.ts` + `application/orders.use-cases.spec.ts` + `reserve-order-checkout-items.use-case.spec.ts`                                                       | ✅           | ✅                      | ✅                            | ✅           | ✅ (gộp trong các file trên)                               | Đã refactor xong (phát hiện lại khi audit ngày 2026-10-20, xem nhật ký) — 22 use-case, 2 controller (`orders`, `payments`). Đã phát hiện VÀ SỬA 1 bug tiền-refactor (`ConflictException` thay vì `ConflictError` khi bắt lỗi reserve inventory) bằng cách tách `ReserveOrderCheckoutItemsUseCase` dùng chung giữa HTTP checkout và SQS worker — xem nhật ký                                                                |
 
 Chú thích trạng thái: ☐ Chưa bắt đầu · 🔶 Một phần · 🔄 Đang làm · ✅ Xong · ⚠️ Blocked (xem ghi chú)
 
@@ -55,6 +57,7 @@ categories/
 ```
 
 Quyết định thiết kế quan trọng (áp dụng tiếp cho module sau):
+
 - **1 method cũ = 1 use-case riêng** (không gộp use-case thành 1 class to). Mỗi use-case là 1 `@Injectable()` nhận port qua constructor (`@Inject(TOKEN)`).
 - **DI token cho port**: `export const XXX_REPOSITORY = Symbol('XXX_REPOSITORY')` khai báo ngay trong file port, bind trong module bằng `{ provide: XXX_REPOSITORY, useClass: DynamoDbXxxRepository }`.
 - **Timestamp sinh ở use-case, không sinh ở infrastructure**: use-case tạo `new Date().toISOString()` rồi truyền xuống port (để sau này test use-case dễ kiểm soát "thời điểm", infra chỉ ghi dữ liệu được đưa vào).
@@ -66,9 +69,41 @@ Quyết định thiết kế quan trọng (áp dụng tiếp cho module sau):
 - **Lint**: nếu viết test mock port bằng `jest.fn()` trên object literal, rule `@typescript-eslint/unbound-method` sẽ báo lỗi sai (false positive) khi `expect(repo.method).toHaveBeenCalledWith(...)` — đã tắt rule này cho `**/*.spec.ts` và `test/**/*.ts` trong `eslint.config.mjs`, không cần `eslint-disable` thủ công ở từng chỗ.
 - Giữ nguyên toàn bộ HTTP contract (route, DTO field, response shape, permission/role decorator) — strangler pattern, không đổi API khi refactor.
 
+## Giai đoạn 6 — Zod Schema Validation (xong 2026-10-23)
+
+Tất cả entity `fromRecord()` đã được refactor để dùng Zod schema thay vì cast `as XxxProps` không an toàn.
+
+| Entity file | Schema | fromRecord | Ghi chú |
+|---|---|---|---|
+| `categories/domain/category.entity.ts` | ✅ `CategoryPropsSchema` | ✅ | Đơn giản nhất, không có enum field |
+| `products/domain/product.entity.ts` | ✅ `ProductPropsSchema` + `ProductImagePropsSchema` | ✅ | Cast `status as ProductStatus`; images qua `ProductImage.create()` |
+| `orders/domain/order.entity.ts` | ✅ `OrderPropsSchema` + `OrderItemPropsSchema` | ✅ | Cast `status as OrderStatus`, `paymentStatus as PaymentStatus` |
+| `carts/domain/cart.entity.ts` | ✅ `CartPropsSchema` + `CartItemPropsSchema` | ✅ | Cart giữ manual `CartProps` type (enum field), CartItem dùng `z.infer<>` |
+| `users/domain/user.entity.ts` | ✅ 5 schemas | ✅ | `UserAccountPropsSchema`, nested `address`, `permissions` cast |
+| `inventory/domain/inventory.entity.ts` | ✅ `InventoryRecordPropsSchema` | ✅ | Clean, không có enum field |
+| `audit/domain/audit-log.entity.ts` | ✅ `AuditLogItemPropsSchema` | ✅ | `z.enum(AUDIT_ENTITY_TYPES)` với readonly tuple |
+| `mail/domain/email-tracking.entity.ts` | ✅ `EmailTrackingPropsSchema` + `EmailDeliverySummaryPropsSchema` | ✅ | 12-value union qua `emailTypeValues as const` |
+
+## Giai đoạn 7 — Rich Domain Model
+
+Xem spec đầy đủ: [`docs/refactor/RICH_DOMAIN_MODEL_PLAN.md`](./RICH_DOMAIN_MODEL_PLAN.md)
+
+### Tracking table
+
+| Entity | A — Getters | B — Domain Methods | C — Use-cases | D — Tests |
+|---|---|---|---|---|
+| `Order` | ✅ | ☐ | ☐ | ☐ |
+| `Cart` | ✅ | ☐ | ☐ | ☐ |
+| `InventoryRecord` | ✅ | ☐ | ☐ | ☐ |
+| `Product` | ✅ | ☐ | ☐ | ☐ |
+| `Category` | ✅ | ☐ | ☐ | ☐ |
+| `EmailTracking` | ✅ | ☐ | ☐ | ☐ |
+
+Trạng thái ô: ☐ Chưa · 🔄 Đang làm · ✅ Xong
+
 ## Việc đang dang dở (nếu phiên kết thúc giữa chừng)
 
-_Không có việc dang dở._
+_Phase A (computed getters) đã xong toàn bộ 6 entity. 362/362 test pass. Bước tiếp: Phase B (domain methods) — di chuyển business logic từ use-cases và rules files xuống entity methods._
 
 > Khi 1 phiên kết thúc giữa chừng một task, ghi rõ ở đây: module đang làm, bước đã xong, bước tiếp theo, và bất kỳ quyết định/giả định nào đã đưa ra để phiên sau không phải đoán lại.
 
@@ -196,3 +231,16 @@ _Không có việc dang dở._
   - **Fix**: thêm `esbuildArgs: { '--resolve-extensions': '.js,.mjs,.json' }` vào `createNodejsBundling()` (chỉ khi `preCompilation` bật) — buộc esbuild resolve module theo đúng file `.js` đã được `tsc` biên dịch sẵn, không bao giờ quay lại đọc `.ts` gốc nữa.
   - **Kiểm chứng**: build thủ công từng bước (`tsc` riêng → kiểm tra có metadata → `esbuild` riêng với args y hệt CDK → xác nhận mất metadata → thêm `--resolve-extensions` → xác nhận metadata trở lại) TRƯỚC khi sửa file thật, sau đó chạy `node scripts/run-cdk.js synth ServerDevStack` (synth-only, không deploy) và grep trực tiếp asset trong `cdk.out/asset.*/index.js` để xác nhận bản build thật từ infra code (không phải bản tự build tay) cũng có `design:paramtypes` cho `CategoriesController.findAll` — pass. `tsc --noEmit` sạch, `npx jest` 243/243 pass, `npx eslint infra/lib/shared/lambda-bundling.ts` không có lỗi mới.
   - **Việc còn lại**: đã sửa code nhưng CHƯA deploy lại — người dùng cần tự chạy lại `npm run infra:deploy` (dùng `AWS_PROFILE=loc`) để bản vá có hiệu lực trên môi trường thật. Nên audit thêm các Lambda khác dùng `createNodejsBundling({ preCompilation: true })` (tất cả các worker/Cognito Lambda) xem có DTO/decorator nào dựa vào `design:paramtypes` runtime bị ảnh hưởng tương tự hay không — về lý thuyết fix này áp dụng chung cho tất cả vì sửa tại helper dùng chung, nhưng chưa kiểm chứng riêng từng Lambda.
+- 2026-10-23: **Zod Schema Validation refactor (Giai đoạn 6)** — tất cả entity `fromRecord()` dùng Zod schema parse. Chi tiết: `CategoryPropsSchema`, `ProductPropsSchema`+`ProductImagePropsSchema`, `OrderPropsSchema`+`OrderItemPropsSchema`, `CartPropsSchema`+`CartItemPropsSchema`, 5 schemas cho `users`, `InventoryRecordPropsSchema`, `AuditLogItemPropsSchema`, `EmailTrackingPropsSchema`+`EmailDeliverySummaryPropsSchema`. Entities có TypeScript enum field giữ manual type definition, dùng cast sau parse (`parsed.status as ProductStatus`). `270/271` test pass (1 fail health timeout pre-existing).
+- 2026-10-23: **Rich Domain Model Phase A (Getters) hoàn thành** — thêm computed getters vào 6 entity class (`Order`, `Cart`, `InventoryRecord`, `Product`, `Category`, `EmailTracking`). Fix các test failures do Phase A gây ra: (1) `orders.use-cases.spec.ts` — 26 chỗ plain object spread → `Order.fromRecord({...})` để có prototype chain và getters; (2) `orders.integration.spec.ts` — tương tự; (3) `find-one-order.use-case.ts` — `return { ...order, items }` → `Object.assign(order, { items })` để giữ prototype; (4) `reconcile-verified-gateway-result.use-case.ts` — fix bug pre-existing `isOrderPaymentExpired` không tồn tại → `order.isPaymentExpired()`; (5) `products/inventory/audit/mail integration.spec.ts` — thêm đầy đủ required fields vào DynamoDB mock data để Zod parse không throw. 362/362 test pass.
+- 2026-10-23: **Tạo kế hoạch Rich Domain Model (Giai đoạn 7)** — file `docs/refactor/RICH_DOMAIN_MODEL_PLAN.md`. Phân tích toàn bộ use-cases để xác định business logic cần di chuyển xuống entity. Phát hiện bug pre-existing: `reconcile-verified-gateway-result.use-case.ts` import `isOrderPaymentExpired` không tồn tại. Kế hoạch gồm 4 giai đoạn (A: computed getters, B: domain methods, C: thin use-cases, D: tests), 5 session gợi ý.
+- 2026-10-22: **Rich Domain Class refactor** — chuyển đổi toàn bộ entity interface/type sang rich domain class (constructor riêng tư, factory static `create()`/`fromRecord()`/`fromParts()`) theo `docs/refactor/RICH_DOMAIN_CLASS_PLAN.md`. Thứ tự thực hiện: `categories` → `carts` → `products` → `inventory` → `users` → `audit` → `mail`.
+  - **Pattern áp dụng nhất quán**: `private constructor(props)` + `Object.assign(this, props)` cho cả base class; subclass (extends) phải re-assign thủ công các field của riêng mình sau `super(props)` (vd `this.productName = props.productName`) — bắt buộc do `tsconfig.json` dùng `target: "ES2023"` (`useDefineForClassFields: true`) khiến field declaration trong subclass được khởi tạo thành `undefined` SAU `super()`, ghi đè mất kết quả `Object.assign`. Pattern này đã có sẵn trong reference impl `CartDetails` (`this.items = props.items`).
+  - **Thay đổi DynamoDB write**: `Item: entity` → `Item: { ...entity }` (spread class instance thành plain object, tránh SDK cố gắng serialize prototype chain).
+  - **Thay đổi DynamoDB read**: `response.Item as Xxx` → `Xxx.fromRecord(response.Item)`.
+  - **Subclass với `fromParts()`**: `InventorySummary.fromParts(inventory, product)`, `CartDetails.fromParts(cart, items)`, `EmailTrackingView.fromParts(tracking, isRetryable)`, `UserLoginAuditQueryResult.fromParts(items, nextCursor)`, `AuditLogQueryResult.fromParts(items, nextCursor)`.
+  - **Tách file entity**: `audit/audit-log.service.ts` — extract `AuditLogItem`/`AuditLogQueryResult`/`AUDIT_ENTITY_TYPES`/`AuditEntityType` ra `audit/domain/audit-log.entity.ts` (mới tạo). `mail/mail.types.ts` — extract `EmailTracking`/`EmailTrackingView`/`EmailDeliverySummary` ra `mail/domain/email-tracking.entity.ts` (mới tạo). Cập nhật tất cả import phụ thuộc (service, controller, spec, use-case của module khác).
+  - **Fix readonly assignment**: `update-product.use-case.ts` — `Partial<Product>` kế thừa `readonly` từ class field; sửa bằng cách pre-compute `preparedImages` trước, rồi construct `updates` object trong 1 bước bằng spread, không assign sau.
+  - **Bug ES2023 class field initialization**: `InventorySummary` (extends `InventoryRecord`) và `EmailTrackingView` (extends `EmailTracking`) — đã fix bằng cách thêm explicit assignment sau `super(props)` y hệt pattern `CartDetails`.
+  - **Lỗi orders pre-existing**: 29 lỗi TypeScript trong `src/orders/` (`Property 'isPaymentExpired' is missing` và `isOrderPaymentExpired` không export từ `order.rules`) — không liên quan tới phiên này, tồn tại từ trước.
+  - Kiểm tra: `tsc --noEmit` — 0 lỗi mới ngoài 29 lỗi pre-existing trong `src/orders/`. `npx jest` — 270/271 pass (1 fail duy nhất là `health.e2e-spec.ts` timeout pre-existing, không liên quan; inventory test đã pass sau khi fix ES2023 bug). Không có lỗi ESLint mới trên các file đã sửa.

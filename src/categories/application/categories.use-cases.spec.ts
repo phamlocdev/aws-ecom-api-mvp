@@ -72,13 +72,13 @@ describe('FindAllCategoriesUseCase', () => {
   it('maps a repository page to a paginated response', async () => {
     const repository = createRepositoryMock()
     const items: Category[] = [
-      {
+      Category.fromRecord({
         categoryId: 'electronics',
         name: 'Electronics',
         status: 'ACTIVE',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
-      },
+      }),
     ]
     repository.findAll.mockResolvedValue({ items })
     const useCase = new FindAllCategoriesUseCase(repository)
@@ -94,13 +94,13 @@ describe('FindAllCategoriesUseCase', () => {
 describe('FindOneCategoryUseCase', () => {
   it('returns the category when it exists and is active', async () => {
     const repository = createRepositoryMock()
-    const category: Category = {
+    const category = Category.fromRecord({
       categoryId: 'electronics',
       name: 'Electronics',
       status: 'ACTIVE',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
-    }
+    })
     repository.findOne.mockResolvedValue(category)
     const useCase = new FindOneCategoryUseCase(repository)
 
@@ -117,13 +117,15 @@ describe('FindOneCategoryUseCase', () => {
 
   it('throws NotFoundError when the category is soft-deleted', async () => {
     const repository = createRepositoryMock()
-    repository.findOne.mockResolvedValue({
-      categoryId: 'electronics',
-      name: 'Electronics',
-      status: 'DELETED', // Soft-deleted category
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    })
+    repository.findOne.mockResolvedValue(
+      Category.fromRecord({
+        categoryId: 'electronics',
+        name: 'Electronics',
+        status: 'DELETED',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    )
     const useCase = new FindOneCategoryUseCase(repository)
 
     await expect(useCase.execute('electronics')).rejects.toBeInstanceOf(NotFoundError)
@@ -143,13 +145,13 @@ describe('UpdateCategoryUseCase', () => {
 
   it('delegates to the repository when a mutable field is provided', async () => {
     const repository = createRepositoryMock()
-    const updated: Category = {
+    const updated = Category.fromRecord({
       categoryId: 'electronics',
       name: 'Updated name',
       status: 'ACTIVE',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
-    }
+    })
     repository.update.mockResolvedValue(updated)
     const useCase = new UpdateCategoryUseCase(repository)
 

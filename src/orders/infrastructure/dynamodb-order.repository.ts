@@ -16,14 +16,12 @@ import { ConflictError, InvalidInputError } from '../../common/domain-error'
 import { DynamoTablesService } from '../../config/dynamo-tables.service'
 import { DynamoDbService } from '../../dynamodb/dynamodb.service'
 import { ReservedInventoryItem } from '../../inventory/domain/inventory.entity'
-import { Order, OrderItem } from '../domain/order.entity'
+import { Order, OrderItem, ORDERS_ENTITY_TYPE } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
 import { OrderListFilter, OrderPage, OrderRepositoryPort } from '../domain/order.repository.port'
 import { PaymentStatus } from '../domain/payment-status.enum'
 import { aggregateReservedQuantities } from '../domain/order.rules'
 import { PAYMENT_WINDOW_EXPIRED_REASON } from '../domain/payment-reservation.config'
-
-const ORDERS_ENTITY_TYPE = 'ORDER'
 
 @Injectable()
 export class DynamoDbOrderRepository implements OrderRepositoryPort {
@@ -47,7 +45,7 @@ export class DynamoDbOrderRepository implements OrderRepositoryPort {
       await this.dynamoDbService.documentClient.send(
         new PutCommand({
           TableName: this.ordersTableName,
-          Item: order,
+          Item: { ...order },
           ConditionExpression: 'attribute_not_exists(#orderId)',
           ExpressionAttributeNames: { '#orderId': 'orderId' },
         }),
@@ -81,7 +79,7 @@ export class DynamoDbOrderRepository implements OrderRepositoryPort {
       }),
     )
 
-    return (response.Items ?? []) as OrderItem[]
+    return (response.Items ?? []).map(OrderItem.fromRecord)
   }
 
   async findById(orderId: string): Promise<Order | null> {
@@ -92,7 +90,7 @@ export class DynamoDbOrderRepository implements OrderRepositoryPort {
       }),
     )
 
-    return (response.Item as Order | undefined) ?? null
+    return response.Item ? Order.fromRecord(response.Item) : null
   }
 
   async findMany(
@@ -114,7 +112,7 @@ export class DynamoDbOrderRepository implements OrderRepositoryPort {
     )
 
     return {
-      items: (response.Items ?? []) as Order[],
+      items: (response.Items ?? []).map(Order.fromRecord),
       lastEvaluatedKey: response.LastEvaluatedKey,
     }
   }
@@ -143,7 +141,7 @@ export class DynamoDbOrderRepository implements OrderRepositoryPort {
     )
 
     return {
-      items: (response.Items ?? []) as Order[],
+      items: (response.Items ?? []).map(Order.fromRecord),
       lastEvaluatedKey: response.LastEvaluatedKey,
     }
   }

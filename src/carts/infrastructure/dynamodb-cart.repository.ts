@@ -32,7 +32,7 @@ export class DynamoDbCartRepository implements CartRepositoryPort {
     await this.dynamoDbService.documentClient.send(
       new PutCommand({
         TableName: this.cartsTableName,
-        Item: cart,
+        Item: { ...cart },
         ConditionExpression: 'attribute_not_exists(#customerId) AND attribute_not_exists(#cartId)',
         ExpressionAttributeNames: {
           '#customerId': 'customerId',
@@ -53,7 +53,7 @@ export class DynamoDbCartRepository implements CartRepositoryPort {
       }),
     )
 
-    return (response.Items ?? []) as Cart[]
+    return (response.Items ?? []).map(Cart.fromRecord)
   }
 
   async findOne(customerId: string, cartId: string): Promise<Cart | null> {
@@ -63,7 +63,7 @@ export class DynamoDbCartRepository implements CartRepositoryPort {
         Key: { customerId, cartId },
       }),
     )
-    return (response.Item as Cart | undefined) ?? null
+    return response.Item ? Cart.fromRecord(response.Item) : null
   }
 
   async findItems(cartId: string): Promise<CartItem[]> {
@@ -76,14 +76,14 @@ export class DynamoDbCartRepository implements CartRepositoryPort {
       }),
     )
 
-    return (response.Items ?? []) as CartItem[]
+    return (response.Items ?? []).map(CartItem.fromRecord)
   }
 
   async putItem(item: CartItem): Promise<void> {
     await this.dynamoDbService.documentClient.send(
       new PutCommand({
         TableName: this.cartItemsTableName,
-        Item: item,
+        Item: { ...item },
       }),
     )
   }

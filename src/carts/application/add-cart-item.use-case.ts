@@ -31,15 +31,12 @@ export class AddCartItemUseCase {
     const cart = await this.getOwnedCartUseCase.execute(user.sub, cartId)
     ensureCartUsable(cart)
 
-    const timestamp = new Date().toISOString()
-    const item: CartItem = {
+    const item = CartItem.create({
       cartId,
       customerId: user.sub,
       productId: input.productId,
       quantity: input.quantity,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
+    })
 
     await this.cartRepository.putItem(item)
     await touchCart(this.cartRepository, cart)

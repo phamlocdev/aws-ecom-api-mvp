@@ -68,7 +68,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
     it('reserves stock with a conditional UpdateCommand requiring enough availableQuantity', async () => {
       ddbMock
         .on(GetCommand)
-        .resolves({ Item: { productId: 'p1', availableQuantity: 5, reservedQuantity: 0 } })
+        .resolves({ Item: { productId: 'p1', availableQuantity: 5, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' } })
       ddbMock.on(UpdateCommand).resolves({})
 
       await reserveInventoryUseCase.execute('p1', 3)
@@ -83,7 +83,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
     it('throws ConflictError when DynamoDB rejects the reservation (insufficient stock)', async () => {
       ddbMock
         .on(GetCommand)
-        .resolves({ Item: { productId: 'p1', availableQuantity: 1, reservedQuantity: 0 } })
+        .resolves({ Item: { productId: 'p1', availableQuantity: 1, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' } })
       ddbMock.on(UpdateCommand).rejects(
         Object.assign(new Error('conditional check failed'), {
           name: 'ConditionalCheckFailedException',
@@ -112,9 +112,13 @@ describe('inventory use-cases (post-refactor baseline)', () => {
         Item: {
           productId: 'p1',
           name: 'Headphones',
+          description: 'Wireless headphones',
           categoryId: 'cat-1',
-          imageUrl: 'https://example.com/p1.png',
+          price: 100000,
+          currency: 'VND',
           status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         },
       })
       ddbMock.on(GetCommand, { TableName: 'inventory-test' }).resolves({
@@ -128,11 +132,10 @@ describe('inventory use-cases (post-refactor baseline)', () => {
 
       const summary = await findOneInventoryUseCase.execute('p1')
 
-      expect(summary).toEqual({
+      expect(summary).toMatchObject({
         productId: 'p1',
         productName: 'Headphones',
         categoryId: 'cat-1',
-        imageUrl: 'https://example.com/p1.png',
         productStatus: ProductStatus.ACTIVE,
         availableQuantity: 4,
         reservedQuantity: 1,
@@ -145,8 +148,13 @@ describe('inventory use-cases (post-refactor baseline)', () => {
         Item: {
           productId: 'p2',
           name: 'Keyboard',
+          description: 'Mechanical keyboard',
           categoryId: 'cat-1',
+          price: 200000,
+          currency: 'VND',
           status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         },
       })
       ddbMock.on(GetCommand, { TableName: 'inventory-test' }).resolves({ Item: undefined })
@@ -185,12 +193,17 @@ describe('inventory use-cases (post-refactor baseline)', () => {
         Item: {
           productId: 'p1',
           name: 'Headphones',
+          description: 'Wireless headphones',
           categoryId: 'cat-1',
+          price: 100000,
+          currency: 'VND',
           status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         },
       })
       ddbMock.on(GetCommand, { TableName: 'inventory-test' }).resolves({
-        Item: { productId: 'p1', availableQuantity: 4, reservedQuantity: 1 },
+        Item: { productId: 'p1', availableQuantity: 4, reservedQuantity: 1, updatedAt: '2026-01-01T00:00:00.000Z' },
       })
       ddbMock.on(UpdateCommand).resolves({
         Attributes: {
@@ -220,15 +233,20 @@ describe('inventory use-cases (post-refactor baseline)', () => {
           {
             productId: 'p1',
             name: 'Headphones',
+            description: 'Wireless headphones',
             categoryId: 'cat-1',
+            price: 100000,
+            currency: 'VND',
             status: ProductStatus.ACTIVE,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
           },
         ],
         ScannedCount: 1,
         LastEvaluatedKey: undefined,
       })
       ddbMock.on(GetCommand, { TableName: 'inventory-test' }).resolves({
-        Item: { productId: 'p1', availableQuantity: 2, reservedQuantity: 0 },
+        Item: { productId: 'p1', availableQuantity: 2, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' },
       })
 
       const result = await findAllInventoriesUseCase.execute({ limit: 10 })
@@ -249,8 +267,13 @@ describe('inventory use-cases (post-refactor baseline)', () => {
               {
                 productId: 'p1',
                 name: 'Headphones',
+                description: 'Wireless headphones',
                 categoryId: 'cat-1',
+                price: 100000,
+                currency: 'VND',
                 status: ProductStatus.ACTIVE,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
               },
             ],
           },
@@ -261,7 +284,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
         })
         .resolves({
           Responses: {
-            'inventory-test': [{ productId: 'p1', availableQuantity: 3, reservedQuantity: 0 }],
+            'inventory-test': [{ productId: 'p1', availableQuantity: 3, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' }],
           },
         })
 

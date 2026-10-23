@@ -3,7 +3,7 @@ import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { SNSEvent } from 'aws-lambda'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
-import { EmailTracking } from './mail.types'
+import { EmailTracking } from './domain/email-tracking.entity'
 
 type SesEventType = 'Send' | 'Delivery' | 'Bounce' | 'Complaint' | 'Reject' | 'Rendering Failure'
 

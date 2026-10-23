@@ -50,20 +50,23 @@ describe('carts use-cases (post-refactor baseline)', () => {
     clientId: 'test-client',
   }
 
-  const activeCart: Cart = {
+  const activeCart = Cart.fromRecord({
     customerId: user.sub,
     cartId: 'cart-1',
     status: CartStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
-  }
+  })
 
-  const expiredCart: Cart = {
-    ...activeCart,
+  const expiredCart = Cart.fromRecord({
+    customerId: user.sub,
     cartId: 'cart-expired',
+    status: CartStatus.ACTIVE,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
     expiresAt: Math.floor(Date.now() / 1000) - 3600,
-  }
+  })
 
   beforeEach(() => {
     ddbMock.reset()
@@ -195,7 +198,9 @@ describe('carts use-cases (post-refactor baseline)', () => {
 
   describe('MarkCartExpiredUseCase', () => {
     it('is a no-op when the cart is already EXPIRED', async () => {
-      await markCartExpiredUseCase.execute({ ...activeCart, status: CartStatus.EXPIRED })
+      await markCartExpiredUseCase.execute(
+        Cart.fromRecord({ ...(activeCart as unknown as Record<string, unknown>), status: CartStatus.EXPIRED }),
+      )
 
       expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0)
     })

@@ -184,7 +184,17 @@ describe('products use-cases (post-refactor baseline)', () => {
 
     it('throws NotFoundError when the product is soft-deleted', async () => {
       ddbMock.on(GetCommand).resolves({
-        Item: { productId: 'p1', status: ProductStatus.DELETED } as Partial<Product>,
+        Item: {
+          productId: 'p1',
+          name: 'Test Product',
+          description: 'A test product',
+          categoryId: 'electronics',
+          price: 100000,
+          currency: 'VND',
+          status: ProductStatus.DELETED,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        } as Partial<Product>,
       })
 
       await expect(findProductForResponseUseCase.execute('p1')).rejects.toBeInstanceOf(
@@ -196,7 +206,14 @@ describe('products use-cases (post-refactor baseline)', () => {
       ddbMock.on(GetCommand).resolves({
         Item: {
           productId: 'p1',
+          name: 'Test Product',
+          description: 'A test product',
+          categoryId: 'electronics',
+          price: 100000,
+          currency: 'VND',
           status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
           images: [{ key: 'products/a/1.webp', sortOrder: 0, isPrimary: true }],
         } as Partial<Product>,
       })
@@ -217,7 +234,17 @@ describe('products use-cases (post-refactor baseline)', () => {
   describe('UpdateProductUseCase', () => {
     it('throws InvalidInputError when no mutable field is provided', async () => {
       ddbMock.on(GetCommand).resolves({
-        Item: { productId: 'p1', status: ProductStatus.ACTIVE } as Partial<Product>,
+        Item: {
+          productId: 'p1',
+          name: 'Test Product',
+          description: 'A test product',
+          categoryId: 'electronics',
+          price: 100000,
+          currency: 'VND',
+          status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        } as Partial<Product>,
       })
 
       await expect(updateProductUseCase.execute(adminUser, 'p1', {})).rejects.toBeInstanceOf(
@@ -235,10 +262,30 @@ describe('products use-cases (post-refactor baseline)', () => {
 
     it('updates mutable fields and publishes an updated event', async () => {
       ddbMock.on(GetCommand).resolves({
-        Item: { productId: 'p1', status: ProductStatus.ACTIVE } as Partial<Product>,
+        Item: {
+          productId: 'p1',
+          name: 'Test Product',
+          description: 'A test product',
+          categoryId: 'electronics',
+          price: 100000,
+          currency: 'VND',
+          status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        } as Partial<Product>,
       })
       ddbMock.on(UpdateCommand).resolves({
-        Attributes: { productId: 'p1', status: ProductStatus.ACTIVE, price: 999 },
+        Attributes: {
+          productId: 'p1',
+          name: 'Test Product',
+          description: 'A test product',
+          categoryId: 'electronics',
+          price: 999,
+          currency: 'VND',
+          status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
       })
 
       const updated = await updateProductUseCase.execute(adminUser, 'p1', { price: 999 })
@@ -263,7 +310,14 @@ describe('products use-cases (post-refactor baseline)', () => {
       ddbMock.on(GetCommand).resolves({
         Item: {
           productId: 'p1',
+          name: 'Test Product',
+          description: 'A test product',
+          categoryId: 'electronics',
+          price: 100000,
+          currency: 'VND',
           status: ProductStatus.ACTIVE,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
           images: [{ key: 'products/a/1.webp', sortOrder: 0, isPrimary: true }],
         } as Partial<Product>,
       })

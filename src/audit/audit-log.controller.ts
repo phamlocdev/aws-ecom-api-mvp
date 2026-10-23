@@ -4,7 +4,8 @@ import { Permission } from '../auth/permissions'
 import { RequirePermissions } from '../auth/permissions.decorator'
 import { Role } from '../auth/roles.enum'
 import { Roles } from '../auth/roles.decorator'
-import { AuditLogQueryResult, AuditLogService } from './audit-log.service'
+import { AuditLogQueryResult } from './domain/audit-log.entity'
+import { AuditLogService } from './audit-log.service'
 
 @ApiTags('audit')
 @Controller('audit')

@@ -2,7 +2,7 @@ import { InvalidInputError, NotFoundError, UnauthorizedDomainError } from '../..
 import { Role } from '../../auth/roles.enum'
 import { AuthenticatedUser } from '../../auth/auth.types'
 import { CartRepositoryPort } from '../domain/cart.repository.port'
-import { Cart } from '../domain/cart.entity'
+import { Cart, CartItem } from '../domain/cart.entity'
 import { CartStatus } from '../domain/cart-status.enum'
 import { CreateCartUseCase } from './create-cart.use-case'
 import { FindAllCartsUseCase } from './find-all-carts.use-case'
@@ -27,20 +27,23 @@ const user: AuthenticatedUser = {
   clientId: 'test-client',
 }
 
-const activeCart: Cart = {
+const activeCart = Cart.fromRecord({
   customerId: user.sub,
   cartId: 'cart-1',
   status: CartStatus.ACTIVE,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   expiresAt: Math.floor(Date.now() / 1000) + 3600,
-}
+})
 
-const expiredCart: Cart = {
-  ...activeCart,
+const expiredCart = Cart.fromRecord({
+  customerId: user.sub,
   cartId: 'cart-expired',
+  status: CartStatus.ACTIVE,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
   expiresAt: Math.floor(Date.now() / 1000) - 3600,
-}
+})
 
 function createRepositoryMock(): jest.Mocked<CartRepositoryPort> {
   return {
@@ -92,7 +95,9 @@ describe('GetOwnedCartUseCase', () => {
 
   it('throws UnauthorizedDomainError when the cart belongs to a different customer', async () => {
     const repository = createRepositoryMock()
-    repository.findOne.mockResolvedValue({ ...activeCart, customerId: 'someone-else' })
+    repository.findOne.mockResolvedValue(
+      Cart.fromRecord({ ...activeCart, customerId: 'someone-else' }),
+    )
     const useCase = new GetOwnedCartUseCase(repository)
 
     await expect(useCase.execute(user.sub, activeCart.cartId)).rejects.toBeInstanceOf(
@@ -116,14 +121,14 @@ describe('FindOneCartUseCase', () => {
     const repository = createRepositoryMock()
     repository.findOne.mockResolvedValue(activeCart)
     repository.findItems.mockResolvedValue([
-      {
+      CartItem.fromRecord({
         cartId: activeCart.cartId,
         customerId: user.sub,
         productId: 'p1',
         quantity: 2,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
-      },
+      }),
     ])
     const useCase = new FindOneCartUseCase(
       new GetOwnedCartUseCase(repository),
@@ -238,7 +243,7 @@ describe('MarkCartExpiredUseCase', () => {
     const repository = createRepositoryMock()
     const useCase = new MarkCartExpiredUseCase(repository)
 
-    await useCase.execute({ ...activeCart, status: CartStatus.EXPIRED })
+    await useCase.execute(Cart.fromRecord({ ...activeCart, status: CartStatus.EXPIRED }))
 
     expect(repository.updateStatus).not.toHaveBeenCalled()
   })

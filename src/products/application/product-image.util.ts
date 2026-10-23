@@ -80,8 +80,8 @@ async function withPrimaryImageReadUrl(
   }
 
   const [readUrl] = await uploadService.createReadUrls([primaryImage.key])
-  return {
-    ...product,
+  return Product.fromRecord({
+    ...(product as unknown as Record<string, unknown>),
     images: [
       {
         ...primaryImage,
@@ -89,7 +89,7 @@ async function withPrimaryImageReadUrl(
         readUrlExpiresInSeconds: readUrl.expiresInSeconds,
       },
     ],
-  }
+  })
 }
 
 export async function withAllImageReadUrls(
@@ -103,8 +103,8 @@ export async function withAllImageReadUrls(
   const readUrls = await uploadService.createReadUrls(getProductImageKeys(product.images))
   const readUrlByKey = new Map(readUrls.map((item) => [item.key, item] as const))
 
-  return {
-    ...product,
+  return Product.fromRecord({
+    ...(product as unknown as Record<string, unknown>),
     images: product.images.map((image) => {
       const readUrl = readUrlByKey.get(image.key)
       return readUrl
@@ -113,9 +113,9 @@ export async function withAllImageReadUrls(
             readUrl: readUrl.readUrl,
             readUrlExpiresInSeconds: readUrl.expiresInSeconds,
           }
-        : image
+        : { ...(image as unknown as Record<string, unknown>) }
     }),
-  }
+  })
 }
 
 export async function deleteRemovedProductImages(

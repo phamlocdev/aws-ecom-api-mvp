@@ -340,12 +340,30 @@ describe('AuditLogService', () => {
     })
 
     it('returns items and null nextCursor when no LastEvaluatedKey', async () => {
-      const items = [{ entityKey: 'CATEGORY#cat-1', auditId: 'ev-1' }]
+      const items = [
+        {
+          entityKey: 'CATEGORY#cat-1',
+          occurredAtAuditId: '2026-01-01T00:00:00.000Z#ev-1',
+          auditId: 'ev-1',
+          entityType: 'CATEGORY',
+          entityId: 'cat-1',
+          eventName: 'CATEGORY_CREATED',
+          occurredAt: '2026-01-01T00:00:00.000Z',
+          actorType: 'admin',
+          diff: {},
+          before: {},
+          after: {},
+          schemaVersion: 1,
+          expiresAt: 9999999999,
+        },
+      ]
       ddbMock.on(QueryCommand).resolves({ Items: items })
 
       const result = await service.findByEntity({ entityType: 'CATEGORY', entityId: 'cat-1' })
 
-      expect(result.items).toEqual(items)
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0].auditId).toBe('ev-1')
+      expect(result.items[0].entityKey).toBe('CATEGORY#cat-1')
       expect(result.nextCursor).toBeNull()
     })
 

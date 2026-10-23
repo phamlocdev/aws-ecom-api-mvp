@@ -47,9 +47,12 @@ export class UpdateProductUseCase {
   ): Promise<Product> {
     const existingProduct = await this.findOneProductUseCase.execute(productId)
     const { images, ...productFieldUpdates } = changes
-    const updates: Partial<Product> = { ...productFieldUpdates }
-    if (images !== undefined) {
-      updates.images = await prepareProductImages(this.uploadService, images)
+    const preparedImages = images !== undefined
+      ? await prepareProductImages(this.uploadService, images)
+      : undefined
+    const updates: Partial<Product> = {
+      ...productFieldUpdates,
+      ...(preparedImages !== undefined ? { images: preparedImages } : {}),
     }
 
     const mutableFields = Object.entries(updates).filter(([, value]) => value !== undefined)

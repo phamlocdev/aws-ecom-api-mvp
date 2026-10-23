@@ -40,10 +40,7 @@ export class FindLoginAuditUseCase {
       decodeCursor(input.cursor),
     )
 
-    return {
-      items: result.items,
-      nextCursor: encodeCursor(result.lastEvaluatedKey),
-    }
+    return UserLoginAuditQueryResult.fromParts(result.items, encodeCursor(result.lastEvaluatedKey))
   }
 
   private async resolveLoginAuditUserId(input: {

@@ -64,7 +64,7 @@ const cognitoRecord: CognitoUserRecord = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
 
-const storedAccount: UserAccount = {
+const storedAccount = UserAccount.fromRecord({
   userId: 'customer-1',
   username: 'customer',
   email: 'customer@example.com',
@@ -74,7 +74,7 @@ const storedAccount: UserAccount = {
   passwordStatus: 'SET',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
-}
+})
 
 function createCognitoPortMock(): jest.Mocked<CognitoUserPort> {
   return {

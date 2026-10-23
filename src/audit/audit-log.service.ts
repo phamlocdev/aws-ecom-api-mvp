@@ -6,19 +6,16 @@ import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda'
 import { InvalidInputError } from '../common/domain-error'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
+import {
+  AuditEntityType,
+  AUDIT_ENTITY_TYPES,
+  AuditLogItem,
+  AuditLogQueryResult,
+} from './domain/audit-log.entity'
 
 const AUDIT_RETENTION_SECONDS = 365 * 24 * 60 * 60
 const ENTITY_TYPE_OCCURRED_AT_INDEX = 'GSI_EntityTypeOccurredAt'
 
-export const AUDIT_ENTITY_TYPES = [
-  'ORDER',
-  'PRODUCT',
-  'CATEGORY',
-  'INVENTORY',
-  'USER_ACCOUNT',
-] as const
-
-export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number]
 type AuditEventName = 'INSERT' | 'MODIFY' | 'REMOVE'
 type AuditActorType = 'customer' | 'admin' | 'system' | 'unknown'
 type AuditFieldChange = { before?: unknown; after?: unknown }
@@ -78,32 +75,6 @@ const AUDIT_ENTITY_CONFIGS: Record<AuditEntityType, AuditEntityConfig> = {
       'address',
     ],
   },
-}
-
-export interface AuditLogItem {
-  entityKey: string
-  occurredAtAuditId: string
-  auditId: string
-  entityType: AuditEntityType
-  entityId: string
-  sourceTable?: string
-  eventName: AuditEventName
-  occurredAt: string
-  actorType: AuditActorType
-  actorId?: string
-  actorEmail?: string
-  reason?: string
-  diff: AuditDiff
-  before: Record<string, unknown>
-  after: Record<string, unknown>
-  keys?: Record<string, unknown>
-  schemaVersion: number
-  expiresAt: number
-}
-
-export interface AuditLogQueryResult {
-  items: AuditLogItem[]
-  nextCursor: string | null
 }
 
 export interface DynamoDbStreamRecord {
@@ -190,12 +161,12 @@ export class AuditLogService {
         Limit: limit,
         ExclusiveStartKey: decodeCursor(input.cursor),
       }),
-    )) as { Items?: AuditLogItem[]; LastEvaluatedKey?: Record<string, unknown> }
+    )) as { Items?: Record<string, unknown>[]; LastEvaluatedKey?: Record<string, unknown> }
 
-    return {
-      items: response.Items ?? [],
-      nextCursor: encodeCursor(response.LastEvaluatedKey),
-    }
+    return AuditLogQueryResult.fromParts(
+      (response.Items ?? []).map(AuditLogItem.fromRecord),
+      encodeCursor(response.LastEvaluatedKey),
+    )
   }
 
   private async processSqsRecord(record: SQSRecord): Promise<void> {
@@ -222,7 +193,7 @@ export async function putAuditLogItem(
     await client.send(
       new PutCommand({
         TableName: tableName,
-        Item: item,
+        Item: { ...item },
         ConditionExpression:
           'attribute_not_exists(#entityKey) AND attribute_not_exists(#occurredAtAuditId)',
         ExpressionAttributeNames: {
@@ -266,7 +237,7 @@ export function buildAuditLogItem(envelope: AuditPipeEnvelope): AuditLogItem | u
   const occurredAt = resolveOccurredAt(record, newImage)
   const expiresAt = Math.floor(new Date(occurredAt).getTime() / 1000) + AUDIT_RETENTION_SECONDS
 
-  return {
+  return AuditLogItem.create({
     entityKey: buildEntityKey(entityType, entityId),
     occurredAtAuditId: `${occurredAt}#${auditId}`,
     auditId,
@@ -282,7 +253,7 @@ export function buildAuditLogItem(envelope: AuditPipeEnvelope): AuditLogItem | u
     ...(Object.keys(keys).length > 0 ? { keys } : {}),
     schemaVersion: 1,
     expiresAt,
-  }
+  })
 }
 
 export function buildAuditDiff(

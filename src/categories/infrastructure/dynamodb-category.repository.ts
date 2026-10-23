@@ -34,7 +34,7 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
       await this.dynamoDbService.documentClient.send(
         new PutCommand({
           TableName: this.tableName,
-          Item: category,
+          Item: { ...category },
           ConditionExpression: 'attribute_not_exists(#categoryId)',
           ExpressionAttributeNames: { '#categoryId': 'categoryId' },
         }),
@@ -60,7 +60,7 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
       }),
     )
     return {
-      items: (response.Items ?? []) as Category[],
+      items: (response.Items ?? []).map(Category.fromRecord),
       lastEvaluatedKey: response.LastEvaluatedKey,
     }
   }
@@ -69,7 +69,7 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
     const response = await this.dynamoDbService.documentClient.send(
       new GetCommand({ TableName: this.tableName, Key: { categoryId } }),
     )
-    return (response.Item as Category | undefined) ?? null
+    return response.Item ? Category.fromRecord(response.Item) : null
   }
 
   async update(
@@ -112,7 +112,7 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
           ReturnValues: 'ALL_NEW',
         }),
       )
-      return response.Attributes as Category
+      return Category.fromRecord(response.Attributes!)
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
         throw new NotFoundError(`Category ${categoryId} was not found.`)

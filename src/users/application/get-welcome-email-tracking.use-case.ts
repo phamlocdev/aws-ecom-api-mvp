@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { EmailTrackingService } from '../../mail/email-tracking.service'
-import { EmailTrackingView } from '../../mail/mail.types'
+import { EmailTrackingView } from '../../mail/domain/email-tracking.entity'
 import { COGNITO_USER_REPOSITORY, CognitoUserPort } from '../domain/cognito-user.port'
 import {
   USER_ACCOUNT_REPOSITORY,

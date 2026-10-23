@@ -1,4 +1,5 @@
 import assert from 'assert'
+import { type AuditLogItem } from '../audit/domain/audit-log.entity'
 import {
   AuditLogService,
   buildAuditDiff,
@@ -6,7 +7,6 @@ import {
   parseAuditPipeEnvelope,
   putAuditLogItem,
   type AuditLogDocumentClient,
-  type AuditLogItem,
   type DynamoDbStreamRecord,
 } from '../audit/audit-log.service'
 

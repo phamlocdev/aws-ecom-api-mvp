@@ -74,17 +74,19 @@ export class ReserveOrderCheckoutItemsUseCase {
       }
 
       const createdAt = new Date().toISOString()
-      const orderItems: OrderItem[] = productSnapshots.map(({ item, product }, index) => ({
-        orderId: input.orderId,
-        lineId: `${String(index + 1).padStart(3, '0')}-${randomUUID().slice(0, 8)}`,
-        productId: product.productId,
-        productName: product.name,
-        imageUrl: product.imageUrl,
-        unitPrice: product.price,
-        quantity: item.quantity,
-        lineTotal: product.price * item.quantity,
-        createdAt,
-      }))
+      const orderItems = productSnapshots.map(({ item, product }, index) =>
+        OrderItem.create({
+          orderId: input.orderId,
+          lineId: `${String(index + 1).padStart(3, '0')}-${randomUUID().slice(0, 8)}`,
+          productId: product.productId,
+          productName: product.name,
+          imageUrl: product.imageUrl,
+          unitPrice: product.price,
+          quantity: item.quantity,
+          lineTotal: product.price * item.quantity,
+          createdAt,
+        }),
+      )
 
       await this.orderRepository.createOrderItems(orderItems)
 

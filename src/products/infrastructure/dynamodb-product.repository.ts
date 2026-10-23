@@ -47,7 +47,7 @@ export class DynamoDbProductRepository implements ProductRepositoryPort {
             {
               Put: {
                 TableName: this.tableName,
-                Item: product,
+                Item: { ...product },
                 ConditionExpression: 'attribute_not_exists(#productId)',
                 ExpressionAttributeNames: { '#productId': 'productId' },
               },
@@ -93,7 +93,7 @@ export class DynamoDbProductRepository implements ProductRepositoryPort {
         }),
       )
 
-      items.push(...((response.Items ?? []) as Product[]))
+      items.push(...(response.Items ?? []).map(Product.fromRecord))
       scannedCount += response.ScannedCount ?? 0
       lastEvaluatedKey = response.LastEvaluatedKey
       // Điều kiện lặp:
@@ -111,7 +111,7 @@ export class DynamoDbProductRepository implements ProductRepositoryPort {
         Key: { productId },
       }),
     )
-    return (response.Item as Product | undefined) ?? null
+    return response.Item ? Product.fromRecord(response.Item) : null
   }
 
   async update(
@@ -154,7 +154,7 @@ export class DynamoDbProductRepository implements ProductRepositoryPort {
           ReturnValues: 'ALL_NEW',
         }),
       )
-      return response.Attributes as Product
+      return Product.fromRecord(response.Attributes!)
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
         throw new NotFoundError(`Product ${productId} was not found.`)

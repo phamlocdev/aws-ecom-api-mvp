@@ -15,10 +15,13 @@ import {
   EmailDeliveryStatistics,
   EmailDeliveryStatus,
   EmailIdempotencyMode,
-  EmailTracking,
-  EmailTrackingView,
   EmailType,
 } from './mail.types'
+import {
+  EmailDeliverySummary,
+  EmailTracking,
+  EmailTrackingView,
+} from './domain/email-tracking.entity'
 
 const RETRYABLE_ACCEPTED_AGE_MS = 30 * 60 * 1000
 
@@ -92,30 +95,32 @@ export class EmailTrackingService {
       input.emailType,
       input.recipientEmails,
     )
-    const items = input.recipientEmails.map((recipientEmail) => ({
-      emailId:
-        input.idempotencyMode === 'claim-once'
-          ? buildClaimOnceEmailId(
-              input.contextType,
-              input.contextId,
-              input.emailType,
-              recipientEmail,
-            )
-          : randomUUID(),
-      emailType: input.emailType,
-      recipientEmail: recipientEmail.trim().toLowerCase(),
-      status: input.status,
-      contextType: input.contextType,
-      contextId: input.contextId,
-      contextKey,
-      attemptNumber: attemptNumberByRecipient.get(recipientEmail) ?? 1,
-      resendOfEmailId: input.resendOfByRecipient?.[recipientEmail],
-      configurationSetName: input.configurationSetName,
-      failureReason: input.failureReason,
-      createdAt,
-      updatedAt: createdAt,
-      ...(input.status === 'FAILED' ? { failedAt: createdAt } : {}),
-    }))
+    const items = input.recipientEmails.map((recipientEmail) =>
+      EmailTracking.create({
+        emailId:
+          input.idempotencyMode === 'claim-once'
+            ? buildClaimOnceEmailId(
+                input.contextType,
+                input.contextId,
+                input.emailType,
+                recipientEmail,
+              )
+            : randomUUID(),
+        emailType: input.emailType,
+        recipientEmail: recipientEmail.trim().toLowerCase(),
+        status: input.status,
+        contextType: input.contextType,
+        contextId: input.contextId,
+        contextKey,
+        attemptNumber: attemptNumberByRecipient.get(recipientEmail) ?? 1,
+        resendOfEmailId: input.resendOfByRecipient?.[recipientEmail],
+        configurationSetName: input.configurationSetName,
+        failureReason: input.failureReason,
+        createdAt,
+        updatedAt: createdAt,
+        ...(input.status === 'FAILED' ? { failedAt: createdAt } : {}),
+      }),
+    )
 
     if (input.idempotencyMode === 'claim-once') {
       return (
@@ -178,14 +183,18 @@ export class EmailTrackingService {
     return latest?.isRetryable ? latest : undefined
   }
 
-  async getLatestSummary(contextType: EmailContextType, contextId: string, emailType: EmailType) {
+  async getLatestSummary(
+    contextType: EmailContextType,
+    contextId: string,
+    emailType: EmailType,
+  ): Promise<EmailDeliverySummary | undefined> {
     const items = await this.findByContext(contextType, contextId, [emailType])
     const latest = items[0]
     if (!latest) {
       return undefined
     }
 
-    return {
+    return EmailDeliverySummary.create({
       recipientEmail: latest.recipientEmail,
       emailType: latest.emailType,
       status: latest.status,
@@ -193,7 +202,7 @@ export class EmailTrackingService {
       emailId: latest.emailId,
       isRetryable: latest.isRetryable,
       attemptNumber: latest.attemptNumber,
-    }
+    })
   }
 
   async getStatistics(emailTypes: EmailType[]): Promise<EmailDeliveryStatistics> {
@@ -337,7 +346,7 @@ export class EmailTrackingService {
           ExclusiveStartKey: exclusiveStartKey,
         }),
       )
-      items.push(...((response.Items ?? []) as EmailTracking[]))
+      items.push(...(response.Items ?? []).map(EmailTracking.fromRecord))
       exclusiveStartKey = response.LastEvaluatedKey as Record<string, unknown> | undefined
     } while (exclusiveStartKey)
 
@@ -355,7 +364,7 @@ export class EmailTrackingService {
           ExclusiveStartKey: exclusiveStartKey,
         }),
       )
-      items.push(...((response.Items ?? []) as EmailTracking[]))
+      items.push(...(response.Items ?? []).map(EmailTracking.fromRecord))
       exclusiveStartKey = response.LastEvaluatedKey as Record<string, unknown> | undefined
     } while (exclusiveStartKey)
 
@@ -381,17 +390,14 @@ export class EmailTrackingService {
   }
 
   private withRetryableFlag(item: EmailTracking): EmailTrackingView {
-    return {
-      ...item,
-      isRetryable: isRetryableEmailTracking(item),
-    }
+    return EmailTrackingView.fromParts(item, isRetryableEmailTracking(item))
   }
 
   private async putTrackingItem(item: EmailTracking): Promise<void> {
     await this.dynamoDbService.documentClient.send(
       new PutCommand({
         TableName: this.tableName,
-        Item: item,
+        Item: { ...item },
         ConditionExpression: 'attribute_not_exists(#emailId)',
         ExpressionAttributeNames: { '#emailId': 'emailId' },
       }),
@@ -430,7 +436,7 @@ export class EmailTrackingService {
       }),
     )
 
-    return response.Item as EmailTracking | undefined
+    return response.Item ? EmailTracking.fromRecord(response.Item) : undefined
   }
 
   private async reclaimFailedTrackingItem(
@@ -481,7 +487,7 @@ export class EmailTrackingService {
         }),
       )
 
-      return response.Attributes as EmailTracking | undefined
+      return response.Attributes ? EmailTracking.fromRecord(response.Attributes) : undefined
     } catch (error) {
       if (isConditionalCheckFailed(error)) {
         return undefined

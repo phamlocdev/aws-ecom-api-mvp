@@ -10,7 +10,7 @@ import { MarkFailedUseCase } from './mark-failed.use-case'
 import { MarkReservedUseCase } from './mark-reserved.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from './reserve-order-checkout-items.use-case'
 
-const product: Product = {
+const product = Product.fromRecord({
   productId: 'p1',
   name: 'Headphones',
   description: 'Wireless headphones',
@@ -20,7 +20,7 @@ const product: Product = {
   status: ProductStatus.ACTIVE,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
-}
+})
 
 function mockUseCase<T extends { execute: (...args: never[]) => unknown }>(): jest.Mocked<T> {
   return { execute: jest.fn() } as unknown as jest.Mocked<T>

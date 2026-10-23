@@ -59,7 +59,7 @@ export function toUserProfile(
 ): UserProfile {
   const timestamp = new Date().toISOString()
 
-  return {
+  return UserProfile.fromRecord({
     userId: user.sub,
     username: user.username,
     ...((user.email ?? storedProfile?.email) ? { email: user.email ?? storedProfile?.email } : {}),
@@ -69,7 +69,7 @@ export function toUserProfile(
     passwordStatus: resolvePasswordStatus(storedProfile, user.username),
     createdAt: storedProfile?.createdAt ?? timestamp,
     updatedAt: storedProfile?.updatedAt ?? timestamp,
-  }
+  } as unknown as Record<string, unknown>)
 }
 
 export function normalizeUserAddress(address: UserAddress): UserAddress {
@@ -79,13 +79,13 @@ export function normalizeUserAddress(address: UserAddress): UserAddress {
     ...(address.location?.city ? { city: address.location.city } : {}),
   }
 
-  return {
+  return UserAddress.create({
     ...(address.recipientName ? { recipientName: address.recipientName } : {}),
     ...(address.phone ? { phone: address.phone } : {}),
     ...(address.line1 ? { line1: address.line1 } : {}),
     ...(Object.keys(location).length > 0 ? { location } : {}),
     ...(address.notes ? { notes: address.notes } : {}),
-  }
+  })
 }
 
 export function resolvePasswordStatus(
@@ -104,10 +104,10 @@ export function isGoogleFederatedUsername(username: string | undefined): boolean
 }
 
 export function toUserPermissionsRecord(account: UserAccount): UserPermissionsRecord {
-  return {
+  return UserPermissionsRecord.fromRecord({
     userId: account.userId,
     permissions: normalizePermissions(account.permissions),
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
-  }
+  } as unknown as Record<string, unknown>)
 }

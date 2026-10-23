@@ -163,14 +163,14 @@ describe('orders use-cases (integration)', () => {
     clientId: 'test-client',
   }
 
-  const activeCart: Cart = {
+  const activeCart = Cart.fromRecord({
     customerId: customerUser.sub,
     cartId: 'cart-1',
     status: CartStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
-  }
+  })
 
   const cartItem: CartItem = {
     cartId: activeCart.cartId,
@@ -181,7 +181,7 @@ describe('orders use-cases (integration)', () => {
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
 
-  const product: Product = {
+  const product = Product.fromRecord({
     productId: 'p1',
     name: 'Headphones',
     description: 'Wireless headphones',
@@ -191,9 +191,9 @@ describe('orders use-cases (integration)', () => {
     status: ProductStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
-  }
+  })
 
-  const reservedOrder: Order = {
+  const reservedOrder = Order.fromRecord({
     orderId: 'order-1',
     customerId: customerUser.sub,
     customerEmail: customerUser.email,
@@ -207,7 +207,7 @@ describe('orders use-cases (integration)', () => {
     updatedAt: '2026-01-01T00:00:00.000Z',
     totalAmount: 200000,
     paymentExpiresAt: Math.floor(Date.now() / 1000) + 3600,
-  }
+  })
 
   const reservedOrderItem: OrderItem = {
     orderId: reservedOrder.orderId,
@@ -372,7 +372,7 @@ describe('orders use-cases (integration)', () => {
 
   describe('CreateOrderRequestUseCase', () => {
     it('throws InvalidInputError when the cart has expired, without writing anything', async () => {
-      getOwnedCartUseCase.execute.mockResolvedValue({ ...activeCart, status: CartStatus.EXPIRED })
+      getOwnedCartUseCase.execute.mockResolvedValue(Cart.fromRecord({ ...activeCart, status: CartStatus.EXPIRED }))
 
       await expect(
         createOrderRequestUseCase.execute(customerUser, { cartId: activeCart.cartId }),

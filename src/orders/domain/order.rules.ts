@@ -1,14 +1,5 @@
-import { Order } from './order.entity'
-
-// Pure business rules shared by several order use-cases. Kept in domain/
-// because they only depend on the Order entity, not on Nest/AWS SDK.
-
 export function toEpochSeconds(timestampMs: number): number {
   return Math.floor(timestampMs / 1000)
-}
-
-export function isOrderPaymentExpired(order: Order): boolean {
-  return Boolean(order.paymentExpiresAt && order.paymentExpiresAt <= toEpochSeconds(Date.now()))
 }
 
 export function normalizeAdditionalReceivingEmails(emails: string[] | undefined): string[] | undefined {

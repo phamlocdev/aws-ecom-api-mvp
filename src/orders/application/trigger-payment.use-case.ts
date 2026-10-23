@@ -9,7 +9,7 @@ import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 import { PAYMENT_WINDOW_EXPIRED_REASON } from '../domain/payment-reservation.config'
 import { PaymentStatus } from '../domain/payment-status.enum'
-import { isOrderPaymentExpired, toEpochSeconds } from '../domain/order.rules'
+import { toEpochSeconds } from '../domain/order.rules'
 import { VnpayService } from '../infrastructure/vnpay.service'
 import { buildPaymentOrderInfo } from './vnpay-order-info.util'
 import { GetOrderByIdUseCase } from './get-order-by-id.use-case'
@@ -50,7 +50,7 @@ export class TriggerPaymentUseCase {
     if (order.totalAmount === undefined) {
       throw new InvalidInputError(`Order ${orderId} does not have a payable amount.`)
     }
-    if (isOrderPaymentExpired(order)) {
+    if (order.isPaymentExpired()) {
       await this.releaseExpiredOrderReservationUseCase.execute(order)
       throw new ConflictError(PAYMENT_WINDOW_EXPIRED_REASON)
     }
@@ -87,7 +87,7 @@ export class TriggerPaymentUseCase {
     } catch (error) {
       if (error instanceof ConflictError) {
         const latestOrder = await this.getOrderByIdUseCase.execute(orderId)
-        if (isOrderPaymentExpired(latestOrder)) {
+        if (latestOrder.isPaymentExpired()) {
           await this.releaseExpiredOrderReservationUseCase.execute(latestOrder)
           throw new ConflictError(PAYMENT_WINDOW_EXPIRED_REASON)
         }

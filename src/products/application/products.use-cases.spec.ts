@@ -27,7 +27,7 @@ const adminUser: AuthenticatedUser = {
   clientId: 'test-client',
 }
 
-const baseProduct: Product = {
+const baseProduct = Product.fromRecord({
   productId: 'p1',
   name: 'Headphones',
   description: 'Wireless headphones',
@@ -37,7 +37,7 @@ const baseProduct: Product = {
   status: ProductStatus.ACTIVE,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
-}
+})
 
 function createRepositoryMock(): jest.Mocked<ProductRepositoryPort> {
   return {
@@ -159,7 +159,9 @@ describe('FindOneProductUseCase', () => {
 
   it('throws NotFoundError when the product is soft-deleted', async () => {
     const repository = createRepositoryMock()
-    repository.findOne.mockResolvedValue({ ...baseProduct, status: ProductStatus.DELETED })
+    repository.findOne.mockResolvedValue(
+      Product.fromRecord({ ...(baseProduct as unknown as Record<string, unknown>), status: ProductStatus.DELETED }),
+    )
     const useCase = new FindOneProductUseCase(repository)
 
     await expect(useCase.execute('p1')).rejects.toBeInstanceOf(NotFoundError)
@@ -170,10 +172,10 @@ describe('FindProductForResponseUseCase', () => {
   it('enriches every image with a read URL', async () => {
     const repository = createRepositoryMock()
     const uploadService = createUploadServiceMock()
-    const productWithImages: Product = {
-      ...baseProduct,
+    const productWithImages = Product.fromRecord({
+      ...(baseProduct as unknown as Record<string, unknown>),
       images: [{ key: 'products/a/1.webp', sortOrder: 0, isPrimary: true }],
-    }
+    })
     repository.findOne.mockResolvedValue(productWithImages)
     uploadService.createReadUrls.mockResolvedValue([
       { key: 'products/a/1.webp', readUrl: 'https://example.com/1', expiresInSeconds: 900 },
@@ -234,7 +236,7 @@ describe('UpdateProductUseCase', () => {
     const uploadService = createUploadServiceMock()
     const publisher = createPublisherMock()
     repository.findOne.mockResolvedValue(baseProduct)
-    const updated = { ...baseProduct, price: 999 }
+    const updated = Product.fromRecord({ ...(baseProduct as unknown as Record<string, unknown>), price: 999 })
     repository.update.mockResolvedValue(updated)
     const findOneProductUseCase = new FindOneProductUseCase(repository)
     const useCase = new UpdateProductUseCase(
@@ -279,10 +281,10 @@ describe('DeleteProductUseCase', () => {
     const repository = createRepositoryMock()
     const uploadService = createUploadServiceMock()
     const publisher = createPublisherMock()
-    const productWithImages: Product = {
-      ...baseProduct,
+    const productWithImages = Product.fromRecord({
+      ...(baseProduct as unknown as Record<string, unknown>),
       images: [{ key: 'products/a/1.webp', sortOrder: 0, isPrimary: true }],
-    }
+    })
     repository.findOne.mockResolvedValue(productWithImages)
     repository.remove.mockResolvedValue(undefined)
     const findOneProductUseCase = new FindOneProductUseCase(repository)

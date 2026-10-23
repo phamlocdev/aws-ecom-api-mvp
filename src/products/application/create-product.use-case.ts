@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { randomUUID } from 'crypto'
 import { buildUserAuditMutationContext, toAuditMutationAttributes } from '../../audit/audit-actor'
 import { AuthenticatedUser } from '../../auth/auth.types'
 import { UploadService } from '../../upload/upload.service'
@@ -39,28 +38,23 @@ export class CreateProductUseCase {
   ) {}
 
   async execute(user: AuthenticatedUser, input: CreateProductInput): Promise<Product> {
-    const timestamp = new Date().toISOString()
     const images = await prepareProductImages(this.uploadService, input.images)
     const actor = buildUserAuditMutationContext(user, 'Product created')
-    const product: Product = {
-      productId: randomUUID(),
+    const product = Product.create({
       name: input.name,
       description: input.description,
       categoryId: input.categoryId,
       price: input.price,
-      currency: 'VND',
       imageUrl: input.imageUrl,
       images,
-      status: input.status ?? ProductStatus.ACTIVE,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+      status: input.status,
       ...toAuditMutationAttributes(actor),
-    }
+    })
     const initialInventory: InitialProductInventory = {
       productId: product.productId,
       availableQuantity: input.availableQuantity ?? 0,
       reservedQuantity: 0,
-      updatedAt: timestamp,
+      updatedAt: product.createdAt,
       ...toAuditMutationAttributes({ ...actor, reason: 'Initial inventory created' }),
     }
 

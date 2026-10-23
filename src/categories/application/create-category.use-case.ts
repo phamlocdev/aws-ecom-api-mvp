@@ -10,6 +10,7 @@ export interface CreateCategoryInput {
   description?: string
 }
 
+
 @Injectable()
 export class CreateCategoryUseCase {
   constructor(
@@ -18,17 +19,13 @@ export class CreateCategoryUseCase {
   ) {}
 
   async execute(user: AuthenticatedUser, input: CreateCategoryInput): Promise<Category> {
-    const timestamp = new Date().toISOString()
     const actor = buildUserAuditMutationContext(user, 'Category created')
-    const category: Category = {
+    const category = Category.create({
       categoryId: input.categoryId,
       name: input.name,
       description: input.description,
-      status: 'ACTIVE',
-      createdAt: timestamp,
-      updatedAt: timestamp,
       ...toAuditMutationAttributes(actor),
-    }
+    })
 
     await this.categoryRepository.create(category)
     return category

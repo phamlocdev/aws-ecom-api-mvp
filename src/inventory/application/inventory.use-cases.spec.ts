@@ -3,7 +3,7 @@ import { Role } from '../../auth/roles.enum'
 import { AuthenticatedUser } from '../../auth/auth.types'
 import { ProductStatus } from '../../products/domain/product-status.enum'
 import { InventoryRepositoryPort } from '../domain/inventory.repository.port'
-import { InventorySummary } from '../domain/inventory.entity'
+import { InventoryRecord, InventorySummary } from '../domain/inventory.entity'
 import { FindAllInventoriesUseCase } from './find-all-inventories.use-case'
 import { FindOneInventoryUseCase } from './find-one-inventory.use-case'
 import { UpdateInventoryQuantityUseCase } from './update-inventory-quantity.use-case'
@@ -23,15 +23,15 @@ const adminUser: AuthenticatedUser = {
   clientId: 'test-client',
 }
 
-const summary: InventorySummary = {
-  productId: 'p1',
-  productName: 'Headphones',
-  categoryId: 'cat-1',
-  productStatus: ProductStatus.ACTIVE,
-  availableQuantity: 4,
-  reservedQuantity: 1,
-  updatedAt: '2026-01-01T00:00:00.000Z',
-}
+const summary = InventorySummary.fromParts(
+  InventoryRecord.fromRecord({
+    productId: 'p1',
+    availableQuantity: 4,
+    reservedQuantity: 1,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }),
+  { name: 'Headphones', categoryId: 'cat-1', status: ProductStatus.ACTIVE },
+)
 
 function createRepositoryMock(): jest.Mocked<InventoryRepositoryPort> {
   return {

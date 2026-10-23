@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { randomUUID } from 'crypto'
 import { buildUserAuditMutationContext, toAuditMutationAttributes } from '../../audit/audit-actor'
 import { AuthenticatedUser } from '../../auth/auth.types'
 import { GetCartItemsUseCase } from '../../carts/application/get-cart-items.use-case'
@@ -11,14 +10,10 @@ import { FindCustomerProfileByUsernameUseCase } from '../../users/application/fi
 import { Order } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
-import { PaymentStatus } from '../domain/payment-status.enum'
-import { normalizeAdditionalReceivingEmails } from '../domain/order.rules'
 import { CreateOrderInput } from './create-order-input.type'
 import { GetOrderByIdUseCase } from './get-order-by-id.use-case'
 import { MarkFailedUseCase } from './mark-failed.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from './reserve-order-checkout-items.use-case'
-
-const ORDERS_ENTITY_TYPE = 'ORDER'
 
 @Injectable()
 export class CreateOrderRequestUseCase {
@@ -54,23 +49,15 @@ export class CreateOrderRequestUseCase {
         ? { username: user.username, name: user.name, email: user.email, sub: user.sub }
         : await this.findCustomerProfileByUsernameUseCase.execute(user.username)
 
-    const timestamp = new Date().toISOString()
     const createActor = buildUserAuditMutationContext(user, 'Order created')
-    const order: Order = {
-      orderId: randomUUID(),
+    const order = Order.create({
       customerId: user.sub,
       customerEmail: user.email ?? profile.email,
       customerName: user.name ?? profile.name,
-      additionalReceivingEmails: normalizeAdditionalReceivingEmails(input.additionalReceivingEmails),
+      additionalReceivingEmails: input.additionalReceivingEmails,
       cartId: input.cartId,
-      status: OrderStatus.PENDING,
-      entityType: ORDERS_ENTITY_TYPE,
-      deduplicationKey: randomUUID(),
-      paymentStatus: PaymentStatus.NOT_STARTED,
-      createdAt: timestamp,
-      updatedAt: timestamp,
       ...toAuditMutationAttributes(createActor),
-    }
+    })
 
     await this.orderRepository.create(order)
 

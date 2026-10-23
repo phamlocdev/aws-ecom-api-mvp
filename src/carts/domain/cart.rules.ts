@@ -12,20 +12,20 @@ export function toEpochSeconds(value: number): number {
 /** A cart whose TTL has passed is EXPIRED even if the stored row has not been touched yet. */
 export function deriveCartStatus(cart: Cart): Cart {
   if (cart.expiresAt <= toEpochSeconds(Date.now())) {
-    return {
-      ...cart,
+    return Cart.fromRecord({
+      ...(cart as unknown as Record<string, unknown>),
       status: CartStatus.EXPIRED,
-    }
+    })
   }
 
   if (cart.status === CartStatus.EXPIRED) {
     return cart
   }
 
-  return {
-    ...cart,
+  return Cart.fromRecord({
+    ...(cart as unknown as Record<string, unknown>),
     status: CartStatus.ACTIVE,
-  }
+  })
 }
 
 /** Throws InvalidInputError if the cart can no longer be mutated (expired). */

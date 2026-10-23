@@ -24,9 +24,6 @@ export class FindOneOrderUseCase {
     }
 
     const items = await this.orderRepository.findOrderItems(order.orderId)
-    return {
-      ...order,
-      items,
-    }
+    return Object.assign(order, { items })
   }
 }

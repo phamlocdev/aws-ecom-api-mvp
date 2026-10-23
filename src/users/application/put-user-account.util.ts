@@ -23,7 +23,7 @@ export async function putUserAccount(
 ): Promise<UserAccount> {
   const existing = await userAccountRepository.findById(input.userId)
   const timestamp = new Date().toISOString()
-  const record: UserAccount = {
+  const record = UserAccount.fromRecord({
     userId: input.userId,
     username: input.username ?? existing?.username ?? input.userId,
     ...(input.email !== undefined
@@ -70,7 +70,7 @@ export async function putUserAccount(
             lastModifiedReason: existing.lastModifiedReason,
           }
         : {}),
-  }
+  } as unknown as Record<string, unknown>)
 
   await userAccountRepository.save(record)
 

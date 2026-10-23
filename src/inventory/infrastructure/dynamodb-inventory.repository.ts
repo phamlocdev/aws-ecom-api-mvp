@@ -56,20 +56,19 @@ export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
       return existing
     }
 
-    const record: InventoryRecord = {
+    const record = InventoryRecord.create({
       productId,
       availableQuantity: 0,
       reservedQuantity: 0,
-      updatedAt: new Date().toISOString(),
       ...toAuditMutationAttributes(
         systemAuditMutationContext('inventory-service', 'Inventory record initialized'),
       ),
-    }
+    })
 
     await this.dynamoDbService.documentClient.send(
       new PutCommand({
         TableName: this.tableName,
-        Item: record,
+        Item: { ...record },
         ConditionExpression: 'attribute_not_exists(productId)',
         ExpressionAttributeValues: {
           ':productId': productId,
@@ -88,7 +87,7 @@ export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
       }),
     )
 
-    return (response.Item as InventoryRecord | undefined) ?? null
+    return response.Item ? InventoryRecord.fromRecord(response.Item) : null
   }
 
   async findOneSummary(productId: string): Promise<InventorySummary> {
@@ -137,7 +136,7 @@ export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
         }),
       )
 
-      const products = (response.Items ?? []) as Product[]
+      const products = (response.Items ?? []).map(Product.fromRecord)
       const inventoryRecords = await Promise.all(
         products.map((product) => this.ensureRecord(product.productId)),
       )
@@ -182,7 +181,7 @@ export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
       }),
     )
 
-    return toInventorySummary(product, response.Attributes as InventoryRecord)
+    return toInventorySummary(product, InventoryRecord.fromRecord(response.Attributes!))
   }
 
   async reserve(productId: string, quantity: number, audit: AuditMutationContext): Promise<void> {
@@ -252,7 +251,7 @@ export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
       throw new NotFoundError(`Product ${productId} was not found.`)
     }
 
-    return response.Item as Product
+    return Product.fromRecord(response.Item)
   }
 
   private async findProductsByIds(productIds: string[]): Promise<Product[]> {
@@ -274,7 +273,7 @@ export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
         }),
       )
 
-      products.push(...((response.Responses?.[this.productsTableName] ?? []) as Product[]))
+      products.push(...(response.Responses?.[this.productsTableName] ?? []).map(Product.fromRecord))
     }
 
     const productMap = new Map(products.map((product) => [product.productId, product] as const))
@@ -304,7 +303,7 @@ export class DynamoDbInventoryRepository implements InventoryRepositoryPort {
         }),
       )
 
-      inventoryRecords.push(...((response.Responses?.[this.tableName] ?? []) as InventoryRecord[]))
+      inventoryRecords.push(...(response.Responses?.[this.tableName] ?? []).map(InventoryRecord.fromRecord))
     }
 
     const inventoryMap = new Map(
@@ -377,16 +376,7 @@ function buildInventoryProductFilterExpression(
 }
 
 function toInventorySummary(product: Product, inventory: InventoryRecord): InventorySummary {
-  return {
-    productId: product.productId,
-    productName: product.name,
-    categoryId: product.categoryId,
-    imageUrl: product.imageUrl,
-    productStatus: product.status,
-    availableQuantity: inventory.availableQuantity,
-    reservedQuantity: inventory.reservedQuantity,
-    updatedAt: inventory.updatedAt,
-  }
+  return InventorySummary.fromParts(inventory, product)
 }
 
 function chunk<T>(items: T[], size: number): T[][] {

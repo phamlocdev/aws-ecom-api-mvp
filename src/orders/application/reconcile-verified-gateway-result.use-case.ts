@@ -15,7 +15,6 @@ import { SesMailService } from '../../mail/ses-mail.service'
 import { Order } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
 import { PaymentStatus } from '../domain/payment-status.enum'
-import { isOrderPaymentExpired } from '../domain/order.rules'
 import { VnpayService } from '../infrastructure/vnpay.service'
 import { buildAutoRefundReason, buildPaymentOrderInfo } from './vnpay-order-info.util'
 import { FindOrderItemsUseCase } from './find-order-items.use-case'
@@ -95,7 +94,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
       return this.handleFailedIpn(order, verify.message, source)
     }
 
-    if (isOrderPaymentExpired(order)) {
+    if (order.isPaymentExpired()) {
       await this.releaseExpiredOrderReservationUseCase.execute(order)
       const latestOrder = await this.getOrderByIdUseCase.execute(orderId)
       const latePaymentResult = await this.handleLatePaymentSuccess(latestOrder, verify, source)
@@ -137,7 +136,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
           await this.sendOrderConfirmationEmailBestEffort(latestOrder)
           return InpOrderAlreadyConfirmed
         }
-        if (isOrderPaymentExpired(latestOrder) || latestOrder.status === OrderStatus.EXPIRED) {
+        if (latestOrder.isPaymentExpired() || latestOrder.status === OrderStatus.EXPIRED) {
           return this.handleLatePaymentSuccess(latestOrder, verify, source)
         }
       }

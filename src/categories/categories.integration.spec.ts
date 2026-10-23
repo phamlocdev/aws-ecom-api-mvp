@@ -13,7 +13,6 @@ import { Permission } from '../auth/permissions'
 import { AuthenticatedUser } from '../auth/auth.types'
 import { DynamoDbCategoryRepository } from './infrastructure/dynamodb-category.repository'
 import { CategoryRepositoryPort } from './domain/category.repository.port'
-import { Category } from './domain/category.entity'
 import { CreateCategoryUseCase } from './application/create-category.use-case'
 import { FindAllCategoriesUseCase } from './application/find-all-categories.use-case'
 import { FindOneCategoryUseCase } from './application/find-one-category.use-case'
@@ -26,6 +25,10 @@ describe('categories use-cases (integration)', () => {
   const ddbMock = mockClient(DynamoDBDocumentClient)
   let repository: CategoryRepositoryPort
   let createCategoryUseCase: CreateCategoryUseCase
+  let findAllCategoriesUseCase: FindAllCategoriesUseCase
+  let findOneCategoryUseCase: FindOneCategoryUseCase
+  let updateCategoryUseCase: UpdateCategoryUseCase
+  let deleteCategoryUseCase: DeleteCategoryUseCase
 
   const adminUser: AuthenticatedUser = {
     sub: 'admin-1',
@@ -54,6 +57,10 @@ describe('categories use-cases (integration)', () => {
 
     repository = new DynamoDbCategoryRepository(dynamoDbService, dynamoTables)
     createCategoryUseCase = new CreateCategoryUseCase(repository)
+    findAllCategoriesUseCase = new FindAllCategoriesUseCase(repository)
+    findOneCategoryUseCase = new FindOneCategoryUseCase(repository)
+    updateCategoryUseCase = new UpdateCategoryUseCase(repository)
+    deleteCategoryUseCase = new DeleteCategoryUseCase(repository)
   })
 
   describe('CreateCategoryUseCase', () => {
@@ -74,7 +81,7 @@ describe('categories use-cases (integration)', () => {
       const calls = ddbMock.commandCalls(PutCommand)
       expect(calls).toHaveLength(1)
       const input = calls[0].args[0].input
-      expect(input.TableName).toBe('categories-test')\
+      expect(input.TableName).toBe('categories-test')
       expect(input.Item).toMatchObject({ categoryId: 'electronics', name: 'Electronics' })
       expect(input.ConditionExpression).toBe('attribute_not_exists(#categoryId)')
     })
@@ -112,7 +119,7 @@ describe('categories use-cases (integration)', () => {
     })
 
     it('returns items from the scan result', async () => {
-      const item: Category = {
+      const item = {
         categoryId: 'electronics',
         name: 'Electronics',
         status: 'ACTIVE',
@@ -139,7 +146,7 @@ describe('categories use-cases (integration)', () => {
 
   describe('FindOneCategoryUseCase', () => {
     it('returns the category when the item exists', async () => {
-      const item: Category = {
+      const item = {
         categoryId: 'electronics',
         name: 'Electronics',
         status: 'ACTIVE',
@@ -170,7 +177,7 @@ describe('categories use-cases (integration)', () => {
           status: 'DELETED',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
-        } as Category,
+        },
       })
 
       await expect(findOneCategoryUseCase.execute('electronics')).rejects.toBeInstanceOf(
@@ -181,7 +188,7 @@ describe('categories use-cases (integration)', () => {
 
   describe('UpdateCategoryUseCase', () => {
     it('sends an UpdateCommand with a conditional check and returns updated attributes', async () => {
-      const updatedItem: Category = {
+      const updatedItem = {
         categoryId: 'electronics',
         name: 'Updated Electronics',
         status: 'ACTIVE',
