@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { systemAuditMutationContext } from '../../audit/audit-actor'
-import { ConflictError } from '../../common/domain-error'
+import { ConflictError, NotFoundError } from '../../common/domain-error'
 import { INVENTORY_REPOSITORY, InventoryRepositoryPort } from '../domain/inventory.repository.port'
 
 @Injectable()
@@ -14,6 +14,12 @@ export class ReserveInventoryUseCase {
 
   async execute(productId: string, quantity: number): Promise<void> {
     const actor = systemAuditMutationContext('orders-service', 'Inventory reserved for order')
+
+    const inventory = await this.inventoryRepository.findOne(productId)
+    if (!inventory) {
+      throw new NotFoundError(`Inventory record for product ${productId} not found.`)
+    }
+    inventory.reserve(quantity, new Date().toISOString())
 
     try {
       await this.inventoryRepository.reserve(productId, quantity, actor)

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ProductStatus } from '../../products/domain/product-status.enum'
+import { ConflictError, InvalidInputError } from '../../common/domain-error'
 
 const InventoryRecordPropsSchema = z.object({
   productId: z.string(),
@@ -44,6 +45,19 @@ export class InventoryRecord {
 
   get totalQuantity(): number {
     return this.availableQuantity + this.reservedQuantity
+  }
+
+  reserve(quantity: number): void {
+    if (quantity <= 0) throw new InvalidInputError('Quantity must be positive')
+    if (this.availableQuantity < quantity) {
+      throw new ConflictError(
+        `Insufficient inventory: need ${quantity}, available ${this.availableQuantity}`,
+      )
+    }
+  }
+
+  release(quantity: number): void {
+    if (quantity <= 0) throw new InvalidInputError('Quantity must be positive')
   }
 }
 

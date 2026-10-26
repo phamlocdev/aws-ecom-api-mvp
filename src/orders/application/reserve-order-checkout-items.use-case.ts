@@ -6,7 +6,7 @@ import { ReserveInventoryUseCase } from '../../inventory/application/reserve-inv
 import { ReservedInventoryItem } from '../../inventory/domain/inventory.entity'
 import { FindOneProductUseCase } from '../../products/application/find-one-product.use-case'
 import { Product } from '../../products/domain/product.entity'
-import { OrderItem } from '../domain/order.entity'
+import { Order, OrderItem } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 import { FailPendingOrderAndReleaseReservationUseCase } from './fail-pending-order-and-release-reservation.use-case'
@@ -90,7 +90,7 @@ export class ReserveOrderCheckoutItemsUseCase {
 
       await this.orderRepository.createOrderItems(orderItems)
 
-      const totalAmount = orderItems.reduce((total, item) => total + item.lineTotal, 0)
+      const totalAmount = Order.computeTotal(orderItems)
       if (input.actorId) {
         await this.markReservedUseCase.execute(
           input.orderId,

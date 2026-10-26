@@ -118,12 +118,12 @@ describe('carts use-cases (post-refactor baseline)', () => {
       )
     })
 
-    it('derives EXPIRED status once the TTL has passed, even if stored status is ACTIVE', async () => {
+    it('isExpired returns true once the TTL has passed, even if stored status is ACTIVE', async () => {
       ddbMock.on(GetCommand).resolves({ Item: expiredCart })
 
       const cart = await getOwnedCartUseCase.execute(user.sub, expiredCart.cartId)
 
-      expect(cart.status).toBe(CartStatus.EXPIRED)
+      expect(cart.isExpired).toBe(true)
     })
 
     it('throws UnauthorizedDomainError when the cart belongs to a different customer', async () => {

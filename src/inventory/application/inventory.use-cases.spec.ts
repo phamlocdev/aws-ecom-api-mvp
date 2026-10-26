@@ -116,8 +116,16 @@ describe('UpdateInventoryQuantityUseCase', () => {
 })
 
 describe('ReserveInventoryUseCase', () => {
+  const inventoryRecord = InventoryRecord.fromRecord({
+    productId: 'p1',
+    availableQuantity: 4,
+    reservedQuantity: 1,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })
+
   it('delegates to the repository with a system audit context', async () => {
     const repository = createRepositoryMock()
+    repository.findOne.mockResolvedValue(inventoryRecord)
     repository.reserve.mockResolvedValue(undefined)
     const useCase = new ReserveInventoryUseCase(repository)
 
@@ -132,6 +140,7 @@ describe('ReserveInventoryUseCase', () => {
 
   it('propagates ConflictError raised by the repository', async () => {
     const repository = createRepositoryMock()
+    repository.findOne.mockResolvedValue(inventoryRecord)
     repository.reserve.mockRejectedValue(
       new ConflictError('Insufficient inventory for product p1.'),
     )

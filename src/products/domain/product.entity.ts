@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { ProductStatus } from './product-status.enum'
+import { InvalidInputError } from '../../common/domain-error'
 
 const ProductImagePropsSchema = z.object({
   key: z.string(),
@@ -136,5 +137,23 @@ export class Product {
 
   get isDeleted(): boolean {
     return this.status === ProductStatus.DELETED
+  }
+
+  deactivate(): void {
+    if (!this.isActive) {
+      throw new InvalidInputError(`Product ${this.productId} is not active.`)
+    }
+  }
+
+  activate(): void {
+    if (this.status !== ProductStatus.INACTIVE) {
+      throw new InvalidInputError(`Product ${this.productId} is not inactive.`)
+    }
+  }
+
+  delete(): void {
+    if (this.isDeleted) {
+      throw new InvalidInputError(`Product ${this.productId} is already deleted.`)
+    }
   }
 }

@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common'
 import { ExpireReservationAndReleaseInventoryIfUnpaidUseCase } from './expire-reservation-and-release-inventory-if-unpaid.use-case'
 import { FindOrderItemsUseCase } from './find-order-items.use-case'
 import { Order } from '../domain/order.entity'
-import { OrderStatus } from '../domain/order-status.enum'
 
 @Injectable()
 export class ReleaseExpiredOrderReservationUseCase {
@@ -14,7 +13,7 @@ export class ReleaseExpiredOrderReservationUseCase {
   ) {}
 
   async execute(order: Order): Promise<void> {
-    if (order.status !== OrderStatus.RESERVED || !order.isPaymentExpired()) {
+    if (!order.canExpireReservation()) {
       return
     }
 

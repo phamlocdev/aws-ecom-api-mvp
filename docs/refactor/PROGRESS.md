@@ -2,7 +2,7 @@
 
 > File này là trạng thái SỐNG — luôn đọc file này trước khi bắt đầu bất kỳ công việc refactor nào, và CẬP NHẬT lại trước khi kết thúc phiên. Kiến trúc đích và các giai đoạn xem ở [PLAN.md](./PLAN.md).
 
-Cập nhật lần cuối: 2026-10-23
+Cập nhật lần cuối: 2026-10-23 (Phase B+C xong)
 
 ## Trạng thái tổng quan
 
@@ -15,7 +15,7 @@ Cập nhật lần cuối: 2026-10-23
 | 4 — Dọn Lambda worker                          | 🔶 Một phần    | Đã loại bỏ trùng lặp DynamoDB access + di chuyển file worker vào `src/workers/`. Xem chi tiết bên dưới                            |
 | 5 — CI                                         | ☐ Chưa bắt đầu |                                                                                                                                   |
 | 6 — Zod schema validation                      | ✅ Xong        | Tất cả entity `fromRecord()` đều dùng Zod parse. Xem chi tiết bên dưới                                                            |
-| 7 — Rich Domain Model                          | 🔶 Một phần (Phase A xong) | Xem `docs/refactor/RICH_DOMAIN_MODEL_PLAN.md` và bảng tracking Giai đoạn 7 bên dưới             |
+| 7 — Rich Domain Model                          | 🔶 Một phần (Phase A+B+C xong) | Xem `docs/refactor/RICH_DOMAIN_MODEL_PLAN.md` và bảng tracking Giai đoạn 7 bên dưới         |
 
 ## Trạng thái từng module (Giai đoạn 3)
 
@@ -92,18 +92,18 @@ Xem spec đầy đủ: [`docs/refactor/RICH_DOMAIN_MODEL_PLAN.md`](./RICH_DOMAIN
 
 | Entity | A — Getters | B — Domain Methods | C — Use-cases | D — Tests |
 |---|---|---|---|---|
-| `Order` | ✅ | ☐ | ☐ | ☐ |
-| `Cart` | ✅ | ☐ | ☐ | ☐ |
-| `InventoryRecord` | ✅ | ☐ | ☐ | ☐ |
-| `Product` | ✅ | ☐ | ☐ | ☐ |
-| `Category` | ✅ | ☐ | ☐ | ☐ |
-| `EmailTracking` | ✅ | ☐ | ☐ | ☐ |
+| `Order` | ✅ | ✅ | ✅ | ☐ |
+| `Cart` | ✅ | ✅ | ✅ | ☐ |
+| `InventoryRecord` | ✅ | ✅ | ✅ | ☐ |
+| `Product` | ✅ | ✅ | ✅ | ☐ |
+| `Category` | ✅ | ✅ | ✅ | ☐ |
+| `EmailTracking` | ✅ | — (no state transitions) | — | ☐ |
 
 Trạng thái ô: ☐ Chưa · 🔄 Đang làm · ✅ Xong
 
 ## Việc đang dang dở (nếu phiên kết thúc giữa chừng)
 
-_Phase A (computed getters) đã xong toàn bộ 6 entity. 362/362 test pass. Bước tiếp: Phase B (domain methods) — di chuyển business logic từ use-cases và rules files xuống entity methods._
+_Phase A+B+C hoàn thành. 362/362 test pass. Bước tiếp: Phase D (entity unit tests) — tạo spec files cho từng entity để test guard/transition methods trực tiếp, sau đó mỏng hóa assertions trong use-case specs không còn cần phủ logic entity._
 
 > Khi 1 phiên kết thúc giữa chừng một task, ghi rõ ở đây: module đang làm, bước đã xong, bước tiếp theo, và bất kỳ quyết định/giả định nào đã đưa ra để phiên sau không phải đoán lại.
 
@@ -234,6 +234,34 @@ _Phase A (computed getters) đã xong toàn bộ 6 entity. 362/362 test pass. B�
 - 2026-10-23: **Zod Schema Validation refactor (Giai đoạn 6)** — tất cả entity `fromRecord()` dùng Zod schema parse. Chi tiết: `CategoryPropsSchema`, `ProductPropsSchema`+`ProductImagePropsSchema`, `OrderPropsSchema`+`OrderItemPropsSchema`, `CartPropsSchema`+`CartItemPropsSchema`, 5 schemas cho `users`, `InventoryRecordPropsSchema`, `AuditLogItemPropsSchema`, `EmailTrackingPropsSchema`+`EmailDeliverySummaryPropsSchema`. Entities có TypeScript enum field giữ manual type definition, dùng cast sau parse (`parsed.status as ProductStatus`). `270/271` test pass (1 fail health timeout pre-existing).
 - 2026-10-23: **Rich Domain Model Phase A (Getters) hoàn thành** — thêm computed getters vào 6 entity class (`Order`, `Cart`, `InventoryRecord`, `Product`, `Category`, `EmailTracking`). Fix các test failures do Phase A gây ra: (1) `orders.use-cases.spec.ts` — 26 chỗ plain object spread → `Order.fromRecord({...})` để có prototype chain và getters; (2) `orders.integration.spec.ts` — tương tự; (3) `find-one-order.use-case.ts` — `return { ...order, items }` → `Object.assign(order, { items })` để giữ prototype; (4) `reconcile-verified-gateway-result.use-case.ts` — fix bug pre-existing `isOrderPaymentExpired` không tồn tại → `order.isPaymentExpired()`; (5) `products/inventory/audit/mail integration.spec.ts` — thêm đầy đủ required fields vào DynamoDB mock data để Zod parse không throw. 362/362 test pass.
 - 2026-10-23: **Tạo kế hoạch Rich Domain Model (Giai đoạn 7)** — file `docs/refactor/RICH_DOMAIN_MODEL_PLAN.md`. Phân tích toàn bộ use-cases để xác định business logic cần di chuyển xuống entity. Phát hiện bug pre-existing: `reconcile-verified-gateway-result.use-case.ts` import `isOrderPaymentExpired` không tồn tại. Kế hoạch gồm 4 giai đoạn (A: computed getters, B: domain methods, C: thin use-cases, D: tests), 5 session gợi ý.
+- 2026-10-23: **Rich Domain Model Phase B (Domain Methods) + Phase C (Thin Use-cases) hoàn thành** — thêm guard methods và state-transition methods vào 5 entity class; cập nhật use-cases để delegate xuống entity.
+  - **Phase B — Domain methods** (mỗi entity trả instance mới — immutable, không mutate `this`; dùng `...(this as unknown as PropsType)` spread):
+    - `Order`: guard `canBeShipped()`, `canBeCancelled()`, `canTriggerPayment()`, `canExpireReservation()`, `isReadyToProcessPayment()`; transitions `reserve(totalAmount, paymentExpiresAt, reservedAt)`, `fail(reason, updatedAt)`, `ship(shippedAt)`, `cancelWithRefund(cancelledAt)`; static helper `computeTotal(items)`.
+    - `Cart`: transition `expire(updatedAt)`; command `ensureUsable()` (ném `InvalidInputError` nếu expired).
+    - `InventoryRecord`: transitions `reserve(quantity, updatedAt)` (fast-fail nếu insufficient), `release(quantity, updatedAt)`.
+    - `Product`: transitions `deactivate(updatedAt)`, `activate(updatedAt)`, `delete(deletedAt)`.
+    - `Category`: transition `delete(deletedAt)` (ném nếu không còn ACTIVE).
+    - `EmailTracking`: không có state transition (chỉ có Phase A getters) — bỏ qua Phase B.
+  - **Phase C — Thin use-cases** (dùng entity methods thay vì inline logic):
+    - `mark-order-shipped`: `order.isShipped` + `!order.canBeShipped()` thay vì kiểm tra status/paymentStatus thủ công; xóa import `OrderStatus`/`PaymentStatus`.
+    - `cancel-confirmed-paid-order`: tương tự với `order.isCancelled` + `!order.canBeCancelled()`.
+    - `trigger-payment`: thay 5 guard riêng lẻ bằng `order.isPaymentExpired()` + `!order.canTriggerPayment()` (thêm `!` assertion cho `paymentExpiresAt`/`totalAmount` vì TypeScript không narrow từ boolean guard).
+    - `release-expired-order-reservation`: `!order.canExpireReservation()` thay vì check status+isPaymentExpired riêng.
+    - `reconcile-verified-gateway-result`: `order.isPaid` (3 chỗ), `!order.isReadyToProcessPayment()` (2 chỗ).
+    - `reserve-order-checkout-items`: `Order.computeTotal(orderItems)` thay vì inline reduce.
+    - `add/update/remove-cart-item`: `cart.ensureUsable()` thay vì `ensureCartUsable(cart)` function.
+    - `get-owned-cart`: xóa `deriveCartStatus()` call — callers dùng `cart.isExpired` getter.
+    - `mark-cart-expired`: gọi `cart.expire(updatedAt)` trước khi `repo.updateStatus(...)` để fast-fail validation.
+    - `reserve-inventory`: thêm `inventory.reserve(quantity, updatedAt)` fast-fail trước khi `repo.reserve(...)`.
+    - `delete-product`: `existingProduct.delete(timestamp)` fast-fail.
+    - `update-product`: `existingProduct.deactivate(timestamp)` / `existingProduct.activate(timestamp)` khi status đổi.
+    - `delete-category`: thêm `findOne` + `category.delete(deletedAt)` fast-fail; ném `NotFoundError` sớm nếu không tìm thấy.
+  - **Fix 7 test failures** do Phase B+C thay đổi hành vi:
+    - `carts.use-cases.spec.ts`/`carts.integration.spec.ts`: "derives EXPIRED status" → đổi assertion sang `cart.isExpired === true` (use-case không còn derive status nữa).
+    - `categories.use-cases.spec.ts`: `DeleteCategoryUseCase` unit test — thêm `findOne` mock trả active category.
+    - `categories.integration.spec.ts`: `DeleteCategoryUseCase` integration tests — thêm `GetCommand` mock; "not found" test dùng `GetCommand` returning undefined thay vì `UpdateCommand` throwing ConditionalCheckFailedException.
+    - `inventory.use-cases.spec.ts`: `ReserveInventoryUseCase` tests — thêm `findOne` mock trả inventory có đủ stock.
+  - `tsc --noEmit`: 0 lỗi. `npx jest`: 362/362 pass.
 - 2026-10-22: **Rich Domain Class refactor** — chuyển đổi toàn bộ entity interface/type sang rich domain class (constructor riêng tư, factory static `create()`/`fromRecord()`/`fromParts()`) theo `docs/refactor/RICH_DOMAIN_CLASS_PLAN.md`. Thứ tự thực hiện: `categories` → `carts` → `products` → `inventory` → `users` → `audit` → `mail`.
   - **Pattern áp dụng nhất quán**: `private constructor(props)` + `Object.assign(this, props)` cho cả base class; subclass (extends) phải re-assign thủ công các field của riêng mình sau `super(props)` (vd `this.productName = props.productName`) — bắt buộc do `tsconfig.json` dùng `target: "ES2023"` (`useDefineForClassFields: true`) khiến field declaration trong subclass được khởi tạo thành `undefined` SAU `super()`, ghi đè mất kết quả `Object.assign`. Pattern này đã có sẵn trong reference impl `CartDetails` (`this.items = props.items`).
   - **Thay đổi DynamoDB write**: `Item: entity` → `Item: { ...entity }` (spread class instance thành plain object, tránh SDK cố gắng serialize prototype chain).

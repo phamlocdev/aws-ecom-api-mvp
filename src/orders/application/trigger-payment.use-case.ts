@@ -5,7 +5,6 @@ import { AuthenticatedUser } from '../../auth/auth.types'
 import { Role } from '../../auth/roles.enum'
 import { ConflictError, ForbiddenDomainError, InvalidInputError } from '../../common/domain-error'
 import { TriggerPaymentResult } from '../domain/order.entity'
-import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 import { PAYMENT_WINDOW_EXPIRED_REASON } from '../domain/payment-reservation.config'
 import { PaymentStatus } from '../domain/payment-status.enum'
@@ -41,21 +40,12 @@ export class TriggerPaymentUseCase {
     if (!isAdminOrManager && order.customerId !== user.sub) {
       throw new ForbiddenDomainError('You do not have access to this order.')
     }
-    if (order.status !== OrderStatus.RESERVED) {
-      throw new InvalidInputError(`Order ${orderId} is not ready for payment.`)
-    }
-    if (order.paymentStatus === PaymentStatus.PAID) {
-      throw new InvalidInputError(`Order ${orderId} is already paid.`)
-    }
-    if (order.totalAmount === undefined) {
-      throw new InvalidInputError(`Order ${orderId} does not have a payable amount.`)
-    }
     if (order.isPaymentExpired()) {
       await this.releaseExpiredOrderReservationUseCase.execute(order)
       throw new ConflictError(PAYMENT_WINDOW_EXPIRED_REASON)
     }
-    if (!order.paymentExpiresAt) {
-      throw new InvalidInputError(`Order ${orderId} does not have a payment deadline.`)
+    if (!order.canTriggerPayment()) {
+      throw new InvalidInputError(`Order ${orderId} is not ready for payment.`)
     }
 
     const paymentAttemptId = randomUUID()
@@ -63,12 +53,13 @@ export class TriggerPaymentUseCase {
     const requestedAtIso = requestedAt.toISOString()
     const actor = buildUserAuditMutationContext(user, 'Payment requested')
     const nowEpochSeconds = toEpochSeconds(requestedAt.getTime())
-    const paymentGatewayExpiresAt = order.paymentExpiresAt - VNPAY_PAYMENT_EXPIRY_SKEW_SECONDS
+    // canTriggerPayment() guards ensure paymentExpiresAt and totalAmount are defined
+    const paymentGatewayExpiresAt = order.paymentExpiresAt! - VNPAY_PAYMENT_EXPIRY_SKEW_SECONDS
     if (paymentGatewayExpiresAt <= nowEpochSeconds) {
       throw new ConflictError('Payment window is about to expire. Please place the order again.')
     }
     const paymentUrl = await this.vnpayService.buildOrderPaymentUrl({
-      amount: order.totalAmount,
+      amount: order.totalAmount!,
       clientIp,
       createDate: requestedAt,
       expireDate: new Date(paymentGatewayExpiresAt * 1000),

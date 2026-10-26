@@ -76,7 +76,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
       return IpnInvalidAmount
     }
 
-    if (order.status === OrderStatus.CONFIRMED || order.paymentStatus === PaymentStatus.PAID) {
+    if (order.status === OrderStatus.CONFIRMED || order.isPaid) {
       await this.sendOrderConfirmationEmailBestEffort(order)
       return InpOrderAlreadyConfirmed
     }
@@ -104,7 +104,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
       return latePaymentResult
     }
 
-    if (order.status !== OrderStatus.RESERVED || order.paymentStatus !== PaymentStatus.PROCESSING) {
+    if (!order.isReadyToProcessPayment()) {
       return InpOrderAlreadyConfirmed
     }
 
@@ -129,10 +129,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
     } catch (error) {
       if (error instanceof ConflictError) {
         const latestOrder = await this.getOrderByIdUseCase.execute(orderId)
-        if (
-          latestOrder.status === OrderStatus.CONFIRMED ||
-          latestOrder.paymentStatus === PaymentStatus.PAID
-        ) {
+        if (latestOrder.status === OrderStatus.CONFIRMED || latestOrder.isPaid) {
           await this.sendOrderConfirmationEmailBestEffort(latestOrder)
           return InpOrderAlreadyConfirmed
         }
@@ -149,7 +146,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
     failureReason: string,
     source: GatewayReconcileSource,
   ): Promise<IpnResponse> {
-    if (order.status !== OrderStatus.RESERVED || order.paymentStatus !== PaymentStatus.PROCESSING) {
+    if (!order.isReadyToProcessPayment()) {
       return IpnSuccess
     }
 
@@ -259,7 +256,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
   }
 
   private async sendOrderConfirmationEmailBestEffort(order: Order): Promise<void> {
-    if (order.status !== OrderStatus.CONFIRMED || order.paymentStatus !== PaymentStatus.PAID) {
+    if (order.status !== OrderStatus.CONFIRMED || !order.isPaid) {
       return
     }
 

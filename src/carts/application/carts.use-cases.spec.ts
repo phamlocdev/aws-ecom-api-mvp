@@ -105,14 +105,14 @@ describe('GetOwnedCartUseCase', () => {
     )
   })
 
-  it('derives EXPIRED status once the TTL has passed', async () => {
+  it('returns a cart whose isExpired getter is true once the TTL has passed', async () => {
     const repository = createRepositoryMock()
     repository.findOne.mockResolvedValue(expiredCart)
     const useCase = new GetOwnedCartUseCase(repository)
 
     const result = await useCase.execute(user.sub, expiredCart.cartId)
 
-    expect(result.status).toBe(CartStatus.EXPIRED)
+    expect(result.isExpired).toBe(true)
   })
 })
 

@@ -4,6 +4,7 @@ import { OrderStatus } from './order-status.enum'
 import { PaymentStatus } from './payment-status.enum'
 import type { EmailType } from '../../mail/mail.types'
 import { normalizeAdditionalReceivingEmails, toEpochSeconds } from './order.rules'
+import { InvalidInputError } from '../../common/domain-error'
 
 export const ORDERS_ENTITY_TYPE = 'ORDER'
 
@@ -185,6 +186,90 @@ export class Order {
 
   get isInTerminalState(): boolean {
     return [OrderStatus.CANCELLED, OrderStatus.FAILED, OrderStatus.EXPIRED].includes(this.status)
+  }
+
+  // --- Guard methods ---
+
+  canBeShipped(): boolean {
+    return this.status === OrderStatus.CONFIRMED && this.paymentStatus === PaymentStatus.PAID
+  }
+
+  canBeCancelled(): boolean {
+    return this.status === OrderStatus.CONFIRMED && this.paymentStatus === PaymentStatus.PAID
+  }
+
+  canTriggerPayment(): boolean {
+    return (
+      this.status === OrderStatus.RESERVED &&
+      this.paymentStatus !== PaymentStatus.PAID &&
+      this.totalAmount !== undefined &&
+      this.paymentExpiresAt !== undefined &&
+      !this.isPaymentExpired()
+    )
+  }
+
+  canExpireReservation(): boolean {
+    return this.status === OrderStatus.RESERVED && this.isPaymentExpired()
+  }
+
+  isReadyToProcessPayment(): boolean {
+    return this.status === OrderStatus.RESERVED && this.paymentStatus === PaymentStatus.PROCESSING
+  }
+
+  // --- State transition methods (validate → return new instance, timestamps come from caller) ---
+
+  reserve(totalAmount: number, paymentExpiresAt: number, reservedAt: string): Order {
+    if (this.status !== OrderStatus.PENDING) {
+      throw new InvalidInputError(`Order cannot be reserved from status ${this.status}`)
+    }
+    return new Order({
+      ...(this as unknown as OrderProps),
+      status: OrderStatus.RESERVED,
+      totalAmount,
+      paymentExpiresAt,
+      reservedAt,
+      updatedAt: reservedAt,
+    })
+  }
+
+  fail(reason: string, updatedAt: string): Order {
+    if (this.isInTerminalState) {
+      throw new InvalidInputError(`Order is already in terminal state ${this.status}`)
+    }
+    return new Order({
+      ...(this as unknown as OrderProps),
+      status: OrderStatus.FAILED,
+      failureReason: reason,
+      updatedAt,
+    })
+  }
+
+  ship(shippedAt: string): Order {
+    if (!this.canBeShipped()) {
+      throw new InvalidInputError(`Order cannot be shipped from status ${this.status}`)
+    }
+    return new Order({
+      ...(this as unknown as OrderProps),
+      status: OrderStatus.SHIPPED,
+      shippedAt,
+      updatedAt: shippedAt,
+    })
+  }
+
+  cancelWithRefund(cancelledAt: string): Order {
+    if (!this.canBeCancelled()) {
+      throw new InvalidInputError(`Order cannot be cancelled from status ${this.status}`)
+    }
+    return new Order({
+      ...(this as unknown as OrderProps),
+      status: OrderStatus.CANCELLED,
+      cancelledAt,
+      updatedAt: cancelledAt,
+    })
+  }
+
+  static computeTotal(items: Pick<OrderItem, 'lineTotal'>[]): number {
+    return items.reduce((total, item) => total + item.lineTotal, 0)
   }
 }
 

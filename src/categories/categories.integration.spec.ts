@@ -230,6 +230,15 @@ describe('categories use-cases (integration)', () => {
 
   describe('DeleteCategoryUseCase', () => {
     it('soft-deletes the category by setting status to DELETED', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: {
+          categoryId: 'electronics',
+          name: 'Electronics',
+          status: 'ACTIVE',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      })
       ddbMock.on(UpdateCommand).resolves({})
 
       await deleteCategoryUseCase.execute(adminUser, 'electronics')
@@ -242,14 +251,8 @@ describe('categories use-cases (integration)', () => {
       expect(input.ExpressionAttributeValues).toMatchObject({ ':deleted': 'DELETED' })
     })
 
-    it('throws NotFoundError when the category does not exist (ConditionalCheckFailedException)', async () => {
-      ddbMock
-        .on(UpdateCommand)
-        .rejects(
-          Object.assign(new Error('conditional check failed'), {
-            name: 'ConditionalCheckFailedException',
-          }),
-        )
+    it('throws NotFoundError when the category does not exist', async () => {
+      ddbMock.on(GetCommand).resolves({ Item: undefined })
 
       await expect(deleteCategoryUseCase.execute(adminUser, 'missing')).rejects.toBeInstanceOf(
         NotFoundError,

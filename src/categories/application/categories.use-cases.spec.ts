@@ -180,6 +180,15 @@ describe('UpdateCategoryUseCase', () => {
 describe('DeleteCategoryUseCase', () => {
   it('delegates removal to the repository', async () => {
     const repository = createRepositoryMock()
+    repository.findOne.mockResolvedValue(
+      Category.fromRecord({
+        categoryId: 'electronics',
+        name: 'Electronics',
+        status: 'ACTIVE',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    )
     repository.remove.mockResolvedValue(undefined)
     const useCase = new DeleteCategoryUseCase(repository)
 

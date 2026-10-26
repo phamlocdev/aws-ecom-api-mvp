@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { InvalidInputError } from '../../common/domain-error'
 
 const CategoryPropsSchema = z.object({
   categoryId: z.string(),
@@ -79,5 +80,17 @@ export class Category {
 
   get isDeleted(): boolean {
     return this.status === 'DELETED'
+  }
+
+  delete(deletedAt: string): Category {
+    if (!this.isActive) {
+      throw new InvalidInputError(`Category ${this.categoryId} is not active.`)
+    }
+    return new Category({
+      ...(this as unknown as CategoryProps),
+      status: 'DELETED' as const,
+      deletedAt,
+      updatedAt: deletedAt,
+    })
   }
 }

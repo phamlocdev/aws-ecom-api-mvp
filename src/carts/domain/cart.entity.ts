@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { CartStatus } from './cart-status.enum'
+import { InvalidInputError } from '../../common/domain-error'
 
 const CartPropsSchema = z.object({
   customerId: z.string(),
@@ -77,6 +78,18 @@ export class Cart {
 
   get isUsable(): boolean {
     return !this.isExpired
+  }
+
+  expire(updatedAt: string): void {
+    if (this.status !== CartStatus.ACTIVE) {
+      throw new InvalidInputError(`Cart ${this.cartId} is not active.`)
+    }
+  }
+
+  ensureUsable(): void {
+    if (this.isExpired) {
+      throw new InvalidInputError(`Cart ${this.cartId} has expired.`)
+    }
   }
 }
 

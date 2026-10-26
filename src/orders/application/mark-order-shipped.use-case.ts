@@ -2,9 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { AuditMutationContext } from '../../audit/audit-actor'
 import { InvalidInputError } from '../../common/domain-error'
 import { Order } from '../domain/order.entity'
-import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
-import { PaymentStatus } from '../domain/payment-status.enum'
 import { OrderEventsPublisher } from '../infrastructure/order-events.publisher'
 import { GetOrderByIdUseCase } from './get-order-by-id.use-case'
 
@@ -23,11 +21,11 @@ export class MarkOrderShippedUseCase {
 
   async execute(orderId: string, actor: AuditMutationContext): Promise<Order> {
     const order = await this.getOrderByIdUseCase.execute(orderId)
-    if (order.status === OrderStatus.SHIPPED) {
+    if (order.isShipped) {
       return order
     }
 
-    if (order.status !== OrderStatus.CONFIRMED || order.paymentStatus !== PaymentStatus.PAID) {
+    if (!order.canBeShipped()) {
       throw new InvalidInputError('Only paid confirmed orders can be marked as shipped.')
     }
 

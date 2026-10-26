@@ -17,11 +17,8 @@ export class MarkCartExpiredUseCase {
       return
     }
 
-    await this.cartRepository.updateStatus(
-      cart.customerId,
-      cart.cartId,
-      CartStatus.EXPIRED,
-      new Date().toISOString(),
-    )
+    const updatedAt = new Date().toISOString()
+    cart.expire(updatedAt)
+    await this.cartRepository.updateStatus(cart.customerId, cart.cartId, CartStatus.EXPIRED, updatedAt)
   }
 }
