@@ -5,7 +5,7 @@ const CategoryPropsSchema = z.object({
   categoryId: z.string(),
   name: z.string(),
   description: z.string().optional(),
-  status: z.enum(['ACTIVE', 'DELETED']),
+  status: z.enum(['ACTIVE', 'DELETED']).default('ACTIVE'),
   deletedAt: z.string().optional(),
   lastModifiedByType: z.string().optional(),
   lastModifiedById: z.string().optional(),
