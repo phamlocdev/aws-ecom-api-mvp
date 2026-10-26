@@ -19,7 +19,7 @@ export class ReserveInventoryUseCase {
     if (!inventory) {
       throw new NotFoundError(`Inventory record for product ${productId} not found.`)
     }
-    inventory.reserve(quantity, new Date().toISOString())
+    inventory.reserve(quantity)
 
     try {
       await this.inventoryRepository.reserve(productId, quantity, actor)

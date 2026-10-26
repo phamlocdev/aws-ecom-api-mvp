@@ -2,7 +2,7 @@
 
 > File này là trạng thái SỐNG — luôn đọc file này trước khi bắt đầu bất kỳ công việc refactor nào, và CẬP NHẬT lại trước khi kết thúc phiên. Kiến trúc đích và các giai đoạn xem ở [PLAN.md](./PLAN.md).
 
-Cập nhật lần cuối: 2026-10-23 (Phase B+C xong)
+Cập nhật lần cuối: 2026-10-26 (Phase D xong — Rich Domain Model hoàn thành)
 
 ## Trạng thái tổng quan
 
@@ -15,7 +15,7 @@ Cập nhật lần cuối: 2026-10-23 (Phase B+C xong)
 | 4 — Dọn Lambda worker                          | 🔶 Một phần    | Đã loại bỏ trùng lặp DynamoDB access + di chuyển file worker vào `src/workers/`. Xem chi tiết bên dưới                            |
 | 5 — CI                                         | ☐ Chưa bắt đầu |                                                                                                                                   |
 | 6 — Zod schema validation                      | ✅ Xong        | Tất cả entity `fromRecord()` đều dùng Zod parse. Xem chi tiết bên dưới                                                            |
-| 7 — Rich Domain Model                          | 🔶 Một phần (Phase A+B+C xong) | Xem `docs/refactor/RICH_DOMAIN_MODEL_PLAN.md` và bảng tracking Giai đoạn 7 bên dưới         |
+| 7 — Rich Domain Model                          | ✅ Xong                        | Xem `docs/refactor/RICH_DOMAIN_MODEL_PLAN.md` và bảng tracking Giai đoạn 7 bên dưới         |
 
 ## Trạng thái từng module (Giai đoạn 3)
 
@@ -92,18 +92,18 @@ Xem spec đầy đủ: [`docs/refactor/RICH_DOMAIN_MODEL_PLAN.md`](./RICH_DOMAIN
 
 | Entity | A — Getters | B — Domain Methods | C — Use-cases | D — Tests |
 |---|---|---|---|---|
-| `Order` | ✅ | ✅ | ✅ | ☐ |
-| `Cart` | ✅ | ✅ | ✅ | ☐ |
-| `InventoryRecord` | ✅ | ✅ | ✅ | ☐ |
-| `Product` | ✅ | ✅ | ✅ | ☐ |
-| `Category` | ✅ | ✅ | ✅ | ☐ |
-| `EmailTracking` | ✅ | — (no state transitions) | — | ☐ |
+| `Order` | ✅ | ✅ | ✅ | ✅ |
+| `Cart` | ✅ | ✅ | ✅ | ✅ |
+| `InventoryRecord` | ✅ | ✅ | ✅ | ✅ |
+| `Product` | ✅ | ✅ | ✅ | ✅ |
+| `Category` | ✅ | ✅ | ✅ | ✅ |
+| `EmailTracking` | ✅ | — (no state transitions) | — | ✅ |
 
 Trạng thái ô: ☐ Chưa · 🔄 Đang làm · ✅ Xong
 
 ## Việc đang dang dở (nếu phiên kết thúc giữa chừng)
 
-_Phase A+B+C hoàn thành. 362/362 test pass. Bước tiếp: Phase D (entity unit tests) — tạo spec files cho từng entity để test guard/transition methods trực tiếp, sau đó mỏng hóa assertions trong use-case specs không còn cần phủ logic entity._
+_Giai đoạn 7 (Rich Domain Model) hoàn thành toàn bộ. 456/456 test pass. Giai đoạn 5 (CI) vẫn chưa bắt đầu; Giai đoạn 4 còn phần nhỏ chưa làm (xem nhật ký 2026-10-21)._
 
 > Khi 1 phiên kết thúc giữa chừng một task, ghi rõ ở đây: module đang làm, bước đã xong, bước tiếp theo, và bất kỳ quyết định/giả định nào đã đưa ra để phiên sau không phải đoán lại.
 
@@ -272,3 +272,7 @@ _Phase A+B+C hoàn thành. 362/362 test pass. Bước tiếp: Phase D (entity un
   - **Bug ES2023 class field initialization**: `InventorySummary` (extends `InventoryRecord`) và `EmailTrackingView` (extends `EmailTracking`) — đã fix bằng cách thêm explicit assignment sau `super(props)` y hệt pattern `CartDetails`.
   - **Lỗi orders pre-existing**: 29 lỗi TypeScript trong `src/orders/` (`Property 'isPaymentExpired' is missing` và `isOrderPaymentExpired` không export từ `order.rules`) — không liên quan tới phiên này, tồn tại từ trước.
   - Kiểm tra: `tsc --noEmit` — 0 lỗi mới ngoài 29 lỗi pre-existing trong `src/orders/`. `npx jest` — 270/271 pass (1 fail duy nhất là `health.e2e-spec.ts` timeout pre-existing, không liên quan; inventory test đã pass sau khi fix ES2023 bug). Không có lỗi ESLint mới trên các file đã sửa.
+- 2026-10-26: **Rich Domain Model Phase D (Entity Unit Tests) hoàn thành** — tạo 6 spec file cạnh entity, mỗi file zero mocks/zero AWS SDK. Đồng thời sửa 4 lỗi TypeScript latent trong use-case (args dư thừa cho entity methods `Product.deactivate/activate/delete`, `InventoryRecord.reserve`).
+  - Spec files mới: `orders/domain/order.entity.spec.ts` (41 test), `carts/domain/cart.entity.spec.ts` (7 test), `inventory/domain/inventory.entity.spec.ts` (11 test), `products/domain/product.entity.spec.ts` (11 test), `categories/domain/category.entity.spec.ts` (8 test), `mail/domain/email-tracking.entity.spec.ts` (10 test). Tổng 88 test case mới (94 sau khi Jest đếm).
+  - Bug fixes trong use-cases: `reserve-inventory.use-case.ts` (`inventory.reserve(quantity)` không phải 2 args), `delete-product.use-case.ts` (`existingProduct.delete()` không phải 1 arg), `update-product.use-case.ts` (`existingProduct.deactivate()/activate()` không phải 1 arg) — các lỗi này không phát hiện được trước vì JS runtime bỏ qua extra args, chỉ `tsc` mới bắt được khi viết test.
+  - **Giai đoạn 7 (Rich Domain Model) hoàn thành toàn bộ.** `tsc --noEmit`: 0 lỗi. `npx jest`: 456/456 pass.

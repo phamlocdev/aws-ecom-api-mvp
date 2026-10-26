@@ -26,7 +26,7 @@ export class DeleteProductUseCase {
   async execute(user: AuthenticatedUser, productId: string): Promise<void> {
     const existingProduct = await this.findOneProductUseCase.execute(productId)
     const timestamp = new Date().toISOString()
-    existingProduct.delete(timestamp)
+    existingProduct.delete()
     const actor = buildUserAuditMutationContext(user, 'Product deleted')
 
     await this.productRepository.remove(productId, timestamp, actor)
