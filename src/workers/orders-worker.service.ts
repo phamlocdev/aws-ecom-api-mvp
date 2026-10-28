@@ -5,14 +5,12 @@ import { GetOwnedCartUseCase } from '../carts/application/get-owned-cart.use-cas
 import { GetCartItemsUseCase } from '../carts/application/get-cart-items.use-case'
 import { MarkCartExpiredUseCase } from '../carts/application/mark-cart-expired.use-case'
 import { CartStatus } from '../carts/domain/cart-status.enum'
-import { ExpireReservationAndReleaseInventoryIfUnpaidUseCase } from '../orders/application/expire-reservation-and-release-inventory-if-unpaid.use-case'
 import { FindExpiredReservedOrdersUseCase } from '../orders/application/find-expired-reserved-orders.use-case'
-import { FindOrderItemsUseCase } from '../orders/application/find-order-items.use-case'
-import { GetOrderByIdUseCase } from '../orders/application/get-order-by-id.use-case'
-import { MarkFailedUseCase } from '../orders/application/mark-failed.use-case'
+import { ReleaseExpiredOrderReservationUseCase } from '../orders/application/release-expired-order-reservation.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from '../orders/application/reserve-order-checkout-items.use-case'
 import { OrderStatus } from '../orders/domain/order-status.enum'
 import { PlaceOrderMessage } from '../orders/domain/order.entity'
+import { ORDER_REPOSITORY, OrderRepositoryPort } from '../orders/domain/order.repository.port'
 import { ConfigService } from '@nestjs/config'
 
 @Injectable()
@@ -21,24 +19,20 @@ export class OrdersWorkerService {
   private readonly placeOrderDelayMs: number
 
   constructor(
+    @Inject(ORDER_REPOSITORY)
+    private readonly orderRepository: OrderRepositoryPort,
     @Inject(GetOwnedCartUseCase)
     private readonly getOwnedCartUseCase: GetOwnedCartUseCase,
     @Inject(GetCartItemsUseCase)
     private readonly getCartItemsUseCase: GetCartItemsUseCase,
     @Inject(MarkCartExpiredUseCase)
     private readonly markCartExpiredUseCase: MarkCartExpiredUseCase,
-    @Inject(GetOrderByIdUseCase)
-    private readonly getOrderByIdUseCase: GetOrderByIdUseCase,
-    @Inject(FindOrderItemsUseCase)
-    private readonly findOrderItemsUseCase: FindOrderItemsUseCase,
     @Inject(FindExpiredReservedOrdersUseCase)
     private readonly findExpiredReservedOrdersUseCase: FindExpiredReservedOrdersUseCase,
-    @Inject(MarkFailedUseCase)
-    private readonly markFailedUseCase: MarkFailedUseCase,
+    @Inject(ReleaseExpiredOrderReservationUseCase)
+    private readonly releaseExpiredOrderReservationUseCase: ReleaseExpiredOrderReservationUseCase,
     @Inject(ReserveOrderCheckoutItemsUseCase)
     private readonly reserveOrderCheckoutItemsUseCase: ReserveOrderCheckoutItemsUseCase,
-    @Inject(ExpireReservationAndReleaseInventoryIfUnpaidUseCase)
-    private readonly expireReservationAndReleaseInventoryIfUnpaidUseCase: ExpireReservationAndReleaseInventoryIfUnpaidUseCase,
     @Inject(ConfigService)
     configService: ConfigService,
   ) {
@@ -83,17 +77,7 @@ export class OrdersWorkerService {
       expiredOrdersFound += response.items.length
 
       for (const order of response.items) {
-        const items = await this.findOrderItemsUseCase.execute(order.orderId)
-        if (items.length === 0) {
-          this.logger.warn(`Expired reserved order ${order.orderId} has no order items.`)
-          continue
-        }
-
-        const released = await this.expireReservationAndReleaseInventoryIfUnpaidUseCase.execute(
-          order,
-          items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-          systemAuditMutationContext('reservation-expiry-poller', 'Payment expired'),
-        )
+        const released = await this.releaseExpiredOrderReservationUseCase.execute(order)
         if (released) {
           reservationsReleased += 1
         } else {
@@ -113,7 +97,11 @@ export class OrdersWorkerService {
 
   private async handlePlaceOrderRecord(record: SQSRecord): Promise<void> {
     const message = parseJson<PlaceOrderMessage>(record.body)
-    const order = await this.getOrderByIdUseCase.execute(message.orderId)
+    const order = await this.orderRepository.findById(message.orderId)
+    if (!order) {
+      this.logger.warn(`Order ${message.orderId} not found; skipping.`)
+      return
+    }
 
     if (order.status !== OrderStatus.PENDING) {
       return
@@ -124,23 +112,19 @@ export class OrdersWorkerService {
     const cart = await this.getOwnedCartUseCase.execute(message.customerId, message.cartId)
     if (cart.status === CartStatus.EXPIRED || cart.expiresAt <= Math.floor(Date.now() / 1000)) {
       await this.markCartExpiredUseCase.execute(cart)
-      await this.markFailedUseCase.execute(
-        order.orderId,
-        OrderStatus.EXPIRED,
-        'Cart expired before checkout.',
-        systemAuditMutationContext('place-order-worker', 'Cart expired before checkout.'),
-      )
+      const actor = systemAuditMutationContext('place-order-worker', 'Cart expired before checkout.')
+      order.failAsExpired('Cart expired before checkout.', new Date().toISOString())
+      order.withAudit(actor)
+      await this.orderRepository.save(order)
       return
     }
 
     const cartItems = await this.getCartItemsUseCase.execute(cart.cartId)
     if (cartItems.length === 0) {
-      await this.markFailedUseCase.execute(
-        order.orderId,
-        OrderStatus.FAILED,
-        'Cart has no items.',
-        systemAuditMutationContext('place-order-worker', 'Cart has no items.'),
-      )
+      const actor = systemAuditMutationContext('place-order-worker', 'Cart has no items.')
+      order.fail('Cart has no items.', new Date().toISOString())
+      order.withAudit(actor)
+      await this.orderRepository.save(order)
       return
     }
 

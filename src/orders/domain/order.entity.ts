@@ -5,6 +5,7 @@ import { PaymentStatus } from './payment-status.enum'
 import type { EmailType } from '../../mail/mail.types'
 import { normalizeAdditionalReceivingEmails, toEpochSeconds } from './order.rules'
 import { InvalidInputError } from '../../common/domain-error'
+import type { AuditMutationContext } from '../../audit/audit-actor'
 
 export const ORDERS_ENTITY_TYPE = 'ORDER'
 
@@ -137,6 +138,44 @@ export class Order {
     Object.assign(this, props)
   }
 
+  private mutate(changes: Partial<OrderProps>): void {
+    Object.assign(this as object, changes)
+  }
+
+  toRecord(): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries({
+        orderId: this.orderId,
+        customerId: this.customerId,
+        cartId: this.cartId,
+        status: this.status,
+        entityType: this.entityType,
+        deduplicationKey: this.deduplicationKey,
+        paymentStatus: this.paymentStatus,
+        createdAt: this.createdAt,
+        updatedAt: this.updatedAt,
+        customerEmail: this.customerEmail,
+        customerName: this.customerName,
+        additionalReceivingEmails: this.additionalReceivingEmails,
+        paymentAttemptId: this.paymentAttemptId,
+        paymentRequestedAt: this.paymentRequestedAt,
+        paidAt: this.paidAt,
+        paymentTransactionId: this.paymentTransactionId,
+        paymentFailureReason: this.paymentFailureReason,
+        shippedAt: this.shippedAt,
+        cancelledAt: this.cancelledAt,
+        reservedAt: this.reservedAt,
+        paymentExpiresAt: this.paymentExpiresAt,
+        failureReason: this.failureReason,
+        totalAmount: this.totalAmount,
+        lastModifiedByType: this.lastModifiedByType,
+        lastModifiedById: this.lastModifiedById,
+        lastModifiedByEmail: this.lastModifiedByEmail,
+        lastModifiedReason: this.lastModifiedReason,
+      }).filter(([, v]) => v !== undefined),
+    )
+  }
+
   static create(data: CreateOrderData): Order {
     const timestamp = new Date().toISOString()
     return new Order({
@@ -216,55 +255,104 @@ export class Order {
     return this.status === OrderStatus.RESERVED && this.paymentStatus === PaymentStatus.PROCESSING
   }
 
-  // --- State transition methods (validate → return new instance, timestamps come from caller) ---
+  // --- State transition methods (validate → mutate this → return this for chaining) ---
 
-  reserve(totalAmount: number, paymentExpiresAt: number, reservedAt: string): Order {
+  reserve(totalAmount: number, paymentExpiresAt: number, reservedAt: string): void {
     if (this.status !== OrderStatus.PENDING) {
       throw new InvalidInputError(`Order cannot be reserved from status ${this.status}`)
     }
-    return new Order({
-      ...(this as unknown as OrderProps),
-      status: OrderStatus.RESERVED,
-      totalAmount,
-      paymentExpiresAt,
-      reservedAt,
-      updatedAt: reservedAt,
-    })
+    this.mutate({ status: OrderStatus.RESERVED, totalAmount, paymentExpiresAt, reservedAt, updatedAt: reservedAt })
   }
 
-  fail(reason: string, updatedAt: string): Order {
+  fail(reason: string, updatedAt: string): void {
     if (this.isInTerminalState) {
       throw new InvalidInputError(`Order is already in terminal state ${this.status}`)
     }
-    return new Order({
-      ...(this as unknown as OrderProps),
-      status: OrderStatus.FAILED,
-      failureReason: reason,
-      updatedAt,
-    })
+    this.mutate({ status: OrderStatus.FAILED, failureReason: reason, updatedAt })
   }
 
-  ship(shippedAt: string): Order {
+  ship(shippedAt: string): void {
     if (!this.canBeShipped()) {
       throw new InvalidInputError(`Order cannot be shipped from status ${this.status}`)
     }
-    return new Order({
-      ...(this as unknown as OrderProps),
-      status: OrderStatus.SHIPPED,
-      shippedAt,
-      updatedAt: shippedAt,
-    })
+    this.mutate({ status: OrderStatus.SHIPPED, shippedAt, updatedAt: shippedAt })
   }
 
-  cancelWithRefund(cancelledAt: string): Order {
+  cancelWithRefund(cancelledAt: string): void {
     if (!this.canBeCancelled()) {
       throw new InvalidInputError(`Order cannot be cancelled from status ${this.status}`)
     }
-    return new Order({
-      ...(this as unknown as OrderProps),
-      status: OrderStatus.CANCELLED,
-      cancelledAt,
-      updatedAt: cancelledAt,
+    this.mutate({ status: OrderStatus.CANCELLED, cancelledAt, updatedAt: cancelledAt })
+  }
+
+  failAsExpired(reason: string, updatedAt: string): void {
+    if (this.isInTerminalState) {
+      throw new InvalidInputError(`Order is already in terminal state ${this.status}`)
+    }
+    this.mutate({ status: OrderStatus.EXPIRED, failureReason: reason, updatedAt })
+  }
+
+  startPayment(paymentAttemptId: string, requestedAt: string): void {
+    if (this.status !== OrderStatus.RESERVED) {
+      throw new InvalidInputError(`Order cannot start payment in status ${this.status}`)
+    }
+    if (this.paymentStatus === PaymentStatus.PAID) {
+      throw new InvalidInputError('Order payment is already paid.')
+    }
+    if (this.isPaymentExpired()) {
+      throw new InvalidInputError('Order payment window has expired.')
+    }
+    this.mutate({
+      paymentStatus: PaymentStatus.PROCESSING,
+      paymentRequestedAt: requestedAt,
+      paymentAttemptId,
+      paymentFailureReason: undefined,
+      paymentTransactionId: undefined,
+      paidAt: undefined,
+      updatedAt: requestedAt,
+    })
+  }
+
+  confirmPayment(paymentAttemptId: string, transactionId: string, paidAt: string): void {
+    if (this.status !== OrderStatus.RESERVED) {
+      throw new InvalidInputError(`Order cannot confirm payment in status ${this.status}`)
+    }
+    if (this.paymentStatus !== PaymentStatus.PROCESSING) {
+      throw new InvalidInputError('Order payment is not in PROCESSING state.')
+    }
+    if (this.paymentAttemptId !== paymentAttemptId) {
+      throw new InvalidInputError('Payment attempt ID mismatch.')
+    }
+    this.mutate({ status: OrderStatus.CONFIRMED, paymentStatus: PaymentStatus.PAID, paymentTransactionId: transactionId, paidAt, updatedAt: paidAt })
+  }
+
+  failPayment(paymentAttemptId: string, failureReason: string): void {
+    if (this.paymentStatus !== PaymentStatus.PROCESSING) {
+      throw new InvalidInputError('Order payment is not in PROCESSING state.')
+    }
+    if (this.paymentAttemptId !== paymentAttemptId) {
+      throw new InvalidInputError('Payment attempt ID mismatch.')
+    }
+    this.mutate({ paymentStatus: PaymentStatus.FAILED, paymentFailureReason: failureReason, updatedAt: new Date().toISOString() })
+  }
+
+  refundExpiredPayment(transactionId: string, failureReason: string): void {
+    this.mutate({
+      status: OrderStatus.EXPIRED,
+      paymentStatus: PaymentStatus.FAILED,
+      paymentTransactionId: transactionId,
+      paymentFailureReason: failureReason,
+      failureReason,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  withAudit(actor: AuditMutationContext): void {
+    this.mutate({
+      lastModifiedByType: actor.actorType,
+      lastModifiedById: actor.actorId ?? 'unknown',
+      lastModifiedByEmail: actor.actorEmail ?? 'unknown',
+      lastModifiedReason: actor.reason,
     })
   }
 

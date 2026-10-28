@@ -8,11 +8,8 @@ import { CartStatus } from '../../carts/domain/cart-status.enum'
 import { InvalidInputError } from '../../common/domain-error'
 import { FindCustomerProfileByUsernameUseCase } from '../../users/application/find-customer-profile-by-username.use-case'
 import { Order } from '../domain/order.entity'
-import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 import { CreateOrderInput } from './create-order-input.type'
-import { GetOrderByIdUseCase } from './get-order-by-id.use-case'
-import { MarkFailedUseCase } from './mark-failed.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from './reserve-order-checkout-items.use-case'
 
 @Injectable()
@@ -30,12 +27,8 @@ export class CreateOrderRequestUseCase {
     private readonly markCartExpiredUseCase: MarkCartExpiredUseCase,
     @Inject(FindCustomerProfileByUsernameUseCase)
     private readonly findCustomerProfileByUsernameUseCase: FindCustomerProfileByUsernameUseCase,
-    @Inject(MarkFailedUseCase)
-    private readonly markFailedUseCase: MarkFailedUseCase,
     @Inject(ReserveOrderCheckoutItemsUseCase)
     private readonly reserveOrderCheckoutItemsUseCase: ReserveOrderCheckoutItemsUseCase,
-    @Inject(GetOrderByIdUseCase)
-    private readonly getOrderByIdUseCase: GetOrderByIdUseCase,
   ) {}
 
   async execute(user: AuthenticatedUser, input: CreateOrderInput): Promise<Order> {
@@ -70,8 +63,10 @@ export class CreateOrderRequestUseCase {
       this.logger.warn(
         `>>>>>> [WARN]: Order ${order.orderId} failed because cart ${cart.cartId} has no items.`,
       )
-      await this.markFailedUseCase.execute(order.orderId, OrderStatus.FAILED, 'Cart has no items.')
-      return this.getOrderByIdUseCase.execute(order.orderId)
+      order.fail('Cart has no items.', new Date().toISOString())
+      order.withAudit(createActor)
+      await this.orderRepository.save(order)
+      return order
     }
 
     const { reservationSucceeded } = await this.reserveOrderCheckoutItemsUseCase.execute({
@@ -83,6 +78,7 @@ export class CreateOrderRequestUseCase {
       await this.markCartExpiredUseCase.execute(cart)
     }
 
-    return this.getOrderByIdUseCase.execute(order.orderId)
+    const finalOrder = await this.orderRepository.findById(order.orderId)
+    return finalOrder ?? order
   }
 }

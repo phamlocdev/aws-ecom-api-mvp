@@ -9,9 +9,9 @@ import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repositor
 import { PAYMENT_WINDOW_EXPIRED_REASON } from '../domain/payment-reservation.config'
 import { PaymentStatus } from '../domain/payment-status.enum'
 import { toEpochSeconds } from '../domain/order.rules'
+import { NotFoundError } from '../../common/domain-error'
 import { VnpayService } from '../infrastructure/vnpay.service'
 import { buildPaymentOrderInfo } from './vnpay-order-info.util'
-import { GetOrderByIdUseCase } from './get-order-by-id.use-case'
 import { ReleaseExpiredOrderReservationUseCase } from './release-expired-order-reservation.use-case'
 
 const VNPAY_PAYMENT_EXPIRY_SKEW_SECONDS = 5
@@ -21,8 +21,6 @@ export class TriggerPaymentUseCase {
   constructor(
     @Inject(ORDER_REPOSITORY)
     private readonly orderRepository: OrderRepositoryPort,
-    @Inject(GetOrderByIdUseCase)
-    private readonly getOrderByIdUseCase: GetOrderByIdUseCase,
     @Inject(ReleaseExpiredOrderReservationUseCase)
     private readonly releaseExpiredOrderReservationUseCase: ReleaseExpiredOrderReservationUseCase,
     @Inject(VnpayService)
@@ -34,7 +32,8 @@ export class TriggerPaymentUseCase {
     orderId: string,
     clientIp: string,
   ): Promise<TriggerPaymentResult> {
-    const order = await this.getOrderByIdUseCase.execute(orderId)
+    const order = await this.orderRepository.findById(orderId)
+    if (!order) throw new NotFoundError(`Order ${orderId} was not found.`)
     const isAdminOrManager = user.groups.includes(Role.ADMIN) || user.groups.includes(Role.MANAGER)
 
     if (!isAdminOrManager && order.customerId !== user.sub) {
@@ -67,25 +66,9 @@ export class TriggerPaymentUseCase {
       orderInfo: buildPaymentOrderInfo(orderId),
     })
 
-    try {
-      await this.orderRepository.startPayment(
-        orderId,
-        paymentAttemptId,
-        requestedAtIso,
-        nowEpochSeconds,
-        actor,
-      )
-    } catch (error) {
-      if (error instanceof ConflictError) {
-        const latestOrder = await this.getOrderByIdUseCase.execute(orderId)
-        if (latestOrder.isPaymentExpired()) {
-          await this.releaseExpiredOrderReservationUseCase.execute(latestOrder)
-          throw new ConflictError(PAYMENT_WINDOW_EXPIRED_REASON)
-        }
-        throw new ConflictError(`Order ${orderId} cannot start payment in its current state.`)
-      }
-      throw error
-    }
+    order.startPayment(paymentAttemptId, requestedAtIso)
+    order.withAudit(actor)
+    await this.orderRepository.save(order)
 
     return {
       orderId,

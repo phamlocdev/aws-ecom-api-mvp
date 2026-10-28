@@ -5,7 +5,6 @@ import {
   PutCommand,
   QueryCommand,
   TransactWriteCommand,
-  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { ConfigService } from '@nestjs/config'
 import { IpnInvalidAmount, IpnOrderNotFound, IpnSuccess, type VerifyIpnCall } from 'vnpay'
@@ -38,25 +37,14 @@ import { OrderRepositoryPort } from './domain/order.repository.port'
 import { DynamoDbOrderRepository } from './infrastructure/dynamodb-order.repository'
 import { OrderEventsPublisher } from './infrastructure/order-events.publisher'
 import { VnpayService } from './infrastructure/vnpay.service'
-import { CancelConfirmedPaidOrderUseCase } from './application/cancel-confirmed-paid-order.use-case'
 import { CreateOrderRequestUseCase } from './application/create-order-request.use-case'
-import { ExpireReservationAndReleaseInventoryIfUnpaidUseCase } from './application/expire-reservation-and-release-inventory-if-unpaid.use-case'
-import { FailPendingOrderAndReleaseReservationUseCase } from './application/fail-pending-order-and-release-reservation.use-case'
 import { FindExpiredReservedOrdersUseCase } from './application/find-expired-reserved-orders.use-case'
 import { FindOneOrderUseCase } from './application/find-one-order.use-case'
-import { FindOrderItemsUseCase } from './application/find-order-items.use-case'
 import { FindOrdersUseCase } from './application/find-orders.use-case'
-import { GetOrderByIdUseCase } from './application/get-order-by-id.use-case'
 import { GetOrderEmailStatisticsUseCase } from './application/get-order-email-statistics.use-case'
 import { GetOrderEmailTrackingUseCase } from './application/get-order-email-tracking.use-case'
 import { HandleVnpayIpnUseCase } from './application/handle-vnpay-ipn.use-case'
 import { HandleVnpayReturnUseCase } from './application/handle-vnpay-return.use-case'
-import { MarkExpiredPaymentRefundedUseCase } from './application/mark-expired-payment-refunded.use-case'
-import { MarkFailedUseCase } from './application/mark-failed.use-case'
-import { MarkOrderShippedUseCase } from './application/mark-order-shipped.use-case'
-import { MarkPaymentFailedUseCase } from './application/mark-payment-failed.use-case'
-import { MarkPaymentSucceededUseCase } from './application/mark-payment-succeeded.use-case'
-import { MarkReservedUseCase } from './application/mark-reserved.use-case'
 import { ReconcileVerifiedGatewayResultUseCase } from './application/reconcile-verified-gateway-result.use-case'
 import { ReleaseExpiredOrderReservationUseCase } from './application/release-expired-order-reservation.use-case'
 import { ResendFailedOrderEmailUseCase } from './application/resend-failed-order-email.use-case'
@@ -115,25 +103,14 @@ describe('orders use-cases (integration)', () => {
   >
   let orderEventsPublisher: jest.Mocked<OrderEventsPublisher>
 
-  let getOrderByIdUseCase: GetOrderByIdUseCase
-  let findOrderItemsUseCase: FindOrderItemsUseCase
   let findOrdersUseCase: FindOrdersUseCase
   let findOneOrderUseCase: FindOneOrderUseCase
   let findExpiredReservedOrdersUseCase: FindExpiredReservedOrdersUseCase
-  let markFailedUseCase: MarkFailedUseCase
-  let markReservedUseCase: MarkReservedUseCase
-  let failPendingOrderAndReleaseReservationUseCase: FailPendingOrderAndReleaseReservationUseCase
-  let expireReservationAndReleaseInventoryIfUnpaidUseCase: ExpireReservationAndReleaseInventoryIfUnpaidUseCase
   let releaseExpiredOrderReservationUseCase: ReleaseExpiredOrderReservationUseCase
   let createOrderRequestUseCase: CreateOrderRequestUseCase
   let reserveOrderCheckoutItemsUseCase: ReserveOrderCheckoutItemsUseCase
-  let markOrderShippedUseCase: MarkOrderShippedUseCase
-  let cancelConfirmedPaidOrderUseCase: CancelConfirmedPaidOrderUseCase
   let updateOrderStatusUseCase: UpdateOrderStatusUseCase
   let triggerPaymentUseCase: TriggerPaymentUseCase
-  let markPaymentSucceededUseCase: MarkPaymentSucceededUseCase
-  let markPaymentFailedUseCase: MarkPaymentFailedUseCase
-  let markExpiredPaymentRefundedUseCase: MarkExpiredPaymentRefundedUseCase
   let reconcileVerifiedGatewayResultUseCase: ReconcileVerifiedGatewayResultUseCase
   let handleVnpayReturnUseCase: HandleVnpayReturnUseCase
   let handleVnpayIpnUseCase: HandleVnpayIpnUseCase
@@ -272,30 +249,16 @@ describe('orders use-cases (integration)', () => {
       getOrThrow: jest.fn().mockReturnValue(3600),
     } as unknown as ConfigService
 
-    getOrderByIdUseCase = new GetOrderByIdUseCase(repository)
-    findOrderItemsUseCase = new FindOrderItemsUseCase(repository)
     findOrdersUseCase = new FindOrdersUseCase(repository)
     findOneOrderUseCase = new FindOneOrderUseCase(repository)
     findExpiredReservedOrdersUseCase = new FindExpiredReservedOrdersUseCase(repository)
-    markFailedUseCase = new MarkFailedUseCase(repository)
-    markReservedUseCase = new MarkReservedUseCase(repository, configService)
-    failPendingOrderAndReleaseReservationUseCase = new FailPendingOrderAndReleaseReservationUseCase(
-      repository,
-    )
-    expireReservationAndReleaseInventoryIfUnpaidUseCase =
-      new ExpireReservationAndReleaseInventoryIfUnpaidUseCase(repository)
-    releaseExpiredOrderReservationUseCase = new ReleaseExpiredOrderReservationUseCase(
-      findOrderItemsUseCase,
-      expireReservationAndReleaseInventoryIfUnpaidUseCase,
-    )
+    releaseExpiredOrderReservationUseCase = new ReleaseExpiredOrderReservationUseCase(repository)
 
     reserveOrderCheckoutItemsUseCase = new ReserveOrderCheckoutItemsUseCase(
       repository,
       reserveInventoryUseCase as unknown as ReserveInventoryUseCase,
       findOneProductUseCase as unknown as FindOneProductUseCase,
-      markReservedUseCase,
-      markFailedUseCase,
-      failPendingOrderAndReleaseReservationUseCase,
+      configService,
     )
 
     createOrderRequestUseCase = new CreateOrderRequestUseCase(
@@ -304,43 +267,22 @@ describe('orders use-cases (integration)', () => {
       getCartItemsUseCase as unknown as GetCartItemsUseCase,
       markCartExpiredUseCase as unknown as MarkCartExpiredUseCase,
       findCustomerProfileByUsernameUseCase as unknown as FindCustomerProfileByUsernameUseCase,
-      markFailedUseCase,
       reserveOrderCheckoutItemsUseCase,
-      getOrderByIdUseCase,
     )
 
-    markOrderShippedUseCase = new MarkOrderShippedUseCase(
-      repository,
-      getOrderByIdUseCase,
-      orderEventsPublisher,
-    )
-    cancelConfirmedPaidOrderUseCase = new CancelConfirmedPaidOrderUseCase(
-      repository,
-      getOrderByIdUseCase,
-      findOrderItemsUseCase,
-      orderEventsPublisher,
-    )
     updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
-      markOrderShippedUseCase,
-      cancelConfirmedPaidOrderUseCase,
+      repository,
+      orderEventsPublisher,
     )
 
     triggerPaymentUseCase = new TriggerPaymentUseCase(
       repository,
-      getOrderByIdUseCase,
       releaseExpiredOrderReservationUseCase,
       vnpayService as unknown as VnpayService,
     )
 
-    markPaymentSucceededUseCase = new MarkPaymentSucceededUseCase(repository)
-    markPaymentFailedUseCase = new MarkPaymentFailedUseCase(repository)
-    markExpiredPaymentRefundedUseCase = new MarkExpiredPaymentRefundedUseCase(repository)
     reconcileVerifiedGatewayResultUseCase = new ReconcileVerifiedGatewayResultUseCase(
-      getOrderByIdUseCase,
-      findOrderItemsUseCase,
-      markPaymentSucceededUseCase,
-      markPaymentFailedUseCase,
-      markExpiredPaymentRefundedUseCase,
+      repository,
       releaseExpiredOrderReservationUseCase,
       emailTrackingService as unknown as EmailTrackingService,
       sesMailService as unknown as SesMailService,
@@ -359,12 +301,11 @@ describe('orders use-cases (integration)', () => {
       emailTrackingService as unknown as EmailTrackingService,
     )
     getOrderEmailTrackingUseCase = new GetOrderEmailTrackingUseCase(
-      getOrderByIdUseCase,
+      repository,
       emailTrackingService as unknown as EmailTrackingService,
     )
     resendFailedOrderEmailUseCase = new ResendFailedOrderEmailUseCase(
-      getOrderByIdUseCase,
-      findOrderItemsUseCase,
+      repository,
       emailTrackingService as unknown as EmailTrackingService,
       sesMailService as unknown as SesMailService,
     )
@@ -372,7 +313,9 @@ describe('orders use-cases (integration)', () => {
 
   describe('CreateOrderRequestUseCase', () => {
     it('throws InvalidInputError when the cart has expired, without writing anything', async () => {
-      getOwnedCartUseCase.execute.mockResolvedValue(Cart.fromRecord({ ...activeCart, status: CartStatus.EXPIRED }))
+      getOwnedCartUseCase.execute.mockResolvedValue(
+        Cart.fromRecord({ ...activeCart, status: CartStatus.EXPIRED }),
+      )
 
       await expect(
         createOrderRequestUseCase.execute(customerUser, { cartId: activeCart.cartId }),
@@ -380,12 +323,11 @@ describe('orders use-cases (integration)', () => {
       expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0)
     })
 
-    it('creates the order, reserves inventory, writes order items and marks the order RESERVED', async () => {
+    it('creates the order, reserves inventory, writes order items and saves the order as RESERVED', async () => {
       getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
       getCartItemsUseCase.execute.mockResolvedValue([cartItem])
       findOneProductUseCase.execute.mockResolvedValue(product)
       ddbMock.on(PutCommand).resolves({})
-      ddbMock.on(UpdateCommand).resolves({})
       ddbMock.on(GetCommand).resolves({ Item: { ...reservedOrder, status: OrderStatus.RESERVED } })
 
       const order = await createOrderRequestUseCase.execute(customerUser, {
@@ -393,20 +335,22 @@ describe('orders use-cases (integration)', () => {
       })
 
       const putCalls = ddbMock.commandCalls(PutCommand)
+      // First PutCommand: create the initial order
       expect(putCalls[0].args[0].input.TableName).toBe('orders-test')
+      // Second PutCommand: createOrderItems
       expect(putCalls[1].args[0].input.TableName).toBe('order-items-test')
       expect(putCalls[1].args[0].input.Item).toMatchObject({
         productId: product.productId,
         quantity: cartItem.quantity,
         lineTotal: 200000,
       })
-
-      const updateCalls = ddbMock.commandCalls(UpdateCommand)
-      expect(updateCalls).toHaveLength(1)
-      expect(updateCalls[0].args[0].input.ExpressionAttributeValues).toMatchObject({
-        ':status': OrderStatus.RESERVED,
-        ':totalAmount': 200000,
+      // Third PutCommand: save reserved order
+      expect(putCalls[2].args[0].input.TableName).toBe('orders-test')
+      expect(putCalls[2].args[0].input.Item).toMatchObject({
+        status: OrderStatus.RESERVED,
+        totalAmount: 200000,
       })
+
       expect(reserveInventoryUseCase.execute).toHaveBeenCalledWith(
         cartItem.productId,
         cartItem.quantity,
@@ -419,17 +363,15 @@ describe('orders use-cases (integration)', () => {
       getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
       getCartItemsUseCase.execute.mockResolvedValue([])
       ddbMock.on(PutCommand).resolves({})
-      ddbMock.on(UpdateCommand).resolves({})
-      ddbMock.on(GetCommand).resolves({ Item: { ...reservedOrder, status: OrderStatus.FAILED } })
 
       const order = await createOrderRequestUseCase.execute(customerUser, {
         cartId: activeCart.cartId,
       })
 
-      const updateCalls = ddbMock.commandCalls(UpdateCommand)
-      expect(updateCalls[0].args[0].input.ExpressionAttributeValues).toMatchObject({
-        ':status': OrderStatus.FAILED,
-        ':failureReason': 'Cart has no items.',
+      const putCalls = ddbMock.commandCalls(PutCommand)
+      // Second PutCommand: save failed order
+      expect(putCalls[1].args[0].input.Item).toMatchObject({
+        status: OrderStatus.FAILED,
       })
       expect(order.status).toBe(OrderStatus.FAILED)
     })
@@ -489,7 +431,9 @@ describe('orders use-cases (integration)', () => {
     })
 
     it('throws ForbiddenDomainError when a different customer requests the order', async () => {
-      ddbMock.on(GetCommand).resolves({ Item: { ...reservedOrder, customerId: 'someone-else' } })
+      ddbMock
+        .on(GetCommand)
+        .resolves({ Item: { ...reservedOrder, customerId: 'someone-else' } })
 
       await expect(
         findOneOrderUseCase.execute(customerUser, reservedOrder.orderId),
@@ -506,116 +450,28 @@ describe('orders use-cases (integration)', () => {
     })
   })
 
-  describe('MarkOrderShippedUseCase', () => {
-    const actor = {
-      actorType: 'admin' as const,
-      actorId: adminUser.sub,
-      reason: 'Manual status update',
-    }
-
-    it('throws InvalidInputError when the order is not a paid, confirmed order', async () => {
-      ddbMock.on(GetCommand).resolves({ Item: reservedOrder })
-
-      await expect(
-        markOrderShippedUseCase.execute(reservedOrder.orderId, actor),
-      ).rejects.toBeInstanceOf(InvalidInputError)
-    })
-
-    it('throws ConflictError when the conditional update fails', async () => {
-      const confirmedPaidOrder = {
-        ...reservedOrder,
-        status: OrderStatus.CONFIRMED,
-        paymentStatus: PaymentStatus.PAID,
-      }
-      ddbMock.on(GetCommand).resolves({ Item: confirmedPaidOrder })
-      ddbMock.on(UpdateCommand).rejects(
-        Object.assign(new Error('conditional check failed'), {
-          name: 'ConditionalCheckFailedException',
-        }),
-      )
-
-      await expect(
-        markOrderShippedUseCase.execute(reservedOrder.orderId, actor),
-      ).rejects.toBeInstanceOf(ConflictError)
-    })
-
-    it('marks the order SHIPPED and publishes the shipped event', async () => {
-      const confirmedPaidOrder = {
-        ...reservedOrder,
-        status: OrderStatus.CONFIRMED,
-        paymentStatus: PaymentStatus.PAID,
-      }
-      ddbMock
-        .on(GetCommand)
-        .resolvesOnce({ Item: confirmedPaidOrder })
-        .resolves({ Item: { ...confirmedPaidOrder, status: OrderStatus.SHIPPED } })
-      ddbMock.on(UpdateCommand).resolves({})
-
-      const order = await markOrderShippedUseCase.execute(reservedOrder.orderId, actor)
-
-      const updateCalls = ddbMock.commandCalls(UpdateCommand)
-      expect(updateCalls[0].args[0].input.ConditionExpression).toContain('#status = :confirmed')
-      expect(orderEventsPublisher.publishOrderShipped).toHaveBeenCalledWith(
-        expect.objectContaining({ orderId: reservedOrder.orderId }),
-      )
-      expect(order.status).toBe(OrderStatus.SHIPPED)
-    })
-  })
-
-  describe('CancelConfirmedPaidOrderUseCase', () => {
-    const actor = {
-      actorType: 'admin' as const,
-      actorId: adminUser.sub,
-      reason: 'Manual status update',
-    }
-    const confirmedPaidOrder = {
-      ...reservedOrder,
-      status: OrderStatus.CONFIRMED,
-      paymentStatus: PaymentStatus.PAID,
-    }
-
-    it('throws ConflictError when the transaction is cancelled', async () => {
-      ddbMock.on(GetCommand).resolves({ Item: confirmedPaidOrder })
-      ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
-      ddbMock
-        .on(TransactWriteCommand)
-        .rejects(Object.assign(new Error('cancelled'), { name: 'TransactionCanceledException' }))
-
-      await expect(
-        cancelConfirmedPaidOrderUseCase.execute(reservedOrder.orderId, actor),
-      ).rejects.toBeInstanceOf(ConflictError)
-    })
-
-    it('cancels the order, releases inventory in one transaction and publishes the cancelled event', async () => {
-      ddbMock
-        .on(GetCommand)
-        .resolvesOnce({ Item: confirmedPaidOrder })
-        .resolves({ Item: { ...confirmedPaidOrder, status: OrderStatus.CANCELLED } })
-      ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
-      ddbMock.on(TransactWriteCommand).resolves({})
-
-      const order = await cancelConfirmedPaidOrderUseCase.execute(reservedOrder.orderId, actor)
-
-      const transactCalls = ddbMock.commandCalls(TransactWriteCommand)
-      const transactItems = transactCalls[0].args[0].input.TransactItems ?? []
-      expect(transactItems[0].Update?.TableName).toBe('orders-test')
-      expect(transactItems[1].Update?.TableName).toBe('inventory-test')
-      expect(transactItems[1].Update?.Key).toEqual({ productId: reservedOrderItem.productId })
-      expect(orderEventsPublisher.publishOrderCancelled).toHaveBeenCalledWith(
-        expect.objectContaining({ orderId: reservedOrder.orderId }),
-      )
-      expect(order.status).toBe(OrderStatus.CANCELLED)
-    })
-  })
-
   describe('UpdateOrderStatusUseCase', () => {
+    const actor = {
+      actorType: 'admin' as const,
+      actorId: adminUser.sub,
+      reason: 'Manual status update',
+    }
+
     it('throws InvalidInputError for an unsupported target status', () => {
       expect(() =>
         updateOrderStatusUseCase.execute(adminUser, reservedOrder.orderId, OrderStatus.CONFIRMED),
       ).toThrow(InvalidInputError)
     })
 
-    it('dispatches SHIPPED to the real MarkOrderShippedUseCase wired to DynamoDB', async () => {
+    it('throws InvalidInputError when shipping an order that is not paid and confirmed', async () => {
+      ddbMock.on(GetCommand).resolves({ Item: reservedOrder })
+
+      await expect(
+        updateOrderStatusUseCase.execute(adminUser, reservedOrder.orderId, OrderStatus.SHIPPED),
+      ).rejects.toBeInstanceOf(InvalidInputError)
+    })
+
+    it('ships the order via PutCommand and publishes the shipped event', async () => {
       const confirmedPaidOrder = {
         ...reservedOrder,
         status: OrderStatus.CONFIRMED,
@@ -625,7 +481,7 @@ describe('orders use-cases (integration)', () => {
         .on(GetCommand)
         .resolvesOnce({ Item: confirmedPaidOrder })
         .resolves({ Item: { ...confirmedPaidOrder, status: OrderStatus.SHIPPED } })
-      ddbMock.on(UpdateCommand).resolves({})
+      ddbMock.on(PutCommand).resolves({})
 
       const order = await updateOrderStatusUseCase.execute(
         adminUser,
@@ -633,8 +489,62 @@ describe('orders use-cases (integration)', () => {
         OrderStatus.SHIPPED,
       )
 
+      const putCalls = ddbMock.commandCalls(PutCommand)
+      expect(putCalls[0].args[0].input.TableName).toBe('orders-test')
+      expect(putCalls[0].args[0].input.Item).toMatchObject({ status: OrderStatus.SHIPPED })
+      expect(orderEventsPublisher.publishOrderShipped).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: reservedOrder.orderId }),
+      )
       expect(order.status).toBe(OrderStatus.SHIPPED)
-      expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(1)
+    })
+
+    it('throws ConflictError when the cancel transaction is rejected', async () => {
+      const confirmedPaidOrder = {
+        ...reservedOrder,
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.PAID,
+      }
+      ddbMock.on(GetCommand).resolves({ Item: confirmedPaidOrder })
+      ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
+      ddbMock
+        .on(TransactWriteCommand)
+        .rejects(Object.assign(new Error('cancelled'), { name: 'TransactionCanceledException' }))
+
+      await expect(
+        updateOrderStatusUseCase.execute(adminUser, reservedOrder.orderId, OrderStatus.CANCELLED),
+      ).rejects.toBeInstanceOf(ConflictError)
+    })
+
+    it('cancels the order, releases inventory in one transaction and publishes the cancelled event', async () => {
+      const confirmedPaidOrder = {
+        ...reservedOrder,
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.PAID,
+      }
+      ddbMock
+        .on(GetCommand)
+        .resolvesOnce({ Item: confirmedPaidOrder })
+        .resolves({ Item: { ...confirmedPaidOrder, status: OrderStatus.CANCELLED } })
+      ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
+      ddbMock.on(TransactWriteCommand).resolves({})
+
+      const order = await updateOrderStatusUseCase.execute(
+        adminUser,
+        reservedOrder.orderId,
+        OrderStatus.CANCELLED,
+      )
+
+      const transactCalls = ddbMock.commandCalls(TransactWriteCommand)
+      const transactItems = transactCalls[0].args[0].input.TransactItems ?? []
+      // Order is written as Put (full overwrite via toRecord())
+      expect(transactItems[0].Put?.TableName).toBe('orders-test')
+      // Inventory is released via Update
+      expect(transactItems[1].Update?.TableName).toBe('inventory-test')
+      expect(transactItems[1].Update?.Key).toEqual({ productId: reservedOrderItem.productId })
+      expect(orderEventsPublisher.publishOrderCancelled).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: reservedOrder.orderId }),
+      )
+      expect(order.status).toBe(OrderStatus.CANCELLED)
     })
   })
 
@@ -662,9 +572,9 @@ describe('orders use-cases (integration)', () => {
       expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1)
     })
 
-    it('builds a VNPay payment url and starts the payment', async () => {
+    it('builds a VNPay payment url and saves the order with PROCESSING status', async () => {
       ddbMock.on(GetCommand).resolves({ Item: reservedOrder })
-      ddbMock.on(UpdateCommand).resolves({})
+      ddbMock.on(PutCommand).resolves({})
 
       const result = await triggerPaymentUseCase.execute(
         customerUser,
@@ -675,9 +585,9 @@ describe('orders use-cases (integration)', () => {
       expect(vnpayService.buildOrderPaymentUrl).toHaveBeenCalledWith(
         expect.objectContaining({ amount: reservedOrder.totalAmount, clientIp: '203.0.113.5' }),
       )
-      const updateCalls = ddbMock.commandCalls(UpdateCommand)
-      expect(updateCalls[0].args[0].input.ExpressionAttributeValues).toMatchObject({
-        ':paymentStatus': PaymentStatus.PROCESSING,
+      const putCalls = ddbMock.commandCalls(PutCommand)
+      expect(putCalls[0].args[0].input.Item).toMatchObject({
+        paymentStatus: PaymentStatus.PROCESSING,
       })
       expect(result).toMatchObject({
         paymentStatus: PaymentStatus.PROCESSING,
@@ -711,7 +621,7 @@ describe('orders use-cases (integration)', () => {
       await expect(handleVnpayIpnUseCase.execute({})).resolves.toBe(IpnInvalidAmount)
     })
 
-    it('confirms the payment via a real conditional UpdateCommand and sends the confirmation email', async () => {
+    it('confirms the payment via PutCommand and sends the confirmation email', async () => {
       vnpayService.verifyIpnQuery.mockResolvedValue(verify)
       const processingOrder = {
         ...reservedOrder,
@@ -729,15 +639,16 @@ describe('orders use-cases (integration)', () => {
           },
         })
       ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
-      ddbMock.on(UpdateCommand).resolves({})
+      ddbMock.on(PutCommand).resolves({})
 
       const result = await handleVnpayIpnUseCase.execute({})
 
-      const updateCalls = ddbMock.commandCalls(UpdateCommand)
-      expect(updateCalls[0].args[0].input.ExpressionAttributeValues).toMatchObject({
-        ':status': OrderStatus.CONFIRMED,
-        ':paymentStatus': PaymentStatus.PAID,
-        ':paymentTransactionId': '123456',
+      const putCalls = ddbMock.commandCalls(PutCommand)
+      expect(putCalls[0].args[0].input.TableName).toBe('orders-test')
+      expect(putCalls[0].args[0].input.Item).toMatchObject({
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.PAID,
+        paymentTransactionId: '123456',
       })
       expect(sesMailService.sendOrderConfirmationEmail).toHaveBeenCalled()
       expect(result).toBe(IpnSuccess)
@@ -756,28 +667,25 @@ describe('orders use-cases (integration)', () => {
     })
   })
 
-  describe('ExpireReservationAndReleaseInventoryIfUnpaidUseCase', () => {
+  describe('ReleaseExpiredOrderReservationUseCase (expireWithInventoryRelease)', () => {
     it('releases inventory for an expired reservation in one transaction', async () => {
+      ddbMock.on(GetCommand).resolves({ Item: reservedOrderItem })
+      ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
       ddbMock.on(TransactWriteCommand).resolves({})
 
-      const released = await expireReservationAndReleaseInventoryIfUnpaidUseCase.execute(
-        reservedOrder,
-        [{ productId: reservedOrderItem.productId, quantity: reservedOrderItem.quantity }],
-      )
+      const released = await releaseExpiredOrderReservationUseCase.execute(reservedOrder)
 
       expect(released).toBe(true)
       expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1)
     })
 
     it('returns false instead of throwing when the conditions no longer match', async () => {
+      ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
       ddbMock
         .on(TransactWriteCommand)
         .rejects(Object.assign(new Error('cancelled'), { name: 'TransactionCanceledException' }))
 
-      const released = await expireReservationAndReleaseInventoryIfUnpaidUseCase.execute(
-        reservedOrder,
-        [{ productId: reservedOrderItem.productId, quantity: reservedOrderItem.quantity }],
-      )
+      const released = await releaseExpiredOrderReservationUseCase.execute(reservedOrder)
 
       expect(released).toBe(false)
     })

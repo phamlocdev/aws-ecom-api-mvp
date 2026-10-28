@@ -177,20 +177,20 @@ describe('Order.isReadyToProcessPayment()', () => {
 // ---------------------------------------------------------------------------
 
 describe('Order.reserve()', () => {
-  it('returns new Order with RESERVED status and updated fields', () => {
-    const order = makeOrder({ status: 'PENDING' })
-    const reserved = order.reserve(99000, 9999999999, '2024-06-01T00:00:00.000Z')
-    expect(reserved.status).toBe(OrderStatus.RESERVED)
-    expect(reserved.totalAmount).toBe(99000)
-    expect(reserved.paymentExpiresAt).toBe(9999999999)
-    expect(reserved.reservedAt).toBe('2024-06-01T00:00:00.000Z')
-    expect(reserved.updatedAt).toBe('2024-06-01T00:00:00.000Z')
-  })
-
-  it('does not mutate the original order', () => {
+  it('mutates order in place with RESERVED status and updated fields', () => {
     const order = makeOrder({ status: 'PENDING' })
     order.reserve(99000, 9999999999, '2024-06-01T00:00:00.000Z')
-    expect(order.status).toBe(OrderStatus.PENDING)
+    expect(order.status).toBe(OrderStatus.RESERVED)
+    expect(order.totalAmount).toBe(99000)
+    expect(order.paymentExpiresAt).toBe(9999999999)
+    expect(order.reservedAt).toBe('2024-06-01T00:00:00.000Z')
+    expect(order.updatedAt).toBe('2024-06-01T00:00:00.000Z')
+  })
+
+  it('mutates the original order', () => {
+    const order = makeOrder({ status: 'PENDING' })
+    order.reserve(99000, 9999999999, '2024-06-01T00:00:00.000Z')
+    expect(order.status).toBe(OrderStatus.RESERVED)
   })
 
   it('throws InvalidInputError when status is not PENDING', () => {
@@ -200,12 +200,12 @@ describe('Order.reserve()', () => {
 })
 
 describe('Order.fail()', () => {
-  it('returns new Order with FAILED status', () => {
+  it('mutates order in place with FAILED status', () => {
     const order = makeOrder({ status: 'RESERVED' })
-    const failed = order.fail('Out of stock', '2024-06-01T00:00:00.000Z')
-    expect(failed.status).toBe(OrderStatus.FAILED)
-    expect(failed.failureReason).toBe('Out of stock')
-    expect(failed.updatedAt).toBe('2024-06-01T00:00:00.000Z')
+    order.fail('Out of stock', '2024-06-01T00:00:00.000Z')
+    expect(order.status).toBe(OrderStatus.FAILED)
+    expect(order.failureReason).toBe('Out of stock')
+    expect(order.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
   it('throws when already in terminal state', () => {
@@ -215,12 +215,12 @@ describe('Order.fail()', () => {
 })
 
 describe('Order.ship()', () => {
-  it('returns new Order with SHIPPED status', () => {
+  it('mutates order in place with SHIPPED status', () => {
     const order = makeOrder({ status: 'CONFIRMED', paymentStatus: 'PAID' })
-    const shipped = order.ship('2024-06-01T00:00:00.000Z')
-    expect(shipped.status).toBe(OrderStatus.SHIPPED)
-    expect(shipped.shippedAt).toBe('2024-06-01T00:00:00.000Z')
-    expect(shipped.updatedAt).toBe('2024-06-01T00:00:00.000Z')
+    order.ship('2024-06-01T00:00:00.000Z')
+    expect(order.status).toBe(OrderStatus.SHIPPED)
+    expect(order.shippedAt).toBe('2024-06-01T00:00:00.000Z')
+    expect(order.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
   it('throws when canBeShipped() returns false', () => {
@@ -230,12 +230,12 @@ describe('Order.ship()', () => {
 })
 
 describe('Order.cancelWithRefund()', () => {
-  it('returns new Order with CANCELLED status', () => {
+  it('mutates order in place with CANCELLED status', () => {
     const order = makeOrder({ status: 'CONFIRMED', paymentStatus: 'PAID' })
-    const cancelled = order.cancelWithRefund('2024-06-01T00:00:00.000Z')
-    expect(cancelled.status).toBe(OrderStatus.CANCELLED)
-    expect(cancelled.cancelledAt).toBe('2024-06-01T00:00:00.000Z')
-    expect(cancelled.updatedAt).toBe('2024-06-01T00:00:00.000Z')
+    order.cancelWithRefund('2024-06-01T00:00:00.000Z')
+    expect(order.status).toBe(OrderStatus.CANCELLED)
+    expect(order.cancelledAt).toBe('2024-06-01T00:00:00.000Z')
+    expect(order.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
   it('throws when canBeCancelled() returns false', () => {

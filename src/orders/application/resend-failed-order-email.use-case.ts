@@ -1,20 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { InvalidInputError } from '../../common/domain-error'
+import { InvalidInputError, NotFoundError } from '../../common/domain-error'
 import { EmailTrackingService } from '../../mail/email-tracking.service'
 import { EmailType } from '../../mail/mail.types'
 import { SesMailService } from '../../mail/ses-mail.service'
 import { Order, OrderItem, ResendOrderEmailResult } from '../domain/order.entity'
+import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 import { normalizeEmail } from '../domain/order.rules'
-import { FindOrderItemsUseCase } from './find-order-items.use-case'
-import { GetOrderByIdUseCase } from './get-order-by-id.use-case'
 
 @Injectable()
 export class ResendFailedOrderEmailUseCase {
   constructor(
-    @Inject(GetOrderByIdUseCase)
-    private readonly getOrderByIdUseCase: GetOrderByIdUseCase,
-    @Inject(FindOrderItemsUseCase)
-    private readonly findOrderItemsUseCase: FindOrderItemsUseCase,
+    @Inject(ORDER_REPOSITORY)
+    private readonly orderRepository: OrderRepositoryPort,
     @Inject(EmailTrackingService)
     private readonly emailTrackingService: EmailTrackingService,
     @Inject(SesMailService)
@@ -34,7 +31,8 @@ export class ResendFailedOrderEmailUseCase {
       throw new InvalidInputError(`Email type ${emailType} is not supported for order resend.`)
     }
 
-    const order = await this.getOrderByIdUseCase.execute(orderId)
+    const order = await this.orderRepository.findById(orderId)
+    if (!order) throw new NotFoundError(`Order ${orderId} was not found.`)
     const normalizedRecipientEmail = normalizeEmail(recipientEmail)
     if (!normalizedRecipientEmail) {
       throw new InvalidInputError('recipientEmail is required.')
@@ -58,7 +56,7 @@ export class ResendFailedOrderEmailUseCase {
       }
     }
 
-    const items = await this.findOrderItemsUseCase.execute(orderId)
+    const items = await this.orderRepository.findOrderItems(orderId)
     const recipientEmails = [normalizedRecipientEmail]
     const result = await this.resendOrderEmailByType({
       order,

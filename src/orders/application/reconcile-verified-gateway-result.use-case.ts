@@ -9,19 +9,15 @@ import {
   type VerifyIpnCall,
 } from 'vnpay'
 import { systemAuditMutationContext } from '../../audit/audit-actor'
-import { ConflictError, NotFoundError } from '../../common/domain-error'
+import { ConflictError } from '../../common/domain-error'
 import { EmailTrackingService } from '../../mail/email-tracking.service'
 import { SesMailService } from '../../mail/ses-mail.service'
 import { Order } from '../domain/order.entity'
 import { OrderStatus } from '../domain/order-status.enum'
 import { PaymentStatus } from '../domain/payment-status.enum'
+import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 import { VnpayService } from '../infrastructure/vnpay.service'
 import { buildAutoRefundReason, buildPaymentOrderInfo } from './vnpay-order-info.util'
-import { FindOrderItemsUseCase } from './find-order-items.use-case'
-import { GetOrderByIdUseCase } from './get-order-by-id.use-case'
-import { MarkExpiredPaymentRefundedUseCase } from './mark-expired-payment-refunded.use-case'
-import { MarkPaymentFailedUseCase } from './mark-payment-failed.use-case'
-import { MarkPaymentSucceededUseCase } from './mark-payment-succeeded.use-case'
 import { ReleaseExpiredOrderReservationUseCase } from './release-expired-order-reservation.use-case'
 
 const AUTO_REFUND_CREATE_BY = 'system-auto-refund'
@@ -37,16 +33,8 @@ export class ReconcileVerifiedGatewayResultUseCase {
   private readonly logger = new Logger(ReconcileVerifiedGatewayResultUseCase.name)
 
   constructor(
-    @Inject(GetOrderByIdUseCase)
-    private readonly getOrderByIdUseCase: GetOrderByIdUseCase,
-    @Inject(FindOrderItemsUseCase)
-    private readonly findOrderItemsUseCase: FindOrderItemsUseCase,
-    @Inject(MarkPaymentSucceededUseCase)
-    private readonly markPaymentSucceededUseCase: MarkPaymentSucceededUseCase,
-    @Inject(MarkPaymentFailedUseCase)
-    private readonly markPaymentFailedUseCase: MarkPaymentFailedUseCase,
-    @Inject(MarkExpiredPaymentRefundedUseCase)
-    private readonly markExpiredPaymentRefundedUseCase: MarkExpiredPaymentRefundedUseCase,
+    @Inject(ORDER_REPOSITORY)
+    private readonly orderRepository: OrderRepositoryPort,
     @Inject(ReleaseExpiredOrderReservationUseCase)
     private readonly releaseExpiredOrderReservationUseCase: ReleaseExpiredOrderReservationUseCase,
     @Inject(EmailTrackingService)
@@ -62,15 +50,9 @@ export class ReconcileVerifiedGatewayResultUseCase {
     const transactionId = String(verify.vnp_TransactionNo ?? '')
     const transactionAmount = Number(verify.vnp_Amount)
 
-    let order: Order
-    try {
-      order = await this.getOrderByIdUseCase.execute(orderId)
-    } catch (error) {
-      if (error instanceof NotFoundError) {
-        return IpnOrderNotFound
-      }
-      throw error
-    }
+    const found = await this.orderRepository.findById(orderId)
+    if (!found) return IpnOrderNotFound
+    let order: Order = found
 
     if (order.totalAmount === undefined || transactionAmount !== order.totalAmount) {
       return IpnInvalidAmount
@@ -96,7 +78,8 @@ export class ReconcileVerifiedGatewayResultUseCase {
 
     if (order.isPaymentExpired()) {
       await this.releaseExpiredOrderReservationUseCase.execute(order)
-      const latestOrder = await this.getOrderByIdUseCase.execute(orderId)
+      const latestFound = await this.orderRepository.findById(orderId)
+      const latestOrder = latestFound ?? order
       const latePaymentResult = await this.handleLatePaymentSuccess(latestOrder, verify, source)
       if (source === 'ipn') {
         this.vnpayService.logIpnResponse(orderId, latePaymentResult)
@@ -113,22 +96,22 @@ export class ReconcileVerifiedGatewayResultUseCase {
       return IpnUnknownError
     }
 
+    const actor = systemAuditMutationContext(
+      source === 'ipn' ? 'payment-ipn' : 'payment-return',
+      'Payment confirmed',
+    )
+
     try {
-      await this.markPaymentSucceededUseCase.execute(
-        orderId,
-        order.paymentAttemptId,
-        transactionId,
-        systemAuditMutationContext(
-          source === 'ipn' ? 'payment-ipn' : 'payment-return',
-          'Payment confirmed',
-        ),
-      )
+      const paidAt = new Date().toISOString()
+      order.confirmPayment(order.paymentAttemptId, transactionId, paidAt)
+      order.withAudit(actor)
+      await this.orderRepository.save(order)
       await this.sendOrderConfirmationEmailBestEffortByOrderId(orderId)
       this.logger.log(`VNPay ${source} confirmed payment for order ${orderId}.`)
       return IpnSuccess
     } catch (error) {
       if (error instanceof ConflictError) {
-        const latestOrder = await this.getOrderByIdUseCase.execute(orderId)
+        const latestOrder = (await this.orderRepository.findById(orderId)) ?? order
         if (latestOrder.status === OrderStatus.CONFIRMED || latestOrder.isPaid) {
           await this.sendOrderConfirmationEmailBestEffort(latestOrder)
           return InpOrderAlreadyConfirmed
@@ -157,16 +140,15 @@ export class ReconcileVerifiedGatewayResultUseCase {
       return IpnUnknownError
     }
 
+    const actor = systemAuditMutationContext(
+      source === 'ipn' ? 'payment-ipn' : 'payment-return',
+      failureReason,
+    )
+
     try {
-      await this.markPaymentFailedUseCase.execute(
-        order.orderId,
-        order.paymentAttemptId,
-        failureReason,
-        systemAuditMutationContext(
-          source === 'ipn' ? 'payment-ipn' : 'payment-return',
-          failureReason,
-        ),
-      )
+      order.failPayment(order.paymentAttemptId, failureReason)
+      order.withAudit(actor)
+      await this.orderRepository.save(order)
       return IpnSuccess
     } catch (error) {
       if (error instanceof ConflictError) {
@@ -231,15 +213,13 @@ export class ReconcileVerifiedGatewayResultUseCase {
       }
 
       const autoRefundReason = `${AUTO_REFUND_REASON} Refund reference: ${refundResult.vnp_ResponseId}.`
-      await this.markExpiredPaymentRefundedUseCase.execute(
-        order.orderId,
-        String(verify.vnp_TransactionNo),
+      const actor = systemAuditMutationContext(
+        source === 'ipn' ? 'payment-ipn' : 'payment-return',
         autoRefundReason,
-        systemAuditMutationContext(
-          source === 'ipn' ? 'payment-ipn' : 'payment-return',
-          autoRefundReason,
-        ),
       )
+      order.refundExpiredPayment(String(verify.vnp_TransactionNo), autoRefundReason)
+      order.withAudit(actor)
+      await this.orderRepository.save(order)
       return IpnSuccess
     } catch (error) {
       this.logger.error(
@@ -251,8 +231,8 @@ export class ReconcileVerifiedGatewayResultUseCase {
   }
 
   private async sendOrderConfirmationEmailBestEffortByOrderId(orderId: string): Promise<void> {
-    const order = await this.getOrderByIdUseCase.execute(orderId)
-    await this.sendOrderConfirmationEmailBestEffort(order)
+    const order = await this.orderRepository.findById(orderId)
+    if (order) await this.sendOrderConfirmationEmailBestEffort(order)
   }
 
   private async sendOrderConfirmationEmailBestEffort(order: Order): Promise<void> {
@@ -268,7 +248,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
     }
 
     try {
-      const items = await this.findOrderItemsUseCase.execute(order.orderId)
+      const items = await this.orderRepository.findOrderItems(order.orderId)
       const result = await this.sesMailService.sendOrderConfirmationEmail({ order, items })
 
       if (result.status === ORDER_CONFIRMATION_EMAIL_SKIPPED) {

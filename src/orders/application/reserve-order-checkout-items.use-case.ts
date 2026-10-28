@@ -1,28 +1,27 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { randomUUID } from 'crypto'
-import { systemAuditMutationContext } from '../../audit/audit-actor'
+import { ConfigService } from '@nestjs/config'
+import {
+  systemAuditMutationContext,
+  toAuditMutationAttributes,
+} from '../../audit/audit-actor'
 import { ConflictError } from '../../common/domain-error'
 import { ReserveInventoryUseCase } from '../../inventory/application/reserve-inventory.use-case'
 import { ReservedInventoryItem } from '../../inventory/domain/inventory.entity'
 import { FindOneProductUseCase } from '../../products/application/find-one-product.use-case'
 import { Product } from '../../products/domain/product.entity'
 import { Order, OrderItem } from '../domain/order.entity'
-import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
-import { FailPendingOrderAndReleaseReservationUseCase } from './fail-pending-order-and-release-reservation.use-case'
-import { MarkFailedUseCase } from './mark-failed.use-case'
-import { MarkReservedUseCase } from './mark-reserved.use-case'
+import { toEpochSeconds } from '../domain/order.rules'
+import { NotFoundError } from '../../common/domain-error'
 
 export type ReserveOrderCheckoutItemsInput = {
   orderId: string
   cartItems: ReservedInventoryItem[]
   /**
    * When provided, builds a `system` audit actor with this id for every
-   * mutation this use-case performs (success and failure alike), using
-   * `systemAuditMutationContext(actorId, reason)` with a reason matching
-   * what each branch used to pass directly (e.g. the place-order worker).
-   * When omitted, each downstream use-case falls back to its own default
-   * actor (e.g. the synchronous checkout path, which never passed one).
+   * mutation this use-case performs (success and failure alike).
+   * When omitted, falls back to a default system actor.
    */
   actorId?: string
 }
@@ -38,12 +37,12 @@ export type ReserveOrderCheckoutItemsResult = {
  * items, mark the order RESERVED on success. On failure, release any
  * already-reserved items and mark the order FAILED — but only swallow the
  * error (so the caller does not treat it as an unexpected failure) when it
- * is an inventory `ConflictError` (insufficient stock), which is an expected
- * business outcome, not an infrastructure error.
+ * is an inventory `ConflictError` (insufficient stock).
  */
 @Injectable()
 export class ReserveOrderCheckoutItemsUseCase {
   private readonly logger = new Logger(ReserveOrderCheckoutItemsUseCase.name)
+  private readonly paymentConfirmationTimeoutSeconds: number
 
   constructor(
     @Inject(ORDER_REPOSITORY)
@@ -52,16 +51,20 @@ export class ReserveOrderCheckoutItemsUseCase {
     private readonly reserveInventoryUseCase: ReserveInventoryUseCase,
     @Inject(FindOneProductUseCase)
     private readonly findOneProductUseCase: FindOneProductUseCase,
-    @Inject(MarkReservedUseCase)
-    private readonly markReservedUseCase: MarkReservedUseCase,
-    @Inject(MarkFailedUseCase)
-    private readonly markFailedUseCase: MarkFailedUseCase,
-    @Inject(FailPendingOrderAndReleaseReservationUseCase)
-    private readonly failPendingOrderAndReleaseReservationUseCase: FailPendingOrderAndReleaseReservationUseCase,
-  ) {}
+    @Inject(ConfigService)
+    configService: ConfigService,
+  ) {
+    this.paymentConfirmationTimeoutSeconds = Number(
+      configService.getOrThrow<number>('PAYMENT_CONFIRMATION_SECONDS_TIMEOUT'),
+    )
+  }
 
   async execute(input: ReserveOrderCheckoutItemsInput): Promise<ReserveOrderCheckoutItemsResult> {
     const reservedItems: ReservedInventoryItem[] = []
+    const actor = systemAuditMutationContext(
+      input.actorId ?? 'orders-service',
+      'Order reserved',
+    )
 
     try {
       const productSnapshots: Array<{ item: ReservedInventoryItem; product: Product }> = []
@@ -91,15 +94,14 @@ export class ReserveOrderCheckoutItemsUseCase {
       await this.orderRepository.createOrderItems(orderItems)
 
       const totalAmount = Order.computeTotal(orderItems)
-      if (input.actorId) {
-        await this.markReservedUseCase.execute(
-          input.orderId,
-          totalAmount,
-          systemAuditMutationContext(input.actorId, 'Order reserved'),
-        )
-      } else {
-        await this.markReservedUseCase.execute(input.orderId, totalAmount)
-      }
+      const paymentExpiresAt = toEpochSeconds(Date.now()) + this.paymentConfirmationTimeoutSeconds
+
+      const order = await this.orderRepository.findById(input.orderId)
+      if (!order) throw new NotFoundError(`Order ${input.orderId} was not found.`)
+
+      order.reserve(totalAmount, paymentExpiresAt, createdAt)
+      order.withAudit(systemAuditMutationContext(input.actorId ?? 'orders-service', 'Order reserved'))
+      await this.orderRepository.save(order)
 
       this.logger.log(
         `>>>>>> [SUCCESS]: Order ${input.orderId} reserved successfully with ${orderItems.length} items and totalAmount=${totalAmount}.`,
@@ -108,31 +110,25 @@ export class ReserveOrderCheckoutItemsUseCase {
       return { reservationSucceeded: true }
     } catch (error) {
       const failureReason = error instanceof Error ? error.message : 'Failed to process order.'
+      const failActor = systemAuditMutationContext(
+        input.actorId ?? 'orders-service',
+        failureReason,
+      )
 
       if (reservedItems.length > 0) {
-        if (input.actorId) {
-          await this.failPendingOrderAndReleaseReservationUseCase.execute(
-            input.orderId,
-            failureReason,
-            reservedItems,
-            systemAuditMutationContext(input.actorId, failureReason),
-          )
-        } else {
-          await this.failPendingOrderAndReleaseReservationUseCase.execute(
-            input.orderId,
-            failureReason,
-            reservedItems,
-          )
-        }
-      } else if (input.actorId) {
-        await this.markFailedUseCase.execute(
+        await this.orderRepository.failWithInventoryRelease(
           input.orderId,
-          OrderStatus.FAILED,
           failureReason,
-          systemAuditMutationContext(input.actorId, failureReason),
+          reservedItems,
+          failActor,
         )
       } else {
-        await this.markFailedUseCase.execute(input.orderId, OrderStatus.FAILED, failureReason)
+        const order = await this.orderRepository.findById(input.orderId)
+        if (order) {
+          order.fail(failureReason, new Date().toISOString())
+          order.withAudit(failActor)
+          await this.orderRepository.save(order)
+        }
       }
 
       if (error instanceof ConflictError) {

@@ -26,6 +26,9 @@ export interface OrderRepositoryPort {
   /** Throws ConflictError if order.orderId already exists. */
   create(order: Order): Promise<void>
 
+  /** Full overwrite — persists all fields from order.toRecord(). */
+  save(order: Order): Promise<void>
+
   createOrderItems(items: OrderItem[]): Promise<void>
 
   findOrderItems(orderId: string): Promise<OrderItem[]>
@@ -45,69 +48,22 @@ export interface OrderRepositoryPort {
     exclusiveStartKey?: Record<string, unknown>,
   ): Promise<OrderPage>
 
-  markReserved(
-    orderId: string,
-    totalAmount: number,
-    paymentExpiresAt: number,
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  markFailed(
-    orderId: string,
-    status: OrderStatus,
-    failureReason: string,
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  /** Throws ConflictError if the order is not CONFIRMED/PAID. */
-  markShipped(orderId: string, shippedAt: string, actor: AuditMutationContext): Promise<void>
-
   /**
-   * Updates the order to CANCELLED and releases the given inventory items in a
-   * single DynamoDB transaction. Throws ConflictError if the order is not
-   * CONFIRMED/PAID or the inventory release conditions fail.
+   * Atomically cancels the order and releases inventory items.
+   * Throws ConflictError if inventory release conditions fail.
    */
-  cancelConfirmedPaidOrder(
-    orderId: string,
+  cancelWithInventoryRelease(
+    order: Order,
     cancelledAt: string,
     inventoryItems: ReservedInventoryItem[],
     actor: AuditMutationContext,
   ): Promise<void>
 
-  /** Throws ConflictError if the order cannot start a new payment attempt. */
-  startPayment(
-    orderId: string,
-    paymentAttemptId: string,
-    requestedAt: string,
-    nowEpochSeconds: number,
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  /** Throws ConflictError if the payment attempt no longer matches. */
-  markPaymentSucceeded(
-    orderId: string,
-    paymentAttemptId: string,
-    transactionId: string,
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  /** Throws ConflictError if the payment attempt no longer matches. */
-  markPaymentFailed(
-    orderId: string,
-    paymentAttemptId: string,
-    failureReason: string,
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  /** Throws ConflictError if the order is already confirmed/paid. */
-  markExpiredPaymentRefunded(
-    orderId: string,
-    transactionId: string,
-    failureReason: string,
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  failPendingOrderAndReleaseReservation(
+  /**
+   * Atomically marks the order FAILED and releases inventory items in a
+   * single DynamoDB transaction.
+   */
+  failWithInventoryRelease(
     orderId: string,
     failureReason: string,
     items: ReservedInventoryItem[],
@@ -115,10 +71,10 @@ export interface OrderRepositoryPort {
   ): Promise<void>
 
   /**
-   * Returns false (instead of throwing) when the order/inventory conditions
+   * Returns false (instead of throwing) when the inventory conditions
    * no longer match, since this is a best-effort sweep operation.
    */
-  expireReservationAndReleaseInventoryIfUnpaid(
+  expireWithInventoryRelease(
     order: Order,
     items: ReservedInventoryItem[],
     actor: AuditMutationContext,

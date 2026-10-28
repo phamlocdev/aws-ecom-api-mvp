@@ -2,7 +2,7 @@
 
 > File này là trạng thái SỐNG — luôn đọc file này trước khi bắt đầu bất kỳ công việc refactor nào, và CẬP NHẬT lại trước khi kết thúc phiên. Kiến trúc đích và các giai đoạn xem ở [PLAN.md](./PLAN.md).
 
-Cập nhật lần cuối: 2026-10-26 (Phase D xong — Rich Domain Model hoàn thành)
+Cập nhật lần cuối: 2026-10-28 (orders module — Order entity chuyển sang mutable pattern, toàn bộ use-case/worker loại bỏ biến trung gian)
 
 ## Trạng thái tổng quan
 
@@ -103,7 +103,7 @@ Trạng thái ô: ☐ Chưa · 🔄 Đang làm · ✅ Xong
 
 ## Việc đang dang dở (nếu phiên kết thúc giữa chừng)
 
-_Giai đoạn 7 (Rich Domain Model) hoàn thành toàn bộ. 456/456 test pass. Giai đoạn 5 (CI) vẫn chưa bắt đầu; Giai đoạn 4 còn phần nhỏ chưa làm (xem nhật ký 2026-10-21)._
+_Orders entity mutable pattern refactor hoàn thành toàn bộ. tsc --noEmit: 0 lỗi. Giai đoạn 5 (CI) vẫn chưa bắt đầu; Giai đoạn 4 còn phần nhỏ chưa làm (xem nhật ký 2026-10-21)._
 
 > Khi 1 phiên kết thúc giữa chừng một task, ghi rõ ở đây: module đang làm, bước đã xong, bước tiếp theo, và bất kỳ quyết định/giả định nào đã đưa ra để phiên sau không phải đoán lại.
 
@@ -272,7 +272,54 @@ _Giai đoạn 7 (Rich Domain Model) hoàn thành toàn bộ. 456/456 test pass. 
   - **Bug ES2023 class field initialization**: `InventorySummary` (extends `InventoryRecord`) và `EmailTrackingView` (extends `EmailTracking`) — đã fix bằng cách thêm explicit assignment sau `super(props)` y hệt pattern `CartDetails`.
   - **Lỗi orders pre-existing**: 29 lỗi TypeScript trong `src/orders/` (`Property 'isPaymentExpired' is missing` và `isOrderPaymentExpired` không export từ `order.rules`) — không liên quan tới phiên này, tồn tại từ trước.
   - Kiểm tra: `tsc --noEmit` — 0 lỗi mới ngoài 29 lỗi pre-existing trong `src/orders/`. `npx jest` — 270/271 pass (1 fail duy nhất là `health.e2e-spec.ts` timeout pre-existing, không liên quan; inventory test đã pass sau khi fix ES2023 bug). Không có lỗi ESLint mới trên các file đã sửa.
+- 2026-10-28: **Orders module — Rich Domain Model + thin use-cases + repository simplification hoàn thành** — refactor toàn diện `src/orders/` theo pattern Rich Domain Entity + thin use-case + minimal repository port.
+  - **`order.entity.ts` — domain methods mới**: `fail(reason, updatedAt)`, `failAsExpired(reason, updatedAt)`, `reserve(totalAmount, paymentExpiresAt, reservedAt)`, `ship(shippedAt)`, `cancelWithRefund(cancelledAt)`, `startPayment(paymentUrl, expiresAt)`, `confirmPayment(paidAt)`, `failPayment(reason, failedAt)`, `refundExpiredPayment(refundedAt)`, `withAudit(actor)` — mỗi method trả instance mới (immutable). Thêm `toRecord()` để serialize `Order` instance thành plain object DynamoDB-safe (thay thế `{ ...order }` spread thủ công tại tầng infrastructure).
+  - **`order.repository.port.ts` — port mới (đơn giản hoá)**:
+    - Giữ lại CRUD cơ bản: `create`, `save`, `findById`, `findMany`, `findExpiredReserved`, `createOrderItems`, `findOrderItems`
+    - Xoá tất cả `markX` methods (`markReserved`, `markFailed`, `markShipped`, `markCancelled`, `markPaymentStarted`, `markPaymentSucceeded`, `markPaymentFailed`, `markPaymentRefunded`)
+    - Thêm 3 cross-table transaction methods: `cancelWithInventoryRelease`, `failWithInventoryRelease`, `expireWithInventoryRelease`
+  - **`dynamodb-order.repository.ts` — implementation mới**:
+    - `save(order)` dùng `PutCommand` với `Item: order.toRecord()` (full overwrite thay vì `UpdateCommand` cho từng trường)
+    - `cancelWithInventoryRelease` dùng `TransactWriteCommand` với `PutCommand` cho order (qua `toRecord()`) + `UpdateCommand` cho inventory
+    - Xoá tất cả `markX` methods tương ứng
+  - **7 use-case files đã xoá** (inlined vào use-case gọi chúng):
+    - `mark-reserved.use-case.ts` → inlined vào `reserve-order-checkout-items.use-case.ts`
+    - `mark-order-shipped.use-case.ts` → inlined vào `update-order-status.use-case.ts`
+    - `cancel-confirmed-paid-order.use-case.ts` → inlined vào `update-order-status.use-case.ts`
+    - `mark-payment-succeeded.use-case.ts` → inlined vào `reconcile-verified-gateway-result.use-case.ts`
+    - `mark-payment-failed.use-case.ts` → inlined vào `reconcile-verified-gateway-result.use-case.ts`
+    - `mark-expired-payment-refunded.use-case.ts` → inlined vào `reconcile-verified-gateway-result.use-case.ts`
+    - `fail-pending-order-and-release-reservation.use-case.ts` → inlined vào `create-order-request.use-case.ts`
+  - **Tổng use-case giảm từ 22 xuống 15** (7 xoá, 0 thêm mới).
+  - **Constructor thay đổi** của các use-case giữ lại (sau khi đã inline thêm 4 wrapper use-case, xem nhật ký 2026-10-28 bên dưới):
+    - `ReserveOrderCheckoutItemsUseCase`: `(ORDER_REPOSITORY, ReserveInventoryUseCase, FindOneProductUseCase, ConfigService)` — 4 args
+    - `CreateOrderRequestUseCase`: `(ORDER_REPOSITORY, GetOwnedCartUseCase, GetCartItemsUseCase, MarkCartExpiredUseCase, FindCustomerProfileByUsernameUseCase, ReserveOrderCheckoutItemsUseCase)` — 6 args
+    - `UpdateOrderStatusUseCase`: `(ORDER_REPOSITORY, OrderEventsPublisher)` — 2 args
+    - `TriggerPaymentUseCase`: `(ORDER_REPOSITORY, ReleaseExpiredOrderReservationUseCase, VnpayService)` — 3 args
+    - `ReconcileVerifiedGatewayResultUseCase`: `(ORDER_REPOSITORY, ReleaseExpiredOrderReservationUseCase, EmailTrackingService, SesMailService, VnpayService)` — 5 args
+    - `GetOrderEmailTrackingUseCase`: `(ORDER_REPOSITORY, EmailTrackingService)` — 2 args
+    - `ResendFailedOrderEmailUseCase`: `(ORDER_REPOSITORY, EmailTrackingService, SesMailService)` — 3 args
+    - `ReleaseExpiredOrderReservationUseCase`: `(ORDER_REPOSITORY)` — 1 arg, trả `Promise<boolean>`
+  - **3 test files viết lại hoàn toàn** để match architecture mới:
+    - `orders.use-cases.spec.ts` — xoá 7 test suite cho use-case đã xoá; `createOrderRepositoryMock()` match port mới (`save`, `cancelWithInventoryRelease`, `failWithInventoryRelease`, `expireWithInventoryRelease`); constructor args mới cho tất cả use-case còn lại
+    - `reserve-order-checkout-items.use-case.spec.ts` — 4-arg constructor; test `repository.save` với `RESERVED`/`FAILED`; test `repository.failWithInventoryRelease` khi có item đã reserve
+    - `orders.integration.spec.ts` — xoá biến/import 7 use-case đã xoá; `PutCommand` assertions thay cho `UpdateCommand` (ship/confirm-payment/trigger-payment dùng `save()` = `PutCommand`); cancel dùng `TransactWriteCommand` với `transactItems[0].Put` (orders) + `transactItems[1].Update` (inventory); `CreateOrderRequestUseCase` integration expect 3 `PutCommand` (create + createOrderItems + save reserved)
+  - Kiểm tra: `npx tsc --noEmit` — 0 lỗi.
 - 2026-10-26: **Rich Domain Model Phase D (Entity Unit Tests) hoàn thành** — tạo 6 spec file cạnh entity, mỗi file zero mocks/zero AWS SDK. Đồng thời sửa 4 lỗi TypeScript latent trong use-case (args dư thừa cho entity methods `Product.deactivate/activate/delete`, `InventoryRecord.reserve`).
   - Spec files mới: `orders/domain/order.entity.spec.ts` (41 test), `carts/domain/cart.entity.spec.ts` (7 test), `inventory/domain/inventory.entity.spec.ts` (11 test), `products/domain/product.entity.spec.ts` (11 test), `categories/domain/category.entity.spec.ts` (8 test), `mail/domain/email-tracking.entity.spec.ts` (10 test). Tổng 88 test case mới (94 sau khi Jest đếm).
   - Bug fixes trong use-cases: `reserve-inventory.use-case.ts` (`inventory.reserve(quantity)` không phải 2 args), `delete-product.use-case.ts` (`existingProduct.delete()` không phải 1 arg), `update-product.use-case.ts` (`existingProduct.deactivate()/activate()` không phải 1 arg) — các lỗi này không phát hiện được trước vì JS runtime bỏ qua extra args, chỉ `tsc` mới bắt được khi viết test.
   - **Giai đoạn 7 (Rich Domain Model) hoàn thành toàn bộ.** `tsc --noEmit`: 0 lỗi. `npx jest`: 456/456 pass.
+- 2026-10-28: **Orders module — Phase 2: inline wrapper use-cases + simplify test files (tsc clean)**
+  - Xoá thêm 4 wrapper use-case không cần thiết (không được dùng bởi controller hoặc worker trực tiếp, chỉ là bridge nội bộ): `get-order-by-id.use-case.ts`, `find-order-items.use-case.ts`, `mark-failed.use-case.ts`, `expire-reservation-and-release-inventory-if-unpaid.use-case.ts`.
+  - Các use-case gọi chúng đã được inline: `findById` thay `getOrderByIdUseCase.execute`, `findOrderItems` thay `findOrderItemsUseCase.execute`, logic `fail`/`failAsExpired` + `repository.save` thay `markFailedUseCase.execute`, `expireWithInventoryRelease` thay `expireReservationUseCase.execute`.
+  - `ReleaseExpiredOrderReservationUseCase.execute` đổi kiểu trả về từ `void` sang `boolean` để worker biết kết quả expire có thành công không.
+  - `orders-worker.service.ts` loại bỏ 4 injection wrapper use-case, inject `ORDER_REPOSITORY` trực tiếp + `ReleaseExpiredOrderReservationUseCase`; gọi `order.failAsExpired()`/`order.fail()` + `repository.save()` trực tiếp.
+  - `orders.module.ts` loại bỏ 4 provider/export tương ứng; thêm `ReleaseExpiredOrderReservationUseCase` vào exports (cần cho worker).
+  - **Test files**: xoá import và describe block của 4 use-case đã xoá; cập nhật constructor args và mock setup cho `UpdateOrderStatusUseCase`, `TriggerPaymentUseCase`, `ReconcileVerifiedGatewayResultUseCase`, `GetOrderEmailTrackingUseCase`, `ResendFailedOrderEmailUseCase` — đổi `getOrderByIdUseCase.execute.mockResolvedValue(x)` → `repository.findById.mockResolvedValue(x)` và tương tự cho `findOrderItems`.
+  - `tsc --noEmit`: 0 lỗi.
+- 2026-10-28: **Orders entity — chuyển sang mutable pattern**
+  - `Order` entity: thêm `private mutate(changes: Partial<OrderProps>): this` dùng `Object.assign(this as object, changes)` để bypass `readonly` tại runtime.
+  - 10 domain method (`reserve`, `fail`, `ship`, `cancelWithRefund`, `failAsExpired`, `startPayment`, `confirmPayment`, `failPayment`, `refundExpiredPayment`, `withAudit`) đổi từ `return new Order({...})` sang `return this.mutate({...})`, trả về `this` thay vì instance mới.
+  - 5 use-case và 1 worker loại bỏ biến trung gian (`const shippedOrder = ...`): `create-order-request`, `reserve-order-checkout-items`, `trigger-payment`, `update-order-status`, `reconcile-verified-gateway-result`, `orders-worker.service`.
+  - `order.entity.spec.ts`: cập nhật test "does not mutate" → "mutates the original order"; cập nhật mô tả `it()` từ "returns new Order" → "mutates order in place and returns it"; thêm `expect(reserved).toBe(order)` để xác nhận cùng reference.
+  - `tsc --noEmit`: 0 lỗi.
