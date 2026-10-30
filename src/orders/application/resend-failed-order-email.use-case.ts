@@ -4,6 +4,7 @@ import { EmailTrackingService } from '../../mail/email-tracking.service'
 import { EmailType } from '../../mail/mail.types'
 import { SesMailService } from '../../mail/ses-mail.service'
 import { Order, OrderItem, ResendOrderEmailResult } from '../domain/order.entity'
+import { ORDER_ITEM_REPOSITORY, OrderItemRepositoryPort } from '../domain/order-item.repository.port'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 import { normalizeEmail } from '../domain/order.rules'
 
@@ -12,6 +13,8 @@ export class ResendFailedOrderEmailUseCase {
   constructor(
     @Inject(ORDER_REPOSITORY)
     private readonly orderRepository: OrderRepositoryPort,
+    @Inject(ORDER_ITEM_REPOSITORY)
+    private readonly orderItemRepository: OrderItemRepositoryPort,
     @Inject(EmailTrackingService)
     private readonly emailTrackingService: EmailTrackingService,
     @Inject(SesMailService)
@@ -56,7 +59,7 @@ export class ResendFailedOrderEmailUseCase {
       }
     }
 
-    const items = await this.orderRepository.findOrderItems(orderId)
+    const items = await this.orderItemRepository.findByOrderId(orderId)
     const recipientEmails = [normalizedRecipientEmail]
     const result = await this.resendOrderEmailByType({
       order,

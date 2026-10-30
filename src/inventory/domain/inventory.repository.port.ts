@@ -2,6 +2,8 @@ import { AuditMutationContext } from '../../audit/audit-actor'
 import { ProductStatus } from '../../products/domain/product-status.enum'
 import { InventoryRecord, InventorySummary, ReservedInventoryItem } from './inventory.entity'
 
+export type InventoryReleaseItem = { productId: string; quantity: number }
+
 export const INVENTORY_REPOSITORY = Symbol('INVENTORY_REPOSITORY')
 
 export interface InventoryFilters {

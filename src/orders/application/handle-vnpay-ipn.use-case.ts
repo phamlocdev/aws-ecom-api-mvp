@@ -1,15 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { IpnFailChecksum, type IpnResponse, type VerifyIpnCall } from 'vnpay'
 import { VnpayService } from '../infrastructure/vnpay.service'
-import { ReconcileVerifiedGatewayResultUseCase } from './reconcile-verified-gateway-result.use-case'
+import { VnpayReconcileService } from './vnpay-reconcile.service'
 
 @Injectable()
 export class HandleVnpayIpnUseCase {
   constructor(
     @Inject(VnpayService)
     private readonly vnpayService: VnpayService,
-    @Inject(ReconcileVerifiedGatewayResultUseCase)
-    private readonly reconcileVerifiedGatewayResultUseCase: ReconcileVerifiedGatewayResultUseCase,
+    @Inject(VnpayReconcileService)
+    private readonly vnpayReconcileService: VnpayReconcileService,
   ) {}
 
   async execute(query: Record<string, string>): Promise<IpnResponse> {
@@ -25,6 +25,6 @@ export class HandleVnpayIpnUseCase {
       return IpnFailChecksum
     }
 
-    return this.reconcileVerifiedGatewayResultUseCase.execute(verify, 'ipn')
+    return this.vnpayReconcileService.execute(verify, 'ipn')
   }
 }

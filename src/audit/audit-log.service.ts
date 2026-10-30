@@ -4,6 +4,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { AttributeValue } from '@aws-sdk/client-dynamodb'
 import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda'
 import { InvalidInputError } from '../common/domain-error'
+import { isConditionalCheckFailure } from '../common/dynamodb-errors'
 import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import {
@@ -683,14 +684,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isConditionalCheckFailure(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    error.name === 'ConditionalCheckFailedException'
-  )
-}
 
 function encodeCursor(value: Record<string, unknown> | undefined): string | null {
   if (!value) {

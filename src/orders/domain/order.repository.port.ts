@@ -1,6 +1,5 @@
-import { AuditMutationContext } from '../../audit/audit-actor'
-import { ReservedInventoryItem } from '../../inventory/domain/inventory.entity'
-import { Order, OrderItem } from './order.entity'
+import { TransactItem } from '../../common/transact-item.type'
+import { Order } from './order.entity'
 import { OrderStatus } from './order-status.enum'
 
 export const ORDER_REPOSITORY = Symbol('ORDER_REPOSITORY')
@@ -29,10 +28,6 @@ export interface OrderRepositoryPort {
   /** Full overwrite — persists all fields from order.toRecord(). */
   save(order: Order): Promise<void>
 
-  createOrderItems(items: OrderItem[]): Promise<void>
-
-  findOrderItems(orderId: string): Promise<OrderItem[]>
-
   /** Returns null if the order does not exist. */
   findById(orderId: string): Promise<Order | null>
 
@@ -49,34 +44,8 @@ export interface OrderRepositoryPort {
   ): Promise<OrderPage>
 
   /**
-   * Atomically cancels the order and releases inventory items.
-   * Throws ConflictError if inventory release conditions fail.
+   * Executes a multi-table DynamoDB transaction.
+   * Throws ConflictError when any condition expression fails.
    */
-  cancelWithInventoryRelease(
-    order: Order,
-    cancelledAt: string,
-    inventoryItems: ReservedInventoryItem[],
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  /**
-   * Atomically marks the order FAILED and releases inventory items in a
-   * single DynamoDB transaction.
-   */
-  failWithInventoryRelease(
-    orderId: string,
-    failureReason: string,
-    items: ReservedInventoryItem[],
-    actor: AuditMutationContext,
-  ): Promise<void>
-
-  /**
-   * Returns false (instead of throwing) when the inventory conditions
-   * no longer match, since this is a best-effort sweep operation.
-   */
-  expireWithInventoryRelease(
-    order: Order,
-    items: ReservedInventoryItem[],
-    actor: AuditMutationContext,
-  ): Promise<boolean>
+  executeTransaction(items: TransactItem[]): Promise<void>
 }

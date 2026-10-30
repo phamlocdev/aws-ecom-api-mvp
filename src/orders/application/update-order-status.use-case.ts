@@ -2,9 +2,15 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { buildUserAuditMutationContext } from '../../audit/audit-actor'
 import { AuthenticatedUser } from '../../auth/auth.types'
 import { InvalidInputError, NotFoundError } from '../../common/domain-error'
+import { DynamoTablesService } from '../../config/dynamo-tables.service'
+import { INVENTORY_REPOSITORY, InventoryRepositoryPort } from '../../inventory/domain/inventory.repository.port'
+import { buildInventoryReleaseTransactItems } from '../../inventory/infrastructure/inventory-transact-items'
 import { Order } from '../domain/order.entity'
+import { ORDER_ITEM_REPOSITORY, OrderItemRepositoryPort } from '../domain/order-item.repository.port'
 import { OrderStatus } from '../domain/order-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
+import { aggregateReservedQuantities } from '../domain/order.rules'
+import { buildOrderCancelTransactItem } from '../infrastructure/order-transact-items'
 import { OrderEventsPublisher } from '../infrastructure/order-events.publisher'
 
 @Injectable()
@@ -14,6 +20,12 @@ export class UpdateOrderStatusUseCase {
   constructor(
     @Inject(ORDER_REPOSITORY)
     private readonly orderRepository: OrderRepositoryPort,
+    @Inject(ORDER_ITEM_REPOSITORY)
+    private readonly orderItemRepository: OrderItemRepositoryPort,
+    @Inject(INVENTORY_REPOSITORY)
+    private readonly inventoryRepository: InventoryRepositoryPort,
+    @Inject(DynamoTablesService)
+    private readonly dynamoTables: DynamoTablesService,
     @Inject(OrderEventsPublisher)
     private readonly orderEventsPublisher: OrderEventsPublisher,
   ) {}
@@ -53,9 +65,8 @@ export class UpdateOrderStatusUseCase {
     }
 
     const shippedAt = new Date().toISOString()
-    order.ship(shippedAt)
-    order.withAudit(actor)
-    await this.orderRepository.save(order)
+    const shipped = order.ship(shippedAt).withAudit(actor)
+    await this.orderRepository.save(shipped)
 
     const updatedOrder = await this.getOrderOrThrow(orderId)
     try {
@@ -87,13 +98,22 @@ export class UpdateOrderStatusUseCase {
       throw new InvalidInputError('Only paid confirmed orders can be cancelled.')
     }
 
-    const items = await this.orderRepository.findOrderItems(order.orderId)
-    const inventoryItems = items.map((item) => ({ productId: item.productId, quantity: item.quantity }))
+    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const aggregatedItems = aggregateReservedQuantities(
+      items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+    )
 
     const cancelledAt = new Date().toISOString()
-    order.cancelWithRefund(cancelledAt)
-    order.withAudit(actor)
-    await this.orderRepository.cancelWithInventoryRelease(order, cancelledAt, inventoryItems, actor)
+    const inventoryTransactItems = buildInventoryReleaseTransactItems(
+      this.dynamoTables.inventory,
+      aggregatedItems,
+      cancelledAt,
+      actor,
+    )
+
+    const cancelled = order.cancelWithRefund(cancelledAt).withAudit(actor)
+    const orderTransactItem = buildOrderCancelTransactItem(this.dynamoTables.orders, cancelled)
+    await this.orderRepository.executeTransaction([orderTransactItem, ...inventoryTransactItems])
 
     const updatedOrder = await this.getOrderOrThrow(orderId)
     try {

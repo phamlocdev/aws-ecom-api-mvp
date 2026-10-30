@@ -3,6 +3,7 @@ import { AuthenticatedUser } from '../../auth/auth.types'
 import { Role } from '../../auth/roles.enum'
 import { ForbiddenDomainError, NotFoundError } from '../../common/domain-error'
 import { OrderDetails } from '../domain/order.entity'
+import { ORDER_ITEM_REPOSITORY, OrderItemRepositoryPort } from '../domain/order-item.repository.port'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
 
 @Injectable()
@@ -10,6 +11,8 @@ export class FindOneOrderUseCase {
   constructor(
     @Inject(ORDER_REPOSITORY)
     private readonly orderRepository: OrderRepositoryPort,
+    @Inject(ORDER_ITEM_REPOSITORY)
+    private readonly orderItemRepository: OrderItemRepositoryPort,
   ) {}
 
   async execute(user: AuthenticatedUser, orderId: string): Promise<OrderDetails> {
@@ -23,7 +26,7 @@ export class FindOneOrderUseCase {
       throw new ForbiddenDomainError('You do not have access to this order.')
     }
 
-    const items = await this.orderRepository.findOrderItems(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.orderId)
     return Object.assign(order, { items })
   }
 }

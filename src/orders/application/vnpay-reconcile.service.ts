@@ -10,15 +10,19 @@ import {
 } from 'vnpay'
 import { systemAuditMutationContext } from '../../audit/audit-actor'
 import { ConflictError } from '../../common/domain-error'
+import { DynamoTablesService } from '../../config/dynamo-tables.service'
+import { buildInventoryReleaseTransactItems } from '../../inventory/infrastructure/inventory-transact-items'
 import { EmailTrackingService } from '../../mail/email-tracking.service'
 import { SesMailService } from '../../mail/ses-mail.service'
 import { Order } from '../domain/order.entity'
+import { ORDER_ITEM_REPOSITORY, OrderItemRepositoryPort } from '../domain/order-item.repository.port'
 import { OrderStatus } from '../domain/order-status.enum'
 import { PaymentStatus } from '../domain/payment-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../domain/order.repository.port'
+import { aggregateReservedQuantities } from '../domain/order.rules'
+import { buildOrderExpireTransactItem } from '../infrastructure/order-transact-items'
 import { VnpayService } from '../infrastructure/vnpay.service'
 import { buildAutoRefundReason, buildPaymentOrderInfo } from './vnpay-order-info.util'
-import { ReleaseExpiredOrderReservationUseCase } from './release-expired-order-reservation.use-case'
 
 const AUTO_REFUND_CREATE_BY = 'system-auto-refund'
 const AUTO_REFUND_REASON =
@@ -29,14 +33,16 @@ const ORDER_CONFIRMATION_EMAIL_SKIPPED = 'SKIPPED'
 export type GatewayReconcileSource = 'ipn' | 'return'
 
 @Injectable()
-export class ReconcileVerifiedGatewayResultUseCase {
-  private readonly logger = new Logger(ReconcileVerifiedGatewayResultUseCase.name)
+export class VnpayReconcileService {
+  private readonly logger = new Logger(VnpayReconcileService.name)
 
   constructor(
     @Inject(ORDER_REPOSITORY)
     private readonly orderRepository: OrderRepositoryPort,
-    @Inject(ReleaseExpiredOrderReservationUseCase)
-    private readonly releaseExpiredOrderReservationUseCase: ReleaseExpiredOrderReservationUseCase,
+    @Inject(ORDER_ITEM_REPOSITORY)
+    private readonly orderItemRepository: OrderItemRepositoryPort,
+    @Inject(DynamoTablesService)
+    private readonly dynamoTables: DynamoTablesService,
     @Inject(EmailTrackingService)
     private readonly emailTrackingService: EmailTrackingService,
     @Inject(SesMailService)
@@ -77,7 +83,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
     }
 
     if (order.isPaymentExpired()) {
-      await this.releaseExpiredOrderReservationUseCase.execute(order)
+      await this.releaseExpiredReservation(order)
       const latestFound = await this.orderRepository.findById(orderId)
       const latestOrder = latestFound ?? order
       const latePaymentResult = await this.handleLatePaymentSuccess(latestOrder, verify, source)
@@ -103,9 +109,8 @@ export class ReconcileVerifiedGatewayResultUseCase {
 
     try {
       const paidAt = new Date().toISOString()
-      order.confirmPayment(order.paymentAttemptId, transactionId, paidAt)
-      order.withAudit(actor)
-      await this.orderRepository.save(order)
+      const confirmed = order.confirmPayment(order.paymentAttemptId, transactionId, paidAt).withAudit(actor)
+      await this.orderRepository.save(confirmed)
       await this.sendOrderConfirmationEmailBestEffortByOrderId(orderId)
       this.logger.log(`VNPay ${source} confirmed payment for order ${orderId}.`)
       return IpnSuccess
@@ -146,9 +151,8 @@ export class ReconcileVerifiedGatewayResultUseCase {
     )
 
     try {
-      order.failPayment(order.paymentAttemptId, failureReason)
-      order.withAudit(actor)
-      await this.orderRepository.save(order)
+      const failed = order.failPayment(order.paymentAttemptId, failureReason).withAudit(actor)
+      await this.orderRepository.save(failed)
       return IpnSuccess
     } catch (error) {
       if (error instanceof ConflictError) {
@@ -217,9 +221,8 @@ export class ReconcileVerifiedGatewayResultUseCase {
         source === 'ipn' ? 'payment-ipn' : 'payment-return',
         autoRefundReason,
       )
-      order.refundExpiredPayment(String(verify.vnp_TransactionNo), autoRefundReason)
-      order.withAudit(actor)
-      await this.orderRepository.save(order)
+      const refunded = order.refundExpiredPayment(String(verify.vnp_TransactionNo), autoRefundReason).withAudit(actor)
+      await this.orderRepository.save(refunded)
       return IpnSuccess
     } catch (error) {
       this.logger.error(
@@ -248,7 +251,7 @@ export class ReconcileVerifiedGatewayResultUseCase {
     }
 
     try {
-      const items = await this.orderRepository.findOrderItems(order.orderId)
+      const items = await this.orderItemRepository.findByOrderId(order.orderId)
       const result = await this.sesMailService.sendOrderConfirmationEmail({ order, items })
 
       if (result.status === ORDER_CONFIRMATION_EMAIL_SKIPPED) {
@@ -265,6 +268,33 @@ export class ReconcileVerifiedGatewayResultUseCase {
         `Unexpected failure while processing order confirmation email for ${order.orderId}.`,
         error,
       )
+    }
+  }
+
+  private async releaseExpiredReservation(order: Order): Promise<void> {
+    if (!order.canExpireReservation()) return
+
+    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    if (items.length === 0) return
+
+    const timestamp = new Date().toISOString()
+    const actor = systemAuditMutationContext('payment-reconcile', 'Payment expired')
+    const aggregatedItems = aggregateReservedQuantities(
+      items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+    )
+    const inventoryTransactItems = buildInventoryReleaseTransactItems(
+      this.dynamoTables.inventory,
+      aggregatedItems,
+      timestamp,
+      actor,
+    )
+    const orderTransactItem = buildOrderExpireTransactItem(this.dynamoTables.orders, order, actor)
+    if (!orderTransactItem) return
+
+    try {
+      await this.orderRepository.executeTransaction([orderTransactItem, ...inventoryTransactItems])
+    } catch (error) {
+      if (!(error instanceof ConflictError)) throw error
     }
   }
 }

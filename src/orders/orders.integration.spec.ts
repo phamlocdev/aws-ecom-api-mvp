@@ -18,22 +18,21 @@ import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
 import { Role } from '../auth/roles.enum'
 import { AuthenticatedUser } from '../auth/auth.types'
+import { CartRepositoryPort } from '../carts/domain/cart.repository.port'
 import { CartStatus } from '../carts/domain/cart-status.enum'
 import { Cart, CartItem } from '../carts/domain/cart.entity'
-import { GetOwnedCartUseCase } from '../carts/application/get-owned-cart.use-case'
-import { GetCartItemsUseCase } from '../carts/application/get-cart-items.use-case'
-import { MarkCartExpiredUseCase } from '../carts/application/mark-cart-expired.use-case'
-import { ReserveInventoryUseCase } from '../inventory/application/reserve-inventory.use-case'
+import { InventoryRepositoryPort } from '../inventory/domain/inventory.repository.port'
 import { EmailTrackingService } from '../mail/email-tracking.service'
 import { SesMailService } from '../mail/ses-mail.service'
-import { FindOneProductUseCase } from '../products/application/find-one-product.use-case'
+import { ProductRepositoryPort } from '../products/domain/product.repository.port'
 import { Product } from '../products/domain/product.entity'
 import { ProductStatus } from '../products/domain/product-status.enum'
-import { FindCustomerProfileByUsernameUseCase } from '../users/application/find-customer-profile-by-username.use-case'
+import { CognitoUserPort } from '../users/domain/cognito-user.port'
 import { OrderStatus } from './domain/order-status.enum'
 import { PaymentStatus } from './domain/payment-status.enum'
 import { Order, OrderItem } from './domain/order.entity'
 import { OrderRepositoryPort } from './domain/order.repository.port'
+import { DynamoDbOrderItemRepository } from './infrastructure/dynamodb-order-item.repository'
 import { DynamoDbOrderRepository } from './infrastructure/dynamodb-order.repository'
 import { OrderEventsPublisher } from './infrastructure/order-events.publisher'
 import { VnpayService } from './infrastructure/vnpay.service'
@@ -45,7 +44,7 @@ import { GetOrderEmailStatisticsUseCase } from './application/get-order-email-st
 import { GetOrderEmailTrackingUseCase } from './application/get-order-email-tracking.use-case'
 import { HandleVnpayIpnUseCase } from './application/handle-vnpay-ipn.use-case'
 import { HandleVnpayReturnUseCase } from './application/handle-vnpay-return.use-case'
-import { ReconcileVerifiedGatewayResultUseCase } from './application/reconcile-verified-gateway-result.use-case'
+import { VnpayReconcileService } from './application/vnpay-reconcile.service'
 import { ReleaseExpiredOrderReservationUseCase } from './application/release-expired-order-reservation.use-case'
 import { ResendFailedOrderEmailUseCase } from './application/resend-failed-order-email.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from './application/reserve-order-checkout-items.use-case'
@@ -62,14 +61,10 @@ describe('orders use-cases (integration)', () => {
   const ddbMock = mockClient(DynamoDBDocumentClient)
   let repository: OrderRepositoryPort
 
-  let getOwnedCartUseCase: jest.Mocked<Pick<GetOwnedCartUseCase, 'execute'>>
-  let getCartItemsUseCase: jest.Mocked<Pick<GetCartItemsUseCase, 'execute'>>
-  let markCartExpiredUseCase: jest.Mocked<Pick<MarkCartExpiredUseCase, 'execute'>>
-  let reserveInventoryUseCase: jest.Mocked<Pick<ReserveInventoryUseCase, 'execute'>>
-  let findOneProductUseCase: jest.Mocked<Pick<FindOneProductUseCase, 'execute'>>
-  let findCustomerProfileByUsernameUseCase: jest.Mocked<
-    Pick<FindCustomerProfileByUsernameUseCase, 'execute'>
-  >
+  let cartRepository: jest.Mocked<CartRepositoryPort>
+  let inventoryRepository: jest.Mocked<InventoryRepositoryPort>
+  let productRepository: jest.Mocked<ProductRepositoryPort>
+  let cognitoUserRepository: jest.Mocked<CognitoUserPort>
   let emailTrackingService: jest.Mocked<
     Pick<
       EmailTrackingService,
@@ -111,7 +106,7 @@ describe('orders use-cases (integration)', () => {
   let reserveOrderCheckoutItemsUseCase: ReserveOrderCheckoutItemsUseCase
   let updateOrderStatusUseCase: UpdateOrderStatusUseCase
   let triggerPaymentUseCase: TriggerPaymentUseCase
-  let reconcileVerifiedGatewayResultUseCase: ReconcileVerifiedGatewayResultUseCase
+  let vnpayReconcileService: VnpayReconcileService
   let handleVnpayReturnUseCase: HandleVnpayReturnUseCase
   let handleVnpayIpnUseCase: HandleVnpayIpnUseCase
   let getOrderEmailStatisticsUseCase: GetOrderEmailStatisticsUseCase
@@ -211,13 +206,53 @@ describe('orders use-cases (integration)', () => {
     } as unknown as DynamoTablesService
 
     repository = new DynamoDbOrderRepository(dynamoDbService, dynamoTables)
+    const orderItemRepository = new DynamoDbOrderItemRepository(dynamoDbService, dynamoTables)
 
-    getOwnedCartUseCase = { execute: jest.fn() }
-    getCartItemsUseCase = { execute: jest.fn() }
-    markCartExpiredUseCase = { execute: jest.fn().mockResolvedValue(undefined) }
-    reserveInventoryUseCase = { execute: jest.fn().mockResolvedValue(undefined) }
-    findOneProductUseCase = { execute: jest.fn() }
-    findCustomerProfileByUsernameUseCase = { execute: jest.fn() }
+    cartRepository = {
+      create: jest.fn(),
+      findAllByCustomer: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(activeCart),
+      findItems: jest.fn().mockResolvedValue([]),
+      putItem: jest.fn(),
+      updateItemQuantity: jest.fn(),
+      removeItem: jest.fn(),
+      updateStatus: jest.fn().mockResolvedValue(undefined),
+    }
+
+    inventoryRepository = {
+      ensureRecord: jest.fn(),
+      findOne: jest.fn(),
+      findOneSummary: jest.fn(),
+      findSummariesByProductIds: jest.fn(),
+      findAllSummaries: jest.fn(),
+      updateAvailableQuantity: jest.fn(),
+      reserve: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn(),
+    }
+
+    productRepository = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+      remove: jest.fn(),
+    }
+
+    cognitoUserRepository = {
+      listAllUsers: jest.fn(),
+      getUserGroups: jest.fn(),
+      getUserByUsername: jest.fn().mockResolvedValue({
+        username: customerUser.username,
+        attributes: { email: customerUser.email, name: customerUser.name },
+      }),
+      createUser: jest.fn(),
+      addUserToGroup: jest.fn(),
+      updateUserAttributes: jest.fn(),
+      enableUser: jest.fn(),
+      disableUser: jest.fn(),
+      setUserPassword: jest.fn(),
+      findUserByEmail: jest.fn(),
+    }
     emailTrackingService = {
       getStatistics: jest.fn(),
       findByContext: jest.fn(),
@@ -250,51 +285,65 @@ describe('orders use-cases (integration)', () => {
     } as unknown as ConfigService
 
     findOrdersUseCase = new FindOrdersUseCase(repository)
-    findOneOrderUseCase = new FindOneOrderUseCase(repository)
+    findOneOrderUseCase = new FindOneOrderUseCase(repository, orderItemRepository)
     findExpiredReservedOrdersUseCase = new FindExpiredReservedOrdersUseCase(repository)
-    releaseExpiredOrderReservationUseCase = new ReleaseExpiredOrderReservationUseCase(repository)
+    releaseExpiredOrderReservationUseCase = new ReleaseExpiredOrderReservationUseCase(
+      repository,
+      orderItemRepository,
+      inventoryRepository,
+      dynamoTables,
+    )
 
     reserveOrderCheckoutItemsUseCase = new ReserveOrderCheckoutItemsUseCase(
       repository,
-      reserveInventoryUseCase as unknown as ReserveInventoryUseCase,
-      findOneProductUseCase as unknown as FindOneProductUseCase,
+      orderItemRepository,
+      inventoryRepository,
+      productRepository,
+      dynamoTables,
       configService,
     )
 
     createOrderRequestUseCase = new CreateOrderRequestUseCase(
       repository,
-      getOwnedCartUseCase as unknown as GetOwnedCartUseCase,
-      getCartItemsUseCase as unknown as GetCartItemsUseCase,
-      markCartExpiredUseCase as unknown as MarkCartExpiredUseCase,
-      findCustomerProfileByUsernameUseCase as unknown as FindCustomerProfileByUsernameUseCase,
-      reserveOrderCheckoutItemsUseCase,
+      orderItemRepository,
+      cartRepository,
+      inventoryRepository,
+      productRepository,
+      cognitoUserRepository,
+      dynamoTables,
+      configService,
     )
 
     updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
       repository,
+      orderItemRepository,
+      inventoryRepository,
+      dynamoTables,
       orderEventsPublisher,
     )
 
     triggerPaymentUseCase = new TriggerPaymentUseCase(
       repository,
-      releaseExpiredOrderReservationUseCase,
+      orderItemRepository,
+      dynamoTables,
       vnpayService as unknown as VnpayService,
     )
 
-    reconcileVerifiedGatewayResultUseCase = new ReconcileVerifiedGatewayResultUseCase(
+    vnpayReconcileService = new VnpayReconcileService(
       repository,
-      releaseExpiredOrderReservationUseCase,
+      orderItemRepository,
+      dynamoTables,
       emailTrackingService as unknown as EmailTrackingService,
       sesMailService as unknown as SesMailService,
       vnpayService as unknown as VnpayService,
     )
     handleVnpayReturnUseCase = new HandleVnpayReturnUseCase(
       vnpayService as unknown as VnpayService,
-      reconcileVerifiedGatewayResultUseCase,
+      vnpayReconcileService,
     )
     handleVnpayIpnUseCase = new HandleVnpayIpnUseCase(
       vnpayService as unknown as VnpayService,
-      reconcileVerifiedGatewayResultUseCase,
+      vnpayReconcileService,
     )
 
     getOrderEmailStatisticsUseCase = new GetOrderEmailStatisticsUseCase(
@@ -306,6 +355,7 @@ describe('orders use-cases (integration)', () => {
     )
     resendFailedOrderEmailUseCase = new ResendFailedOrderEmailUseCase(
       repository,
+      orderItemRepository,
       emailTrackingService as unknown as EmailTrackingService,
       sesMailService as unknown as SesMailService,
     )
@@ -313,7 +363,7 @@ describe('orders use-cases (integration)', () => {
 
   describe('CreateOrderRequestUseCase', () => {
     it('throws InvalidInputError when the cart has expired, without writing anything', async () => {
-      getOwnedCartUseCase.execute.mockResolvedValue(
+      cartRepository.findOne.mockResolvedValue(
         Cart.fromRecord({ ...activeCart, status: CartStatus.EXPIRED }),
       )
 
@@ -324,11 +374,12 @@ describe('orders use-cases (integration)', () => {
     })
 
     it('creates the order, reserves inventory, writes order items and saves the order as RESERVED', async () => {
-      getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
-      getCartItemsUseCase.execute.mockResolvedValue([cartItem])
-      findOneProductUseCase.execute.mockResolvedValue(product)
+      cartRepository.findItems.mockResolvedValue([cartItem])
+      productRepository.findOne.mockResolvedValue(product)
       ddbMock.on(PutCommand).resolves({})
-      ddbMock.on(GetCommand).resolves({ Item: { ...reservedOrder, status: OrderStatus.RESERVED } })
+      ddbMock.on(GetCommand)
+        .resolvesOnce({ Item: { ...reservedOrder, status: OrderStatus.PENDING } })
+        .resolves({ Item: { ...reservedOrder, status: OrderStatus.RESERVED } })
 
       const order = await createOrderRequestUseCase.execute(customerUser, {
         cartId: activeCart.cartId,
@@ -351,17 +402,22 @@ describe('orders use-cases (integration)', () => {
         totalAmount: 200000,
       })
 
-      expect(reserveInventoryUseCase.execute).toHaveBeenCalledWith(
+      expect(inventoryRepository.reserve).toHaveBeenCalledWith(
         cartItem.productId,
         cartItem.quantity,
+        expect.objectContaining({ actorType: 'system' }),
       )
-      expect(markCartExpiredUseCase.execute).toHaveBeenCalledWith(activeCart)
+      expect(cartRepository.updateStatus).toHaveBeenCalledWith(
+        activeCart.customerId,
+        activeCart.cartId,
+        CartStatus.EXPIRED,
+        expect.any(String),
+      )
       expect(order.status).toBe(OrderStatus.RESERVED)
     })
 
     it('marks the order FAILED when the cart has no items', async () => {
-      getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
-      getCartItemsUseCase.execute.mockResolvedValue([])
+      cartRepository.findItems.mockResolvedValue([])
       ddbMock.on(PutCommand).resolves({})
 
       const order = await createOrderRequestUseCase.execute(customerUser, {
@@ -378,10 +434,9 @@ describe('orders use-cases (integration)', () => {
 
     it('releases reserved inventory and rethrows when a later item fails to reserve', async () => {
       const secondCartItem: CartItem = { ...cartItem, productId: 'p2' }
-      getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
-      getCartItemsUseCase.execute.mockResolvedValue([cartItem, secondCartItem])
-      findOneProductUseCase.execute.mockResolvedValue(product)
-      reserveInventoryUseCase.execute
+      cartRepository.findItems.mockResolvedValue([cartItem, secondCartItem])
+      productRepository.findOne.mockResolvedValue(product)
+      inventoryRepository.reserve
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Insufficient inventory for product p2.'))
       ddbMock.on(PutCommand).resolves({})
@@ -396,7 +451,7 @@ describe('orders use-cases (integration)', () => {
       const transactItems = transactCalls[0].args[0].input.TransactItems ?? []
       expect(transactItems[0].Update?.TableName).toBe('orders-test')
       expect(transactItems[1].Update?.TableName).toBe('inventory-test')
-      expect(markCartExpiredUseCase.execute).not.toHaveBeenCalled()
+      expect(cartRepository.updateStatus).not.toHaveBeenCalled()
     })
   })
 
@@ -596,7 +651,7 @@ describe('orders use-cases (integration)', () => {
     })
   })
 
-  describe('ReconcileVerifiedGatewayResultUseCase (via HandleVnpayIpnUseCase)', () => {
+  describe('VnpayReconcileService (via HandleVnpayIpnUseCase)', () => {
     const verify: VerifyIpnCall = {
       isSuccess: true,
       isVerified: true,
@@ -668,12 +723,17 @@ describe('orders use-cases (integration)', () => {
   })
 
   describe('ReleaseExpiredOrderReservationUseCase (expireWithInventoryRelease)', () => {
+    const expiredReservedOrder = Order.fromRecord({
+      ...reservedOrder,
+      paymentExpiresAt: Math.floor(Date.now() / 1000) - 10,
+    })
+
     it('releases inventory for an expired reservation in one transaction', async () => {
       ddbMock.on(GetCommand).resolves({ Item: reservedOrderItem })
       ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
       ddbMock.on(TransactWriteCommand).resolves({})
 
-      const released = await releaseExpiredOrderReservationUseCase.execute(reservedOrder)
+      const released = await releaseExpiredOrderReservationUseCase.execute(expiredReservedOrder)
 
       expect(released).toBe(true)
       expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1)
@@ -685,7 +745,7 @@ describe('orders use-cases (integration)', () => {
         .on(TransactWriteCommand)
         .rejects(Object.assign(new Error('cancelled'), { name: 'TransactionCanceledException' }))
 
-      const released = await releaseExpiredOrderReservationUseCase.execute(reservedOrder)
+      const released = await releaseExpiredOrderReservationUseCase.execute(expiredReservedOrder)
 
       expect(released).toBe(false)
     })

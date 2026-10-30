@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { VnpayReturnResult } from '../domain/order.entity'
 import { VnpayService } from '../infrastructure/vnpay.service'
-import { ReconcileVerifiedGatewayResultUseCase } from './reconcile-verified-gateway-result.use-case'
+import { VnpayReconcileService } from './vnpay-reconcile.service'
 
 @Injectable()
 export class HandleVnpayReturnUseCase {
@@ -10,8 +10,8 @@ export class HandleVnpayReturnUseCase {
   constructor(
     @Inject(VnpayService)
     private readonly vnpayService: VnpayService,
-    @Inject(ReconcileVerifiedGatewayResultUseCase)
-    private readonly reconcileVerifiedGatewayResultUseCase: ReconcileVerifiedGatewayResultUseCase,
+    @Inject(VnpayReconcileService)
+    private readonly vnpayReconcileService: VnpayReconcileService,
   ) {}
 
   async execute(query: Record<string, string>): Promise<VnpayReturnResult> {
@@ -19,7 +19,7 @@ export class HandleVnpayReturnUseCase {
       const verify = await this.vnpayService.verifyReturnQuery(query)
       if (verify.isVerified) {
         try {
-          await this.reconcileVerifiedGatewayResultUseCase.execute(verify, 'return')
+          await this.vnpayReconcileService.execute(verify, 'return')
         } catch (error) {
           this.logger.error(
             `Failed to reconcile VNPay return for order ${verify.vnp_TxnRef}.`,

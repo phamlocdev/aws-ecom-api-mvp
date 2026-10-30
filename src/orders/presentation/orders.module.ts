@@ -4,7 +4,9 @@ import { InventoryModule } from '../../inventory/presentation/inventory.module'
 import { MailModule } from '../../mail/mail.module'
 import { ProductsModule } from '../../products/presentation/products.module'
 import { UsersModule } from '../../users/presentation/users.module'
+import { ORDER_ITEM_REPOSITORY } from '../domain/order-item.repository.port'
 import { ORDER_REPOSITORY } from '../domain/order.repository.port'
+import { DynamoDbOrderItemRepository } from '../infrastructure/dynamodb-order-item.repository'
 import { DynamoDbOrderRepository } from '../infrastructure/dynamodb-order.repository'
 import { OrderEventsPublisher } from '../infrastructure/order-events.publisher'
 import { OrdersQueueService } from '../infrastructure/orders-queue.service'
@@ -17,7 +19,7 @@ import { GetOrderEmailStatisticsUseCase } from '../application/get-order-email-s
 import { GetOrderEmailTrackingUseCase } from '../application/get-order-email-tracking.use-case'
 import { HandleVnpayIpnUseCase } from '../application/handle-vnpay-ipn.use-case'
 import { HandleVnpayReturnUseCase } from '../application/handle-vnpay-return.use-case'
-import { ReconcileVerifiedGatewayResultUseCase } from '../application/reconcile-verified-gateway-result.use-case'
+import { VnpayReconcileService } from '../application/vnpay-reconcile.service'
 import { ReleaseExpiredOrderReservationUseCase } from '../application/release-expired-order-reservation.use-case'
 import { ResendFailedOrderEmailUseCase } from '../application/resend-failed-order-email.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from '../application/reserve-order-checkout-items.use-case'
@@ -31,6 +33,7 @@ import { PaymentsController } from './payments.controller'
   controllers: [OrdersController, PaymentsController],
   providers: [
     { provide: ORDER_REPOSITORY, useClass: DynamoDbOrderRepository },
+    { provide: ORDER_ITEM_REPOSITORY, useClass: DynamoDbOrderItemRepository },
     OrderEventsPublisher,
     OrdersQueueService,
     VnpayService,
@@ -42,7 +45,7 @@ import { PaymentsController } from './payments.controller'
     GetOrderEmailTrackingUseCase,
     HandleVnpayIpnUseCase,
     HandleVnpayReturnUseCase,
-    ReconcileVerifiedGatewayResultUseCase,
+    VnpayReconcileService,
     ReleaseExpiredOrderReservationUseCase,
     ResendFailedOrderEmailUseCase,
     ReserveOrderCheckoutItemsUseCase,

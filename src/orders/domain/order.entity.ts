@@ -6,6 +6,9 @@ import type { EmailType } from '../../mail/mail.types'
 import { normalizeAdditionalReceivingEmails, toEpochSeconds } from './order.rules'
 import { InvalidInputError } from '../../common/domain-error'
 import type { AuditMutationContext } from '../../audit/audit-actor'
+import { BaseEntity } from '../../common/base.entity'
+import { OrderItem } from './order-item.entity'
+export { OrderItem, type CreateOrderItemData } from './order-item.entity'
 
 export const ORDERS_ENTITY_TYPE = 'ORDER'
 
@@ -37,18 +40,6 @@ const OrderPropsSchema = z.object({
   lastModifiedById: z.string().optional(),
   lastModifiedByEmail: z.string().optional(),
   lastModifiedReason: z.string().optional(),
-})
-
-const OrderItemPropsSchema = z.object({
-  orderId: z.string(),
-  lineId: z.string(),
-  productId: z.string(),
-  productName: z.string(),
-  imageUrl: z.string().optional(),
-  unitPrice: z.number(),
-  quantity: z.number(),
-  lineTotal: z.number(),
-  createdAt: z.string(),
 })
 
 type OrderProps = {
@@ -93,19 +84,7 @@ export type CreateOrderData = {
   lastModifiedReason?: string
 }
 
-export type CreateOrderItemData = {
-  orderId: string
-  lineId: string
-  productId: string
-  productName: string
-  imageUrl?: string
-  unitPrice: number
-  quantity: number
-  lineTotal: number
-  createdAt: string
-}
-
-export class Order {
+export class Order extends BaseEntity<OrderProps> {
   readonly orderId!: string
   readonly customerId!: string
   readonly customerEmail?: string
@@ -121,25 +100,16 @@ export class Order {
   readonly paidAt?: string
   readonly paymentTransactionId?: string
   readonly paymentFailureReason?: string
-  readonly createdAt!: string
-  readonly updatedAt!: string
   readonly shippedAt?: string
   readonly cancelledAt?: string
   readonly reservedAt?: string
   readonly paymentExpiresAt?: number
   readonly failureReason?: string
   readonly totalAmount?: number
-  readonly lastModifiedByType?: string
-  readonly lastModifiedById?: string
-  readonly lastModifiedByEmail?: string
-  readonly lastModifiedReason?: string
 
   private constructor(props: OrderProps) {
+    super()
     Object.assign(this, props)
-  }
-
-  private mutate(changes: Partial<OrderProps>): void {
-    Object.assign(this as object, changes)
   }
 
   toRecord(): Record<string, unknown> {
@@ -257,42 +227,48 @@ export class Order {
 
   // --- State transition methods (validate → mutate this → return this for chaining) ---
 
-  reserve(totalAmount: number, paymentExpiresAt: number, reservedAt: string): void {
+  reserve(totalAmount: number, paymentExpiresAt: number, reservedAt: string): this {
     if (this.status !== OrderStatus.PENDING) {
       throw new InvalidInputError(`Order cannot be reserved from status ${this.status}`)
     }
-    this.mutate({ status: OrderStatus.RESERVED, totalAmount, paymentExpiresAt, reservedAt, updatedAt: reservedAt })
+    return this.with({
+      status: OrderStatus.RESERVED,
+      totalAmount,
+      paymentExpiresAt,
+      reservedAt,
+      updatedAt: reservedAt,
+    })
   }
 
-  fail(reason: string, updatedAt: string): void {
+  fail(reason: string, updatedAt: string): this {
     if (this.isInTerminalState) {
       throw new InvalidInputError(`Order is already in terminal state ${this.status}`)
     }
-    this.mutate({ status: OrderStatus.FAILED, failureReason: reason, updatedAt })
+    return this.with({ status: OrderStatus.FAILED, failureReason: reason, updatedAt })
   }
 
-  ship(shippedAt: string): void {
+  ship(shippedAt: string): this {
     if (!this.canBeShipped()) {
       throw new InvalidInputError(`Order cannot be shipped from status ${this.status}`)
     }
-    this.mutate({ status: OrderStatus.SHIPPED, shippedAt, updatedAt: shippedAt })
+    return this.with({ status: OrderStatus.SHIPPED, shippedAt, updatedAt: shippedAt })
   }
 
-  cancelWithRefund(cancelledAt: string): void {
+  cancelWithRefund(cancelledAt: string): this {
     if (!this.canBeCancelled()) {
       throw new InvalidInputError(`Order cannot be cancelled from status ${this.status}`)
     }
-    this.mutate({ status: OrderStatus.CANCELLED, cancelledAt, updatedAt: cancelledAt })
+    return this.with({ status: OrderStatus.CANCELLED, cancelledAt, updatedAt: cancelledAt })
   }
 
-  failAsExpired(reason: string, updatedAt: string): void {
+  failAsExpired(reason: string, updatedAt: string): this {
     if (this.isInTerminalState) {
       throw new InvalidInputError(`Order is already in terminal state ${this.status}`)
     }
-    this.mutate({ status: OrderStatus.EXPIRED, failureReason: reason, updatedAt })
+    return this.with({ status: OrderStatus.EXPIRED, failureReason: reason, updatedAt })
   }
 
-  startPayment(paymentAttemptId: string, requestedAt: string): void {
+  startPayment(paymentAttemptId: string, requestedAt: string): this {
     if (this.status !== OrderStatus.RESERVED) {
       throw new InvalidInputError(`Order cannot start payment in status ${this.status}`)
     }
@@ -302,7 +278,7 @@ export class Order {
     if (this.isPaymentExpired()) {
       throw new InvalidInputError('Order payment window has expired.')
     }
-    this.mutate({
+    return this.with({
       paymentStatus: PaymentStatus.PROCESSING,
       paymentRequestedAt: requestedAt,
       paymentAttemptId,
@@ -313,7 +289,7 @@ export class Order {
     })
   }
 
-  confirmPayment(paymentAttemptId: string, transactionId: string, paidAt: string): void {
+  confirmPayment(paymentAttemptId: string, transactionId: string, paidAt: string): this {
     if (this.status !== OrderStatus.RESERVED) {
       throw new InvalidInputError(`Order cannot confirm payment in status ${this.status}`)
     }
@@ -323,21 +299,31 @@ export class Order {
     if (this.paymentAttemptId !== paymentAttemptId) {
       throw new InvalidInputError('Payment attempt ID mismatch.')
     }
-    this.mutate({ status: OrderStatus.CONFIRMED, paymentStatus: PaymentStatus.PAID, paymentTransactionId: transactionId, paidAt, updatedAt: paidAt })
+    return this.with({
+      status: OrderStatus.CONFIRMED,
+      paymentStatus: PaymentStatus.PAID,
+      paymentTransactionId: transactionId,
+      paidAt,
+      updatedAt: paidAt,
+    })
   }
 
-  failPayment(paymentAttemptId: string, failureReason: string): void {
+  failPayment(paymentAttemptId: string, failureReason: string): this {
     if (this.paymentStatus !== PaymentStatus.PROCESSING) {
       throw new InvalidInputError('Order payment is not in PROCESSING state.')
     }
     if (this.paymentAttemptId !== paymentAttemptId) {
       throw new InvalidInputError('Payment attempt ID mismatch.')
     }
-    this.mutate({ paymentStatus: PaymentStatus.FAILED, paymentFailureReason: failureReason, updatedAt: new Date().toISOString() })
+    return this.with({
+      paymentStatus: PaymentStatus.FAILED,
+      paymentFailureReason: failureReason,
+      updatedAt: new Date().toISOString(),
+    })
   }
 
-  refundExpiredPayment(transactionId: string, failureReason: string): void {
-    this.mutate({
+  refundExpiredPayment(transactionId: string, failureReason: string): this {
+    return this.with({
       status: OrderStatus.EXPIRED,
       paymentStatus: PaymentStatus.FAILED,
       paymentTransactionId: transactionId,
@@ -347,8 +333,8 @@ export class Order {
     })
   }
 
-  withAudit(actor: AuditMutationContext): void {
-    this.mutate({
+  withAudit(actor: AuditMutationContext): this {
+    return this.with({
       lastModifiedByType: actor.actorType,
       lastModifiedById: actor.actorId ?? 'unknown',
       lastModifiedByEmail: actor.actorEmail ?? 'unknown',
@@ -358,30 +344,6 @@ export class Order {
 
   static computeTotal(items: Pick<OrderItem, 'lineTotal'>[]): number {
     return items.reduce((total, item) => total + item.lineTotal, 0)
-  }
-}
-
-export class OrderItem {
-  readonly orderId!: string
-  readonly lineId!: string
-  readonly productId!: string
-  readonly productName!: string
-  readonly imageUrl?: string
-  readonly unitPrice!: number
-  readonly quantity!: number
-  readonly lineTotal!: number
-  readonly createdAt!: string
-
-  private constructor(props: CreateOrderItemData) {
-    Object.assign(this, props)
-  }
-
-  static create(data: CreateOrderItemData): OrderItem {
-    return new OrderItem(data)
-  }
-
-  static fromRecord(item: Record<string, unknown>): OrderItem {
-    return new OrderItem(OrderItemPropsSchema.parse(item))
   }
 }
 

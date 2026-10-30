@@ -1,6 +1,8 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common'
-import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { Inject, Injectable } from '@nestjs/common'
+import { ScanCommand } from '@aws-sdk/lib-dynamodb'
+import { BaseDynamoDbRepository } from '../../common/base-dynamodb.repository'
 import { ConflictError, NotFoundError } from '../../common/domain-error'
+import { isConditionalCheckFailure } from '../../common/dynamodb-errors'
 import {
   AUDIT_ACTOR_ATTRIBUTE_NAMES,
   AUDIT_ACTOR_FIELDS,
@@ -17,32 +19,42 @@ import {
 } from '../domain/category.repository.port'
 
 @Injectable()
-export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
-  private readonly tableName: string
+export class DynamoDbCategoryRepository
+  extends BaseDynamoDbRepository<Category>
+  implements CategoryRepositoryPort
+{
+  protected readonly tableName: string
+  protected readonly primaryKeyName = 'categoryId'
 
   constructor(
     @Inject(DynamoDbService)
-    private readonly dynamoDbService: DynamoDbService,
+    dynamoDbService: DynamoDbService,
     @Inject(DynamoTablesService)
     dynamoTables: DynamoTablesService,
   ) {
+    super(dynamoDbService)
     this.tableName = dynamoTables.categories
+  }
+
+  protected fromRecord(item: Record<string, unknown>): Category {
+    return Category.fromRecord(item)
+  }
+
+  protected toRecord(entity: Category): Record<string, unknown> {
+    return { ...entity }
   }
 
   async create(category: Category): Promise<void> {
     try {
-      await this.dynamoDbService.documentClient.send(
-        new PutCommand({
-          TableName: this.tableName,
-          Item: { ...category },
-          ConditionExpression: 'attribute_not_exists(#categoryId)',
-          ExpressionAttributeNames: { '#categoryId': 'categoryId' },
-        }),
+      await this.putRecord(
+        this.tableName,
+        { ...category },
+        'attribute_not_exists(#categoryId)',
+        { '#categoryId': 'categoryId' },
       )
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
         throw new ConflictError(`Category ${category.categoryId} already exists.`)
-        // throw new ConflictException(`Category ${category.categoryId} already exists.`)
       }
       throw error
     }
@@ -66,10 +78,8 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
   }
 
   async findOne(categoryId: string): Promise<Category | null> {
-    const response = await this.dynamoDbService.documentClient.send(
-      new GetCommand({ TableName: this.tableName, Key: { categoryId } }),
-    )
-    return response.Item ? Category.fromRecord(response.Item) : null
+    const item = await this.getItem(this.tableName, { categoryId })
+    return item ? Category.fromRecord(item) : null
   }
 
   async update(
@@ -101,18 +111,16 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
     updateParts.push(AUDIT_ACTOR_FIELDS)
 
     try {
-      const response = await this.dynamoDbService.documentClient.send(
-        new UpdateCommand({
-          TableName: this.tableName,
-          Key: { categoryId },
-          UpdateExpression: `SET ${updateParts.join(', ')}`,
-          ConditionExpression: 'attribute_exists(#categoryId) AND #status <> :deleted',
-          ExpressionAttributeNames: expressionAttributeNames,
-          ExpressionAttributeValues: expressionAttributeValues,
-          ReturnValues: 'ALL_NEW',
-        }),
+      const attributes = await this.updateItem(
+        this.tableName,
+        { categoryId },
+        `SET ${updateParts.join(', ')}`,
+        expressionAttributeNames,
+        expressionAttributeValues,
+        'attribute_exists(#categoryId) AND #status <> :deleted',
+        'ALL_NEW',
       )
-      return Category.fromRecord(response.Attributes!)
+      return Category.fromRecord(attributes!)
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
         throw new NotFoundError(`Category ${categoryId} was not found.`)
@@ -123,26 +131,24 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
 
   async remove(categoryId: string, deletedAt: string, audit: AuditMutationContext): Promise<void> {
     try {
-      await this.dynamoDbService.documentClient.send(
-        new UpdateCommand({
-          TableName: this.tableName,
-          Key: { categoryId },
-          UpdateExpression: `SET #status = :deleted, #deletedAt = :deletedAt, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
-          ConditionExpression: 'attribute_exists(#categoryId) AND #status <> :deleted',
-          ExpressionAttributeNames: {
-            '#categoryId': 'categoryId',
-            '#status': 'status',
-            '#deletedAt': 'deletedAt',
-            '#updatedAt': 'updatedAt',
-            ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
-          },
-          ExpressionAttributeValues: {
-            ':deleted': 'DELETED',
-            ':deletedAt': deletedAt,
-            ':updatedAt': deletedAt,
-            ...toAuditMutationExpressionValues(audit),
-          },
-        }),
+      await this.updateItem(
+        this.tableName,
+        { categoryId },
+        `SET #status = :deleted, #deletedAt = :deletedAt, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
+        {
+          '#categoryId': 'categoryId',
+          '#status': 'status',
+          '#deletedAt': 'deletedAt',
+          '#updatedAt': 'updatedAt',
+          ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
+        },
+        {
+          ':deleted': 'DELETED',
+          ':deletedAt': deletedAt,
+          ':updatedAt': deletedAt,
+          ...toAuditMutationExpressionValues(audit),
+        },
+        'attribute_exists(#categoryId) AND #status <> :deleted',
       )
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
@@ -153,11 +159,3 @@ export class DynamoDbCategoryRepository implements CategoryRepositoryPort {
   }
 }
 
-function isConditionalCheckFailure(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    error.name === 'ConditionalCheckFailedException'
-  )
-}

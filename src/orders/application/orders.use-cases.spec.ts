@@ -9,23 +9,21 @@ import {
 import { AuditMutationContext } from '../../audit/audit-actor'
 import { AuthenticatedUser } from '../../auth/auth.types'
 import { Role } from '../../auth/roles.enum'
+import { CartRepositoryPort } from '../../carts/domain/cart.repository.port'
 import { CartStatus } from '../../carts/domain/cart-status.enum'
 import { Cart } from '../../carts/domain/cart.entity'
-import { GetCartItemsUseCase } from '../../carts/application/get-cart-items.use-case'
-import { GetOwnedCartUseCase } from '../../carts/application/get-owned-cart.use-case'
-import { MarkCartExpiredUseCase } from '../../carts/application/mark-cart-expired.use-case'
 import {
   ConflictError,
   ForbiddenDomainError,
   InvalidInputError,
   NotFoundError,
 } from '../../common/domain-error'
-import { ReserveInventoryUseCase } from '../../inventory/application/reserve-inventory.use-case'
+import { InventoryRepositoryPort } from '../../inventory/domain/inventory.repository.port'
 import { EmailTrackingService } from '../../mail/email-tracking.service'
 import { SesMailService } from '../../mail/ses-mail.service'
-import { FindOneProductUseCase } from '../../products/application/find-one-product.use-case'
-import { FindCustomerProfileByUsernameUseCase } from '../../users/application/find-customer-profile-by-username.use-case'
+import { CognitoUserPort } from '../../users/domain/cognito-user.port'
 import { Order, OrderItem } from '../domain/order.entity'
+import { OrderItemRepositoryPort } from '../domain/order-item.repository.port'
 import { OrderStatus } from '../domain/order-status.enum'
 import { OrderRepositoryPort } from '../domain/order.repository.port'
 import { PaymentStatus } from '../domain/payment-status.enum'
@@ -37,10 +35,11 @@ import { FindOneOrderUseCase } from './find-one-order.use-case'
 import { FindOrdersUseCase } from './find-orders.use-case'
 import { GetOrderEmailStatisticsUseCase } from './get-order-email-statistics.use-case'
 import { GetOrderEmailTrackingUseCase } from './get-order-email-tracking.use-case'
+import { DynamoTablesService } from '../../config/dynamo-tables.service'
 import { HandleVnpayIpnUseCase } from './handle-vnpay-ipn.use-case'
 import { HandleVnpayReturnUseCase } from './handle-vnpay-return.use-case'
-import { ReconcileVerifiedGatewayResultUseCase } from './reconcile-verified-gateway-result.use-case'
 import { ReleaseExpiredOrderReservationUseCase } from './release-expired-order-reservation.use-case'
+import { VnpayReconcileService } from './vnpay-reconcile.service'
 import { ResendFailedOrderEmailUseCase } from './resend-failed-order-email.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from './reserve-order-checkout-items.use-case'
 import { TriggerPaymentUseCase } from './trigger-payment.use-case'
@@ -103,14 +102,62 @@ function createOrderRepositoryMock(): jest.Mocked<OrderRepositoryPort> {
   return {
     create: jest.fn(),
     save: jest.fn(),
-    createOrderItems: jest.fn(),
-    findOrderItems: jest.fn(),
     findById: jest.fn(),
     findMany: jest.fn(),
     findExpiredReserved: jest.fn(),
-    cancelWithInventoryRelease: jest.fn(),
-    failWithInventoryRelease: jest.fn(),
-    expireWithInventoryRelease: jest.fn(),
+    executeTransaction: jest.fn().mockResolvedValue(undefined),
+  }
+}
+
+function createDynamoTablesMock() {
+  return { orders: 'orders-test', inventory: 'inventory-test' } as unknown as DynamoTablesService
+}
+
+function createOrderItemRepositoryMock(): jest.Mocked<OrderItemRepositoryPort> {
+  return {
+    createMany: jest.fn(),
+    findByOrderId: jest.fn(),
+  }
+}
+
+function createInventoryRepositoryMock(): jest.Mocked<InventoryRepositoryPort> {
+  return {
+    ensureRecord: jest.fn(),
+    findOne: jest.fn(),
+    findOneSummary: jest.fn(),
+    findSummariesByProductIds: jest.fn(),
+    findAllSummaries: jest.fn(),
+    updateAvailableQuantity: jest.fn(),
+    reserve: jest.fn(),
+    release: jest.fn(),
+  }
+}
+
+function createCartRepositoryMock(): jest.Mocked<CartRepositoryPort> {
+  return {
+    create: jest.fn(),
+    findAllByCustomer: jest.fn(),
+    findOne: jest.fn(),
+    findItems: jest.fn(),
+    putItem: jest.fn(),
+    updateItemQuantity: jest.fn(),
+    removeItem: jest.fn(),
+    updateStatus: jest.fn(),
+  }
+}
+
+function createCognitoUserRepositoryMock(): jest.Mocked<CognitoUserPort> {
+  return {
+    listAllUsers: jest.fn(),
+    getUserGroups: jest.fn(),
+    getUserByUsername: jest.fn(),
+    createUser: jest.fn(),
+    addUserToGroup: jest.fn(),
+    updateUserAttributes: jest.fn(),
+    enableUser: jest.fn(),
+    disableUser: jest.fn(),
+    setUserPassword: jest.fn(),
+    findUserByEmail: jest.fn(),
   }
 }
 
@@ -204,18 +251,24 @@ describe('FindExpiredReservedOrdersUseCase', () => {
 describe('ReleaseExpiredOrderReservationUseCase', () => {
   it('is a no-op when the order cannot expire its reservation', async () => {
     const repository = createOrderRepositoryMock()
-    const useCase = new ReleaseExpiredOrderReservationUseCase(repository)
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new ReleaseExpiredOrderReservationUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables)
 
     await useCase.execute(Order.fromRecord({ ...baseOrder, status: OrderStatus.CONFIRMED }))
 
-    expect(repository.findOrderItems).not.toHaveBeenCalled()
-    expect(repository.expireWithInventoryRelease).not.toHaveBeenCalled()
+    expect(orderItemRepository.findByOrderId).not.toHaveBeenCalled()
+    expect(repository.executeTransaction).not.toHaveBeenCalled()
   })
 
   it('is a no-op when the order has no items', async () => {
     const repository = createOrderRepositoryMock()
-    repository.findOrderItems.mockResolvedValue([])
-    const useCase = new ReleaseExpiredOrderReservationUseCase(repository)
+    const orderItemRepository = createOrderItemRepositoryMock()
+    orderItemRepository.findByOrderId.mockResolvedValue([])
+    const inventoryRepository = createInventoryRepositoryMock()
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new ReleaseExpiredOrderReservationUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables)
     const expiredOrder = Order.fromRecord({
       ...baseOrder,
       paymentExpiresAt: Math.floor(Date.now() / 1000) - 10,
@@ -223,15 +276,17 @@ describe('ReleaseExpiredOrderReservationUseCase', () => {
 
     await useCase.execute(expiredOrder)
 
-    expect(repository.findOrderItems).toHaveBeenCalledWith(expiredOrder.orderId)
-    expect(repository.expireWithInventoryRelease).not.toHaveBeenCalled()
+    expect(orderItemRepository.findByOrderId).toHaveBeenCalledWith(expiredOrder.orderId)
+    expect(repository.executeTransaction).not.toHaveBeenCalled()
   })
 
   it('releases inventory for an expired reservation with items', async () => {
     const repository = createOrderRepositoryMock()
-    repository.findOrderItems.mockResolvedValue([baseOrderItem])
-    repository.expireWithInventoryRelease.mockResolvedValue(true)
-    const useCase = new ReleaseExpiredOrderReservationUseCase(repository)
+    const orderItemRepository = createOrderItemRepositoryMock()
+    orderItemRepository.findByOrderId.mockResolvedValue([baseOrderItem])
+    const inventoryRepository = createInventoryRepositoryMock()
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new ReleaseExpiredOrderReservationUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables)
     const expiredOrder = Order.fromRecord({
       ...baseOrder,
       paymentExpiresAt: Math.floor(Date.now() / 1000) - 10,
@@ -239,10 +294,10 @@ describe('ReleaseExpiredOrderReservationUseCase', () => {
 
     await useCase.execute(expiredOrder)
 
-    expect(repository.expireWithInventoryRelease).toHaveBeenCalledWith(
-      expiredOrder,
-      [{ productId: baseOrderItem.productId, quantity: baseOrderItem.quantity }],
-      expect.objectContaining({ actorType: 'system' }),
+    expect(repository.executeTransaction).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ Update: expect.objectContaining({ TableName: 'orders-test' }) }),
+      ]),
     )
   })
 })
@@ -281,16 +336,18 @@ describe('FindOrdersUseCase', () => {
 describe('FindOneOrderUseCase', () => {
   it('throws NotFoundError when the order does not exist', async () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     repository.findById.mockResolvedValue(null)
-    const useCase = new FindOneOrderUseCase(repository)
+    const useCase = new FindOneOrderUseCase(repository, orderItemRepository)
 
     await expect(useCase.execute(customerUser, 'missing')).rejects.toBeInstanceOf(NotFoundError)
   })
 
   it('throws ForbiddenDomainError when a customer requests another customer order', async () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     repository.findById.mockResolvedValue(Order.fromRecord({ ...baseOrder, customerId: 'someone-else' }))
-    const useCase = new FindOneOrderUseCase(repository)
+    const useCase = new FindOneOrderUseCase(repository, orderItemRepository)
 
     await expect(useCase.execute(customerUser, baseOrder.orderId)).rejects.toBeInstanceOf(
       ForbiddenDomainError,
@@ -299,9 +356,10 @@ describe('FindOneOrderUseCase', () => {
 
   it('returns the order combined with its items', async () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     repository.findById.mockResolvedValue(baseOrder)
-    repository.findOrderItems.mockResolvedValue([baseOrderItem])
-    const useCase = new FindOneOrderUseCase(repository)
+    orderItemRepository.findByOrderId.mockResolvedValue([baseOrderItem])
+    const useCase = new FindOneOrderUseCase(repository, orderItemRepository)
 
     const result = await useCase.execute(customerUser, baseOrder.orderId)
 
@@ -363,10 +421,12 @@ describe('GetOrderEmailTrackingUseCase', () => {
 describe('ResendFailedOrderEmailUseCase', () => {
   it('throws InvalidInputError for an unsupported email type', async () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     const emailTrackingService = createEmailTrackingServiceMock()
     const sesMailService = createSesMailServiceMock()
     const useCase = new ResendFailedOrderEmailUseCase(
       repository,
+      orderItemRepository,
       emailTrackingService as never,
       sesMailService as never,
     )
@@ -378,11 +438,13 @@ describe('ResendFailedOrderEmailUseCase', () => {
 
   it('throws InvalidInputError when recipientEmail is blank', async () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     repository.findById.mockResolvedValue(baseOrder)
     const emailTrackingService = createEmailTrackingServiceMock()
     const sesMailService = createSesMailServiceMock()
     const useCase = new ResendFailedOrderEmailUseCase(
       repository,
+      orderItemRepository,
       emailTrackingService as never,
       sesMailService as never,
     )
@@ -394,12 +456,14 @@ describe('ResendFailedOrderEmailUseCase', () => {
 
   it('returns SKIPPED when there is no retryable recipient', async () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     repository.findById.mockResolvedValue(baseOrder)
     const emailTrackingService = createEmailTrackingServiceMock()
     emailTrackingService.findLatestRetryableForRecipient.mockResolvedValue(null as never)
     const sesMailService = createSesMailServiceMock()
     const useCase = new ResendFailedOrderEmailUseCase(
       repository,
+      orderItemRepository,
       emailTrackingService as never,
       sesMailService as never,
     )
@@ -416,8 +480,9 @@ describe('ResendFailedOrderEmailUseCase', () => {
 
   it('resends the order confirmation email for a retryable recipient', async () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     repository.findById.mockResolvedValue(baseOrder)
-    repository.findOrderItems.mockResolvedValue([baseOrderItem])
+    orderItemRepository.findByOrderId.mockResolvedValue([baseOrderItem])
     const emailTrackingService = createEmailTrackingServiceMock()
     emailTrackingService.findLatestRetryableForRecipient.mockResolvedValue({
       emailId: 'email-1',
@@ -425,6 +490,7 @@ describe('ResendFailedOrderEmailUseCase', () => {
     const sesMailService = createSesMailServiceMock()
     const useCase = new ResendFailedOrderEmailUseCase(
       repository,
+      orderItemRepository,
       emailTrackingService as never,
       sesMailService as never,
     )
@@ -451,8 +517,10 @@ describe('UpdateOrderStatusUseCase', () => {
     repository.findById.mockResolvedValue(
       Order.fromRecord({ ...baseOrder, status: OrderStatus.SHIPPED }),
     )
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, publisher)
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, publisher)
 
     await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED)
 
@@ -463,8 +531,10 @@ describe('UpdateOrderStatusUseCase', () => {
   it('throws InvalidInputError when shipping an order that is not a paid confirmed order', async () => {
     const repository = createOrderRepositoryMock()
     repository.findById.mockResolvedValue(baseOrder) // RESERVED, not CONFIRMED+PAID
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, publisher)
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, publisher)
 
     await expect(
       useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED),
@@ -483,8 +553,11 @@ describe('UpdateOrderStatusUseCase', () => {
     repository.findById
       .mockResolvedValueOnce(confirmedPaidOrder)
       .mockResolvedValueOnce(shippedOrder)
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, publisher)
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
     const result = await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED)
 
@@ -502,20 +575,26 @@ describe('UpdateOrderStatusUseCase', () => {
     repository.findById.mockResolvedValue(
       Order.fromRecord({ ...baseOrder, status: OrderStatus.CANCELLED }),
     )
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, publisher)
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
     await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CANCELLED)
 
-    expect(repository.cancelWithInventoryRelease).not.toHaveBeenCalled()
+    expect(repository.executeTransaction).not.toHaveBeenCalled()
     expect(publisher.publishOrderCancelled).not.toHaveBeenCalled()
   })
 
   it('throws InvalidInputError when cancelling an order that is not a paid confirmed order', async () => {
     const repository = createOrderRepositoryMock()
     repository.findById.mockResolvedValue(baseOrder) // RESERVED, not CONFIRMED+PAID
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, publisher)
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
     await expect(
       useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CANCELLED),
@@ -536,17 +615,19 @@ describe('UpdateOrderStatusUseCase', () => {
     repository.findById
       .mockResolvedValueOnce(confirmedPaidOrder)
       .mockResolvedValueOnce(cancelledOrder)
-    repository.findOrderItems.mockResolvedValue([baseOrderItem])
+    const orderItemRepository = createOrderItemRepositoryMock()
+    orderItemRepository.findByOrderId.mockResolvedValue([baseOrderItem])
+    const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, publisher)
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
     const result = await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CANCELLED)
 
-    expect(repository.cancelWithInventoryRelease).toHaveBeenCalledWith(
-      expect.objectContaining({ status: OrderStatus.CANCELLED }),
-      expect.any(String),
-      [{ productId: baseOrderItem.productId, quantity: baseOrderItem.quantity }],
-      expect.objectContaining({ actorType: 'admin' }),
+    expect(repository.executeTransaction).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ Update: expect.objectContaining({ TableName: 'orders-test' }) }),
+      ]),
     )
     expect(publisher.publishOrderCancelled).toHaveBeenCalledWith(
       expect.objectContaining({ orderId: baseOrder.orderId }),
@@ -556,8 +637,11 @@ describe('UpdateOrderStatusUseCase', () => {
 
   it('throws InvalidInputError for any other status', () => {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, publisher)
+    const dynamoTables = createDynamoTablesMock()
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
     expect(() =>
       useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CONFIRMED),
@@ -568,17 +652,19 @@ describe('UpdateOrderStatusUseCase', () => {
 describe('TriggerPaymentUseCase', () => {
   function createDeps() {
     const repository = createOrderRepositoryMock()
-    const releaseExpiredOrderReservationUseCase =
-      mockUseCase<ReleaseExpiredOrderReservationUseCase>()
+    const orderItemRepository = createOrderItemRepositoryMock()
+    const dynamoTables = createDynamoTablesMock()
     const vnpayService = createVnpayServiceMock()
     const useCase = new TriggerPaymentUseCase(
       repository,
-      releaseExpiredOrderReservationUseCase,
+      orderItemRepository,
+      dynamoTables,
       vnpayService as never,
     )
     return {
       repository,
-      releaseExpiredOrderReservationUseCase,
+      orderItemRepository,
+      dynamoTables,
       vnpayService,
       useCase,
     }
@@ -629,17 +715,18 @@ describe('TriggerPaymentUseCase', () => {
   })
 
   it('releases the reservation and throws ConflictError when the payment window has expired', async () => {
-    const { repository, releaseExpiredOrderReservationUseCase, useCase } = createDeps()
+    const { repository, orderItemRepository, useCase } = createDeps()
     const expiredOrder = Order.fromRecord({
       ...baseOrder,
       paymentExpiresAt: Math.floor(Date.now() / 1000) - 10,
     })
     repository.findById.mockResolvedValue(expiredOrder)
+    orderItemRepository.findByOrderId.mockResolvedValue([])
 
     await expect(
       useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
     ).rejects.toBeInstanceOf(ConflictError)
-    expect(releaseExpiredOrderReservationUseCase.execute).toHaveBeenCalledWith(expiredOrder)
+    expect(orderItemRepository.findByOrderId).toHaveBeenCalledWith(expiredOrder.orderId)
   })
 
   it('builds a payment url and saves the order with PROCESSING status for a valid reserved order', async () => {
@@ -672,38 +759,47 @@ describe('CreateOrderRequestUseCase', () => {
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
   })
 
+  const cartItemFixture = {
+    cartId: activeCart.cartId,
+    customerId: customerUser.sub,
+    productId: 'p1',
+    quantity: 2,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+
   function createDeps() {
     const repository = createOrderRepositoryMock()
-    const getOwnedCartUseCase = mockUseCase<GetOwnedCartUseCase>()
-    const getCartItemsUseCase = mockUseCase<GetCartItemsUseCase>()
-    const markCartExpiredUseCase = mockUseCase<MarkCartExpiredUseCase>()
-    const findCustomerProfileByUsernameUseCase =
-      mockUseCase<FindCustomerProfileByUsernameUseCase>()
+    const cartRepository = createCartRepositoryMock()
+    const cognitoUserRepository = createCognitoUserRepositoryMock()
     const reserveOrderCheckoutItemsUseCase = mockUseCase<ReserveOrderCheckoutItemsUseCase>()
+
+    // Default: cart found and active
+    cartRepository.findOne.mockResolvedValue(activeCart)
+    cognitoUserRepository.getUserByUsername.mockResolvedValue({
+      username: customerUser.username,
+      attributes: { email: customerUser.email, name: customerUser.name },
+    } as never)
 
     const useCase = new CreateOrderRequestUseCase(
       repository,
-      getOwnedCartUseCase,
-      getCartItemsUseCase,
-      markCartExpiredUseCase,
-      findCustomerProfileByUsernameUseCase,
+      cartRepository,
+      cognitoUserRepository,
       reserveOrderCheckoutItemsUseCase,
     )
 
     return {
       repository,
-      getOwnedCartUseCase,
-      getCartItemsUseCase,
-      markCartExpiredUseCase,
-      findCustomerProfileByUsernameUseCase,
+      cartRepository,
+      cognitoUserRepository,
       reserveOrderCheckoutItemsUseCase,
       useCase,
     }
   }
 
   it('throws InvalidInputError when the cart has expired', async () => {
-    const { getOwnedCartUseCase, useCase } = createDeps()
-    getOwnedCartUseCase.execute.mockResolvedValue(
+    const { cartRepository, useCase } = createDeps()
+    cartRepository.findOne.mockResolvedValue(
       Cart.fromRecord({ ...activeCart, status: CartStatus.EXPIRED }),
     )
 
@@ -713,9 +809,8 @@ describe('CreateOrderRequestUseCase', () => {
   })
 
   it('marks the order FAILED and returns it when the cart has no items', async () => {
-    const { repository, getOwnedCartUseCase, getCartItemsUseCase, useCase } = createDeps()
-    getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
-    getCartItemsUseCase.execute.mockResolvedValue([])
+    const { repository, cartRepository, useCase } = createDeps()
+    cartRepository.findItems.mockResolvedValue([])
 
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
@@ -727,25 +822,8 @@ describe('CreateOrderRequestUseCase', () => {
   })
 
   it('reserves inventory and marks the order RESERVED on success', async () => {
-    const {
-      repository,
-      getOwnedCartUseCase,
-      getCartItemsUseCase,
-      reserveOrderCheckoutItemsUseCase,
-      markCartExpiredUseCase,
-      useCase,
-    } = createDeps()
-    getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
-    getCartItemsUseCase.execute.mockResolvedValue([
-      {
-        cartId: activeCart.cartId,
-        customerId: customerUser.sub,
-        productId: 'p1',
-        quantity: 2,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-    ])
+    const { repository, cartRepository, reserveOrderCheckoutItemsUseCase, useCase } = createDeps()
+    cartRepository.findItems.mockResolvedValue([cartItemFixture])
     reserveOrderCheckoutItemsUseCase.execute.mockResolvedValue({ reservationSucceeded: true })
     repository.findById.mockResolvedValue(
       Order.fromRecord({ ...baseOrder, status: OrderStatus.RESERVED }),
@@ -754,30 +832,18 @@ describe('CreateOrderRequestUseCase', () => {
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
     expect(reserveOrderCheckoutItemsUseCase.execute).toHaveBeenCalled()
-    expect(markCartExpiredUseCase.execute).toHaveBeenCalledWith(activeCart)
+    expect(cartRepository.updateStatus).toHaveBeenCalledWith(
+      activeCart.customerId,
+      activeCart.cartId,
+      CartStatus.EXPIRED,
+      expect.any(String),
+    )
     expect(result.status).toBe(OrderStatus.RESERVED)
   })
 
   it('does not expire the cart when reservation fails', async () => {
-    const {
-      repository,
-      getOwnedCartUseCase,
-      getCartItemsUseCase,
-      reserveOrderCheckoutItemsUseCase,
-      markCartExpiredUseCase,
-      useCase,
-    } = createDeps()
-    getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
-    getCartItemsUseCase.execute.mockResolvedValue([
-      {
-        cartId: activeCart.cartId,
-        customerId: customerUser.sub,
-        productId: 'p1',
-        quantity: 2,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-    ])
+    const { repository, cartRepository, reserveOrderCheckoutItemsUseCase, useCase } = createDeps()
+    cartRepository.findItems.mockResolvedValue([cartItemFixture])
     reserveOrderCheckoutItemsUseCase.execute.mockResolvedValue({ reservationSucceeded: false })
     repository.findById.mockResolvedValue(
       Order.fromRecord({ ...baseOrder, status: OrderStatus.FAILED }),
@@ -785,24 +851,13 @@ describe('CreateOrderRequestUseCase', () => {
 
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
-    expect(markCartExpiredUseCase.execute).not.toHaveBeenCalled()
+    expect(cartRepository.updateStatus).not.toHaveBeenCalled()
     expect(result.status).toBe(OrderStatus.FAILED)
   })
 
   it('rethrows when the reservation use-case throws an unexpected error', async () => {
-    const { getOwnedCartUseCase, getCartItemsUseCase, reserveOrderCheckoutItemsUseCase, useCase } =
-      createDeps()
-    getOwnedCartUseCase.execute.mockResolvedValue(activeCart)
-    getCartItemsUseCase.execute.mockResolvedValue([
-      {
-        cartId: activeCart.cartId,
-        customerId: customerUser.sub,
-        productId: 'p1',
-        quantity: 2,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-    ])
+    const { cartRepository, reserveOrderCheckoutItemsUseCase, useCase } = createDeps()
+    cartRepository.findItems.mockResolvedValue([cartItemFixture])
     reserveOrderCheckoutItemsUseCase.execute.mockRejectedValue(
       new Error('Insufficient inventory for product p2.'),
     )
@@ -813,19 +868,20 @@ describe('CreateOrderRequestUseCase', () => {
   })
 })
 
-describe('ReconcileVerifiedGatewayResultUseCase', () => {
+describe('VnpayReconcileService', () => {
   function createDeps() {
     const repository = createOrderRepositoryMock()
-    repository.findOrderItems.mockResolvedValue([baseOrderItem])
-    const releaseExpiredOrderReservationUseCase =
-      mockUseCase<ReleaseExpiredOrderReservationUseCase>()
+    const orderItemRepository = createOrderItemRepositoryMock()
+    orderItemRepository.findByOrderId.mockResolvedValue([baseOrderItem])
+    const dynamoTables = createDynamoTablesMock()
     const emailTrackingService = createEmailTrackingServiceMock()
     const sesMailService = createSesMailServiceMock()
     const vnpayService = createVnpayServiceMock()
 
-    const useCase = new ReconcileVerifiedGatewayResultUseCase(
+    const useCase = new VnpayReconcileService(
       repository,
-      releaseExpiredOrderReservationUseCase,
+      orderItemRepository,
+      dynamoTables,
       emailTrackingService as never,
       sesMailService as never,
       vnpayService as never,
@@ -833,7 +889,8 @@ describe('ReconcileVerifiedGatewayResultUseCase', () => {
 
     return {
       repository,
-      releaseExpiredOrderReservationUseCase,
+      orderItemRepository,
+      dynamoTables,
       emailTrackingService,
       sesMailService,
       vnpayService,
@@ -956,21 +1013,21 @@ describe('HandleVnpayReturnUseCase', () => {
       message: 'Success',
       vnp_TxnRef: baseOrder.orderId,
     } as never)
-    const reconcileUseCase = mockUseCase<ReconcileVerifiedGatewayResultUseCase>()
-    reconcileUseCase.execute.mockResolvedValue(IpnSuccess)
-    const useCase = new HandleVnpayReturnUseCase(vnpayService as never, reconcileUseCase)
+    const reconcileService = mockUseCase<VnpayReconcileService>()
+    reconcileService.execute.mockResolvedValue(IpnSuccess)
+    const useCase = new HandleVnpayReturnUseCase(vnpayService as never, reconcileService)
 
     const result = await useCase.execute({ vnp_TxnRef: baseOrder.orderId })
 
-    expect(reconcileUseCase.execute).toHaveBeenCalledWith(expect.anything(), 'return')
+    expect(reconcileService.execute).toHaveBeenCalledWith(expect.anything(), 'return')
     expect(result.redirectUrl).toBe('https://storefront.example/return')
   })
 
   it('redirects with an invalid payload message when verification throws', async () => {
     const vnpayService = createVnpayServiceMock()
     vnpayService.verifyReturnQuery.mockRejectedValue(new Error('bad signature'))
-    const reconcileUseCase = mockUseCase<ReconcileVerifiedGatewayResultUseCase>()
-    const useCase = new HandleVnpayReturnUseCase(vnpayService as never, reconcileUseCase)
+    const reconcileService = mockUseCase<VnpayReconcileService>()
+    const useCase = new HandleVnpayReturnUseCase(vnpayService as never, reconcileService)
 
     const result = await useCase.execute({})
 
@@ -986,32 +1043,32 @@ describe('HandleVnpayIpnUseCase', () => {
   it('returns IpnFailChecksum when verification throws', async () => {
     const vnpayService = createVnpayServiceMock()
     vnpayService.verifyIpnQuery.mockRejectedValue(new Error('bad signature'))
-    const reconcileUseCase = mockUseCase<ReconcileVerifiedGatewayResultUseCase>()
-    const useCase = new HandleVnpayIpnUseCase(vnpayService as never, reconcileUseCase)
+    const reconcileService = mockUseCase<VnpayReconcileService>()
+    const useCase = new HandleVnpayIpnUseCase(vnpayService as never, reconcileService)
 
     await expect(useCase.execute({})).resolves.toBe(IpnFailChecksum)
-    expect(reconcileUseCase.execute).not.toHaveBeenCalled()
+    expect(reconcileService.execute).not.toHaveBeenCalled()
   })
 
   it('returns IpnFailChecksum when the callback is not verified', async () => {
     const vnpayService = createVnpayServiceMock()
     vnpayService.verifyIpnQuery.mockResolvedValue({ isVerified: false } as never)
-    const reconcileUseCase = mockUseCase<ReconcileVerifiedGatewayResultUseCase>()
-    const useCase = new HandleVnpayIpnUseCase(vnpayService as never, reconcileUseCase)
+    const reconcileService = mockUseCase<VnpayReconcileService>()
+    const useCase = new HandleVnpayIpnUseCase(vnpayService as never, reconcileService)
 
     await expect(useCase.execute({})).resolves.toBe(IpnFailChecksum)
-    expect(reconcileUseCase.execute).not.toHaveBeenCalled()
+    expect(reconcileService.execute).not.toHaveBeenCalled()
   })
 
-  it('delegates verified callbacks to the reconcile use-case', async () => {
+  it('delegates verified callbacks to the reconcile service', async () => {
     const vnpayService = createVnpayServiceMock()
     const verifyResult = { isVerified: true } as never
     vnpayService.verifyIpnQuery.mockResolvedValue(verifyResult)
-    const reconcileUseCase = mockUseCase<ReconcileVerifiedGatewayResultUseCase>()
-    reconcileUseCase.execute.mockResolvedValue(IpnSuccess)
-    const useCase = new HandleVnpayIpnUseCase(vnpayService as never, reconcileUseCase)
+    const reconcileService = mockUseCase<VnpayReconcileService>()
+    reconcileService.execute.mockResolvedValue(IpnSuccess)
+    const useCase = new HandleVnpayIpnUseCase(vnpayService as never, reconcileService)
 
     await expect(useCase.execute({})).resolves.toBe(IpnSuccess)
-    expect(reconcileUseCase.execute).toHaveBeenCalledWith(verifyResult, 'ipn')
+    expect(reconcileService.execute).toHaveBeenCalledWith(verifyResult, 'ipn')
   })
 })
