@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { BaseDynamoDbRepository } from '../../common/base-dynamodb.repository'
 import { DynamoTablesService } from '../../config/dynamo-tables.service'
 import { DynamoDbService } from '../../dynamodb/dynamodb.service'
 import { UserAccount, UserLoginAudit } from '../domain/user.entity'
@@ -12,38 +12,31 @@ import {
 } from '../domain/user-account.repository.port'
 
 @Injectable()
-export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort {
-  private readonly userAccountsTableName: string
+export class DynamoDbUserAccountRepository
+  extends BaseDynamoDbRepository<UserAccount>
+  implements UserAccountRepositoryPort
+{
+  protected readonly tableName: string
+  protected readonly primaryKeyName = 'userId'
   private readonly userLoginAuditTableName: string
 
   constructor(
     @Inject(DynamoDbService)
-    private readonly dynamoDbService: DynamoDbService,
+    dynamoDbService: DynamoDbService,
     @Inject(DynamoTablesService)
     dynamoTables: DynamoTablesService,
   ) {
-    this.userAccountsTableName = dynamoTables.userAccounts
+    super(dynamoDbService)
+    this.tableName = dynamoTables.userAccounts
     this.userLoginAuditTableName = dynamoTables.userLoginAudit
   }
 
-  async findById(userId: string): Promise<UserAccount | null> {
-    const response = await this.dynamoDbService.documentClient.send(
-      new GetCommand({
-        TableName: this.userAccountsTableName,
-        Key: { userId },
-      }),
-    )
-
-    return response.Item ? UserAccount.fromRecord(response.Item) : null
+  protected fromRecord(item: Record<string, unknown>): UserAccount {
+    return UserAccount.fromRecord(item)
   }
 
-  async save(account: UserAccount): Promise<void> {
-    await this.dynamoDbService.documentClient.send(
-      new PutCommand({
-        TableName: this.userAccountsTableName,
-        Item: { ...account },
-      }),
-    )
+  protected toRecord(entity: UserAccount): Record<string, unknown> {
+    return { ...entity }
   }
 
   async updateLoginContext(userId: string, fields: LoginContextFields): Promise<void> {
@@ -63,14 +56,12 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
       setExpressions.push('#lastLoginUserAgent = :lastLoginUserAgent')
     }
 
-    await this.dynamoDbService.documentClient.send(
-      new UpdateCommand({
-        TableName: this.userAccountsTableName,
-        Key: { userId },
-        UpdateExpression: `SET ${setExpressions.join(', ')}`,
-        ExpressionAttributeNames: expressionAttributeNames,
-        ExpressionAttributeValues: expressionAttributeValues,
-      }),
+    await this.updateItem(
+      this.tableName,
+      { userId },
+      `SET ${setExpressions.join(', ')}`,
+      expressionAttributeNames,
+      expressionAttributeValues,
     )
   }
 
@@ -78,66 +69,57 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
     userId: string,
     fields: AuthenticationLoginFields,
   ): Promise<void> {
-    await this.dynamoDbService.documentClient.send(
-      new UpdateCommand({
-        TableName: this.userAccountsTableName,
-        Key: { userId },
-        UpdateExpression: [
-          'SET #username = if_not_exists(#username, :username)',
-          '#email = if_not_exists(#email, :email)',
-          '#status = if_not_exists(#status, :active)',
-          '#passwordStatus = if_not_exists(#passwordStatus, :passwordStatus)',
-          '#permissions = if_not_exists(#permissions, :emptyPermissions)',
-          '#createdAt = if_not_exists(#createdAt, :loginAt)',
-          '#lastLoginAt = :loginAt',
-          '#loginCount = if_not_exists(#loginCount, :zero) + :one',
-          '#updatedAt = :loginAt',
-        ].join(', '),
-        ExpressionAttributeNames: {
-          '#username': 'username',
-          '#email': 'email',
-          '#status': 'status',
-          '#passwordStatus': 'passwordStatus',
-          '#permissions': 'permissions',
-          '#createdAt': 'createdAt',
-          '#lastLoginAt': 'lastLoginAt',
-          '#loginCount': 'loginCount',
-          '#updatedAt': 'updatedAt',
-        },
-        ExpressionAttributeValues: {
-          ':username': fields.username,
-          ':email': fields.email ?? '',
-          ':active': 'ACTIVE',
-          ':passwordStatus': fields.passwordStatus,
-          ':emptyPermissions': [],
-          ':loginAt': fields.loginAt,
-          ':zero': 0,
-          ':one': 1,
-        },
-      }),
+    await this.updateItem(
+      this.tableName,
+      { userId },
+      [
+        'SET #username = if_not_exists(#username, :username)',
+        '#email = if_not_exists(#email, :email)',
+        '#status = if_not_exists(#status, :active)',
+        '#passwordStatus = if_not_exists(#passwordStatus, :passwordStatus)',
+        '#permissions = if_not_exists(#permissions, :emptyPermissions)',
+        '#createdAt = if_not_exists(#createdAt, :loginAt)',
+        '#lastLoginAt = :loginAt',
+        '#loginCount = if_not_exists(#loginCount, :zero) + :one',
+        '#updatedAt = :loginAt',
+      ].join(', '),
+      {
+        '#username': 'username',
+        '#email': 'email',
+        '#status': 'status',
+        '#passwordStatus': 'passwordStatus',
+        '#permissions': 'permissions',
+        '#createdAt': 'createdAt',
+        '#lastLoginAt': 'lastLoginAt',
+        '#loginCount': 'loginCount',
+        '#updatedAt': 'updatedAt',
+      },
+      {
+        ':username': fields.username,
+        ':email': fields.email ?? '',
+        ':active': 'ACTIVE',
+        ':passwordStatus': fields.passwordStatus,
+        ':emptyPermissions': [],
+        ':loginAt': fields.loginAt,
+        ':zero': 0,
+        ':one': 1,
+      },
     )
   }
 
   async insertLoginAudit(entry: UserLoginAudit): Promise<void> {
-    await this.dynamoDbService.documentClient.send(
-      new PutCommand({
-        TableName: this.userLoginAuditTableName,
-        Item: { ...entry },
-      }),
-    )
+    await this.putRecord(this.userLoginAuditTableName, { ...entry })
   }
 
   async findLatestLoginAudit(userId: string): Promise<UserLoginAudit | undefined> {
-    const response = await this.dynamoDbService.documentClient.send(
-      new QueryCommand({
-        TableName: this.userLoginAuditTableName,
-        KeyConditionExpression: '#userId = :userId',
-        ExpressionAttributeNames: { '#userId': 'userId' },
-        ExpressionAttributeValues: { ':userId': userId },
-        ScanIndexForward: false,
-        Limit: 1,
-      }),
-    )
+    const response = await this.queryItems({
+      TableName: this.userLoginAuditTableName,
+      KeyConditionExpression: '#userId = :userId',
+      ExpressionAttributeNames: { '#userId': 'userId' },
+      ExpressionAttributeValues: { ':userId': userId },
+      ScanIndexForward: false,
+      Limit: 1,
+    })
 
     return response.Items?.[0] ? UserLoginAudit.fromRecord(response.Items[0]) : undefined
   }
@@ -163,14 +145,12 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
       setExpressions.push('#userAgent = :userAgent')
     }
 
-    await this.dynamoDbService.documentClient.send(
-      new UpdateCommand({
-        TableName: this.userLoginAuditTableName,
-        Key: { userId, loginAt },
-        UpdateExpression: `SET ${setExpressions.join(', ')}`,
-        ExpressionAttributeNames: expressionAttributeNames,
-        ExpressionAttributeValues: expressionAttributeValues,
-      }),
+    await this.updateItem(
+      this.userLoginAuditTableName,
+      { userId, loginAt },
+      `SET ${setExpressions.join(', ')}`,
+      expressionAttributeNames,
+      expressionAttributeValues,
     )
   }
 
@@ -179,17 +159,15 @@ export class DynamoDbUserAccountRepository implements UserAccountRepositoryPort 
     limit: number,
     exclusiveStartKey?: Record<string, unknown>,
   ): Promise<LoginAuditQueryResult> {
-    const response = await this.dynamoDbService.documentClient.send(
-      new QueryCommand({
-        TableName: this.userLoginAuditTableName,
-        KeyConditionExpression: '#userId = :userId',
-        ExpressionAttributeNames: { '#userId': 'userId' },
-        ExpressionAttributeValues: { ':userId': userId },
-        ScanIndexForward: false,
-        Limit: limit,
-        ExclusiveStartKey: exclusiveStartKey,
-      }),
-    )
+    const response = await this.queryItems({
+      TableName: this.userLoginAuditTableName,
+      KeyConditionExpression: '#userId = :userId',
+      ExpressionAttributeNames: { '#userId': 'userId' },
+      ExpressionAttributeValues: { ':userId': userId },
+      ScanIndexForward: false,
+      Limit: limit,
+      ExclusiveStartKey: exclusiveStartKey,
+    })
 
     return {
       items: (response.Items ?? []).map(UserLoginAudit.fromRecord),

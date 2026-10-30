@@ -24,6 +24,6 @@ import { ProductEventsPublisher } from '../infrastructure/product-events.publish
     DeleteProductUseCase,
     { provide: PRODUCT_REPOSITORY, useClass: DynamoDbProductRepository },
   ],
-  exports: [FindOneProductUseCase],
+  exports: [PRODUCT_REPOSITORY, FindOneProductUseCase],
 })
 export class ProductsModule {}

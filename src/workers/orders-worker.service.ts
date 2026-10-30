@@ -113,18 +113,16 @@ export class OrdersWorkerService {
     if (cart.status === CartStatus.EXPIRED || cart.expiresAt <= Math.floor(Date.now() / 1000)) {
       await this.markCartExpiredUseCase.execute(cart)
       const actor = systemAuditMutationContext('place-order-worker', 'Cart expired before checkout.')
-      order.failAsExpired('Cart expired before checkout.', new Date().toISOString())
-      order.withAudit(actor)
-      await this.orderRepository.save(order)
+      const expired = order.failAsExpired('Cart expired before checkout.', new Date().toISOString()).withAudit(actor)
+      await this.orderRepository.save(expired)
       return
     }
 
     const cartItems = await this.getCartItemsUseCase.execute(cart.cartId)
     if (cartItems.length === 0) {
       const actor = systemAuditMutationContext('place-order-worker', 'Cart has no items.')
-      order.fail('Cart has no items.', new Date().toISOString())
-      order.withAudit(actor)
-      await this.orderRepository.save(order)
+      const failed = order.fail('Cart has no items.', new Date().toISOString()).withAudit(actor)
+      await this.orderRepository.save(failed)
       return
     }
 

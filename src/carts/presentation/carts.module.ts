@@ -26,6 +26,6 @@ import { DynamoDbCartRepository } from '../infrastructure/dynamodb-cart.reposito
     MarkCartExpiredUseCase,
     { provide: CART_REPOSITORY, useClass: DynamoDbCartRepository },
   ],
-  exports: [GetOwnedCartUseCase, GetCartItemsUseCase, MarkCartExpiredUseCase],
+  exports: [CART_REPOSITORY, GetOwnedCartUseCase, GetCartItemsUseCase, MarkCartExpiredUseCase],
 })
 export class CartsModule {}

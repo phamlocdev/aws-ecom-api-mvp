@@ -50,9 +50,11 @@ describe('Cart.isUsable', () => {
 // ---------------------------------------------------------------------------
 
 describe('Cart.expire()', () => {
-  it('does not throw when status is ACTIVE', () => {
+  it('returns a new Cart with EXPIRED status', () => {
     const cart = makeCart({ status: 'ACTIVE' })
-    expect(() => cart.expire('2024-06-01T00:00:00.000Z')).not.toThrow()
+    const expired = cart.expire('2024-06-01T00:00:00.000Z')
+    expect(expired.status).toBe(CartStatus.EXPIRED)
+    expect(expired.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
   it('throws InvalidInputError when status is already EXPIRED', () => {

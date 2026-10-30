@@ -20,6 +20,6 @@ import { DynamoDbInventoryRepository } from '../infrastructure/dynamodb-inventor
     ReleaseInventoryUseCase,
     { provide: INVENTORY_REPOSITORY, useClass: DynamoDbInventoryRepository },
   ],
-  exports: [ReserveInventoryUseCase, ReleaseInventoryUseCase],
+  exports: [INVENTORY_REPOSITORY, ReserveInventoryUseCase, ReleaseInventoryUseCase],
 })
 export class InventoryModule {}

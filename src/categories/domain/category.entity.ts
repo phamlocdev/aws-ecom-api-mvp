@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { InvalidInputError } from '../../common/domain-error'
+import { BaseEntity } from '../../common/base.entity'
 
 const CategoryPropsSchema = z.object({
   categoryId: z.string(),
@@ -27,20 +28,15 @@ export type CreateCategoryData = {
   lastModifiedReason?: string
 }
 
-export class Category {
+export class Category extends BaseEntity<CategoryProps> {
   readonly categoryId!: string
   readonly name!: string
   readonly description?: string
   readonly status!: 'ACTIVE' | 'DELETED'
   readonly deletedAt?: string
-  readonly lastModifiedByType?: string
-  readonly lastModifiedById?: string
-  readonly lastModifiedByEmail?: string
-  readonly lastModifiedReason?: string
-  readonly createdAt!: string
-  readonly updatedAt!: string
 
   private constructor(props: CategoryProps) {
+    super()
     Object.assign(this, props)
   }
 
@@ -58,22 +54,6 @@ export class Category {
     return new Category(CategoryPropsSchema.parse(item))
   }
 
-  static fromRecordV2(item: Record<string, unknown>): Category {
-    return new Category({
-      categoryId: item['categoryId'] as string,
-      name: item['name'] as string,
-      description: item['description'] as string | undefined,
-      status: item['status'] as 'ACTIVE' | 'DELETED',
-      deletedAt: item['deletedAt'] as string | undefined,
-      lastModifiedByType: item['lastModifiedByType'] as string | undefined,
-      lastModifiedById: item['lastModifiedById'] as string | undefined,
-      lastModifiedByEmail: item['lastModifiedByEmail'] as string | undefined,
-      lastModifiedReason: item['lastModifiedReason'] as string | undefined,
-      createdAt: item['createdAt'] as string,
-      updatedAt: item['updatedAt'] as string,
-    })
-  }
-
   get isActive(): boolean {
     return this.status === 'ACTIVE'
   }
@@ -82,15 +62,10 @@ export class Category {
     return this.status === 'DELETED'
   }
 
-  delete(deletedAt: string): Category {
+  delete(deletedAt: string): this {
     if (!this.isActive) {
       throw new InvalidInputError(`Category ${this.categoryId} is not active.`)
     }
-    return new Category({
-      ...(this as unknown as CategoryProps),
-      status: 'DELETED' as const,
-      deletedAt,
-      updatedAt: deletedAt,
-    })
+    return this.with({ status: 'DELETED' as const, deletedAt, updatedAt: deletedAt })
   }
 }

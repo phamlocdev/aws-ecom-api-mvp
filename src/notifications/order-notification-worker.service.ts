@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { EmailTrackingService } from '../mail/email-tracking.service'
 import { SesMailService } from '../mail/ses-mail.service'
+import { ORDER_ITEM_REPOSITORY, OrderItemRepositoryPort } from '../orders/domain/order-item.repository.port'
 import { OrderStatus } from '../orders/domain/order-status.enum'
 import { PaymentStatus } from '../orders/domain/payment-status.enum'
 import { ORDER_REPOSITORY, OrderRepositoryPort } from '../orders/domain/order.repository.port'
@@ -22,6 +23,8 @@ export class OrderNotificationWorkerService {
   constructor(
     @Inject(ORDER_REPOSITORY)
     private readonly orderRepository: OrderRepositoryPort,
+    @Inject(ORDER_ITEM_REPOSITORY)
+    private readonly orderItemRepository: OrderItemRepositoryPort,
     @Inject(EmailTrackingService)
     private readonly emailTrackingService: EmailTrackingService,
     @Inject(SesMailService)
@@ -65,7 +68,7 @@ export class OrderNotificationWorkerService {
       return
     }
 
-    const items = await this.orderRepository.findOrderItems(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.orderId)
     const result = await this.sesMailService.sendShippedOrderNotificationEmail({
       order,
       items,
@@ -122,7 +125,7 @@ export class OrderNotificationWorkerService {
       return
     }
 
-    const items = await this.orderRepository.findOrderItems(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.orderId)
     const result = await this.sesMailService.sendCancelledOrderNotificationEmail({
       order,
       items,

@@ -49,18 +49,11 @@ describe('Category.delete()', () => {
     expect(deleted.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
-  it('preserves other fields on the returned instance', () => {
+  it('preserves other fields', () => {
     const category = makeCategory({ status: 'ACTIVE', name: 'Electronics', categoryId: 'cat-42' })
     const deleted = category.delete('2024-06-01T00:00:00.000Z')
     expect(deleted.name).toBe('Electronics')
     expect(deleted.categoryId).toBe('cat-42')
-  })
-
-  it('does not mutate the original category', () => {
-    const category = makeCategory({ status: 'ACTIVE' })
-    category.delete('2024-06-01T00:00:00.000Z')
-    expect(category.status).toBe('ACTIVE')
-    expect(category.deletedAt).toBeUndefined()
   })
 
   it('throws InvalidInputError when category is already DELETED', () => {

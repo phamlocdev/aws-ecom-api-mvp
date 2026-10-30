@@ -44,14 +44,18 @@ describe('InventoryRecord.totalQuantity', () => {
 // ---------------------------------------------------------------------------
 
 describe('InventoryRecord.reserve()', () => {
-  it('does not throw when quantity is within available stock', () => {
-    const inv = makeInventory({ availableQuantity: 10 })
-    expect(() => inv.reserve(3)).not.toThrow()
+  it('mutates quantities in place', () => {
+    const inv = makeInventory({ availableQuantity: 10, reservedQuantity: 2 })
+    inv.reserve(3)
+    expect(inv.availableQuantity).toBe(7)
+    expect(inv.reservedQuantity).toBe(5)
   })
 
-  it('does not throw when quantity equals available stock', () => {
-    const inv = makeInventory({ availableQuantity: 5 })
-    expect(() => inv.reserve(5)).not.toThrow()
+  it('allows reserving exactly the available stock', () => {
+    const inv = makeInventory({ availableQuantity: 5, reservedQuantity: 0 })
+    inv.reserve(5)
+    expect(inv.availableQuantity).toBe(0)
+    expect(inv.reservedQuantity).toBe(5)
   })
 
   it('throws ConflictError when quantity exceeds available stock', () => {
@@ -71,9 +75,18 @@ describe('InventoryRecord.reserve()', () => {
 })
 
 describe('InventoryRecord.release()', () => {
-  it('does not throw for a valid quantity', () => {
-    const inv = makeInventory({ reservedQuantity: 5 })
-    expect(() => inv.release(3)).not.toThrow()
+  it('mutates quantities in place', () => {
+    const inv = makeInventory({ availableQuantity: 5, reservedQuantity: 5 })
+    inv.release(3)
+    expect(inv.availableQuantity).toBe(8)
+    expect(inv.reservedQuantity).toBe(2)
+  })
+
+  it('clamps reservedQuantity to 0 if release exceeds reserved', () => {
+    const inv = makeInventory({ availableQuantity: 5, reservedQuantity: 1 })
+    inv.release(5)
+    expect(inv.availableQuantity).toBe(10)
+    expect(inv.reservedQuantity).toBe(0)
   })
 
   it('throws InvalidInputError when quantity is 0', () => {

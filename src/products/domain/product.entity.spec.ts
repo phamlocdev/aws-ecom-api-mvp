@@ -49,43 +49,55 @@ describe('Product.isDeleted', () => {
 // ---------------------------------------------------------------------------
 
 describe('Product.deactivate()', () => {
-  it('does not throw when product is ACTIVE', () => {
-    expect(() => makeProduct({ status: 'ACTIVE' }).deactivate()).not.toThrow()
+  it('returns a new Product with INACTIVE status', () => {
+    const product = makeProduct({ status: 'ACTIVE' })
+    const deactivated = product.deactivate('2024-06-01T00:00:00.000Z')
+    expect(deactivated.status).toBe('INACTIVE')
+    expect(deactivated.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
   it('throws InvalidInputError when product is INACTIVE', () => {
-    expect(() => makeProduct({ status: 'INACTIVE' }).deactivate()).toThrow(InvalidInputError)
+    expect(() => makeProduct({ status: 'INACTIVE' }).deactivate('2024-06-01T00:00:00.000Z')).toThrow(InvalidInputError)
   })
 
   it('throws InvalidInputError when product is DELETED', () => {
-    expect(() => makeProduct({ status: 'DELETED' }).deactivate()).toThrow(InvalidInputError)
+    expect(() => makeProduct({ status: 'DELETED' }).deactivate('2024-06-01T00:00:00.000Z')).toThrow(InvalidInputError)
   })
 })
 
 describe('Product.activate()', () => {
-  it('does not throw when product is INACTIVE', () => {
-    expect(() => makeProduct({ status: 'INACTIVE' }).activate()).not.toThrow()
+  it('returns a new Product with ACTIVE status', () => {
+    const product = makeProduct({ status: 'INACTIVE' })
+    const activated = product.activate('2024-06-01T00:00:00.000Z')
+    expect(activated.status).toBe('ACTIVE')
+    expect(activated.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
   it('throws InvalidInputError when product is ACTIVE', () => {
-    expect(() => makeProduct({ status: 'ACTIVE' }).activate()).toThrow(InvalidInputError)
+    expect(() => makeProduct({ status: 'ACTIVE' }).activate('2024-06-01T00:00:00.000Z')).toThrow(InvalidInputError)
   })
 
   it('throws InvalidInputError when product is DELETED', () => {
-    expect(() => makeProduct({ status: 'DELETED' }).activate()).toThrow(InvalidInputError)
+    expect(() => makeProduct({ status: 'DELETED' }).activate('2024-06-01T00:00:00.000Z')).toThrow(InvalidInputError)
   })
 })
 
 describe('Product.delete()', () => {
-  it('does not throw when product is ACTIVE', () => {
-    expect(() => makeProduct({ status: 'ACTIVE' }).delete()).not.toThrow()
+  it('returns a new Product with DELETED status', () => {
+    const product = makeProduct({ status: 'ACTIVE' })
+    const deleted = product.delete('2024-06-01T00:00:00.000Z')
+    expect(deleted.status).toBe('DELETED')
+    expect(deleted.deletedAt).toBe('2024-06-01T00:00:00.000Z')
+    expect(deleted.updatedAt).toBe('2024-06-01T00:00:00.000Z')
   })
 
   it('does not throw when product is INACTIVE', () => {
-    expect(() => makeProduct({ status: 'INACTIVE' }).delete()).not.toThrow()
+    const product = makeProduct({ status: 'INACTIVE' })
+    const deleted = product.delete('2024-06-01T00:00:00.000Z')
+    expect(deleted.status).toBe('DELETED')
   })
 
   it('throws InvalidInputError when product is already DELETED', () => {
-    expect(() => makeProduct({ status: 'DELETED' }).delete()).toThrow(InvalidInputError)
+    expect(() => makeProduct({ status: 'DELETED' }).delete('2024-06-01T00:00:00.000Z')).toThrow(InvalidInputError)
   })
 })

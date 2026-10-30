@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { CartStatus } from './cart-status.enum'
 import { InvalidInputError } from '../../common/domain-error'
+import { BaseEntity } from '../../common/base.entity'
 
 const CartPropsSchema = z.object({
   customerId: z.string(),
@@ -10,6 +11,10 @@ const CartPropsSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   expiresAt: z.number(),
+  lastModifiedByType: z.string().optional(),
+  lastModifiedById: z.string().optional(),
+  lastModifiedByEmail: z.string().optional(),
+  lastModifiedReason: z.string().optional(),
 })
 
 type CartProps = {
@@ -19,6 +24,10 @@ type CartProps = {
   createdAt: string
   updatedAt: string
   expiresAt: number
+  lastModifiedByType?: string
+  lastModifiedById?: string
+  lastModifiedByEmail?: string
+  lastModifiedReason?: string
 }
 
 export type CreateCartData = {
@@ -44,15 +53,14 @@ export type CreateCartItemData = {
   quantity: number
 }
 
-export class Cart {
+export class Cart extends BaseEntity<CartProps> {
   readonly customerId!: string
   readonly cartId!: string
   readonly status!: CartStatus
-  readonly createdAt!: string
-  readonly updatedAt!: string
   readonly expiresAt!: number
 
   protected constructor(props: CartProps) {
+    super()
     Object.assign(this, props)
   }
 
@@ -80,16 +88,18 @@ export class Cart {
     return !this.isExpired
   }
 
-  expire(updatedAt: string): void {
+  expire(updatedAt: string): this {
     if (this.status !== CartStatus.ACTIVE) {
       throw new InvalidInputError(`Cart ${this.cartId} is not active.`)
     }
+    return this.with({ status: CartStatus.EXPIRED, updatedAt })
   }
 
-  ensureUsable(): void {
+  ensureUsable(): this {
     if (this.isExpired) {
       throw new InvalidInputError(`Cart ${this.cartId} has expired.`)
     }
+    return this
   }
 }
 

@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { ProductStatus } from './product-status.enum'
 import { InvalidInputError } from '../../common/domain-error'
+import { BaseEntity } from '../../common/base.entity'
 
 const ProductImagePropsSchema = z.object({
   key: z.string(),
@@ -88,7 +89,7 @@ export type CreateProductData = {
   lastModifiedReason?: string
 }
 
-export class Product {
+export class Product extends BaseEntity<ProductProps> {
   readonly productId!: string
   readonly name!: string
   readonly description!: string
@@ -99,14 +100,9 @@ export class Product {
   readonly images?: ProductImage[]
   readonly status!: ProductStatus
   readonly deletedAt?: string
-  readonly lastModifiedByType?: string
-  readonly lastModifiedById?: string
-  readonly lastModifiedByEmail?: string
-  readonly lastModifiedReason?: string
-  readonly createdAt!: string
-  readonly updatedAt!: string
 
   private constructor(props: ProductProps) {
+    super()
     Object.assign(this, props)
   }
 
@@ -139,21 +135,24 @@ export class Product {
     return this.status === ProductStatus.DELETED
   }
 
-  deactivate(): void {
+  deactivate(updatedAt: string): this {
     if (!this.isActive) {
       throw new InvalidInputError(`Product ${this.productId} is not active.`)
     }
+    return this.with({ status: ProductStatus.INACTIVE, updatedAt })
   }
 
-  activate(): void {
+  activate(updatedAt: string): this {
     if (this.status !== ProductStatus.INACTIVE) {
       throw new InvalidInputError(`Product ${this.productId} is not inactive.`)
     }
+    return this.with({ status: ProductStatus.ACTIVE, updatedAt })
   }
 
-  delete(): void {
+  delete(deletedAt: string): this {
     if (this.isDeleted) {
       throw new InvalidInputError(`Product ${this.productId} is already deleted.`)
     }
+    return this.with({ status: ProductStatus.DELETED, deletedAt, updatedAt: deletedAt })
   }
 }

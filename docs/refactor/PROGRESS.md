@@ -2,7 +2,7 @@
 
 > File này là trạng thái SỐNG — luôn đọc file này trước khi bắt đầu bất kỳ công việc refactor nào, và CẬP NHẬT lại trước khi kết thúc phiên. Kiến trúc đích và các giai đoạn xem ở [PLAN.md](./PLAN.md).
 
-Cập nhật lần cuối: 2026-10-28 (orders module — Order entity chuyển sang mutable pattern, toàn bộ use-case/worker loại bỏ biến trung gian)
+Cập nhật lần cuối: 2026-10-29 (3) — `BaseDynamoDbRepository<TEntity>` generic với 4 abstract members (`tableName`, `primaryKeyName`, `fromRecord`, `toRecord`) + concrete `findById`, `save`, `executeTransaction` (public); `src/common/transact-item.type.ts` — custom `TransactItem` type không phụ thuộc AWS SDK; `BaseEntity` common fields đều required (không có `?`), entity classes bỏ `declare` re-declarations; `InventoryRecord.createdAt` promote thành required; `OrderRepositoryPort` bỏ 3 transaction methods → thay bằng `buildCancelTransactItem`, `buildFailTransactItem`, `buildExpireTransactItem` + `executeTransaction` (public); `InventoryRepositoryPort.buildReleaseTransactItems` return `TransactItem[]`; tất cả 7 repo implement 4 abstract members; use-case `ReleaseExpiredOrderReservationUseCase`, `UpdateOrderStatusUseCase`, `ReserveOrderCheckoutItemsUseCase` dùng builder pattern; tsc --noEmit: 0 lỗi
 
 ## Trạng thái tổng quan
 
@@ -103,7 +103,7 @@ Trạng thái ô: ☐ Chưa · 🔄 Đang làm · ✅ Xong
 
 ## Việc đang dang dở (nếu phiên kết thúc giữa chừng)
 
-_Orders entity mutable pattern refactor hoàn thành toàn bộ. tsc --noEmit: 0 lỗi. Giai đoạn 5 (CI) vẫn chưa bắt đầu; Giai đoạn 4 còn phần nhỏ chưa làm (xem nhật ký 2026-10-21)._
+_Orders module refactor lớn (5 yêu cầu) đã hoàn thành hoàn toàn. tsc --noEmit: 0 lỗi. npx jest chưa được chạy lại sau refactor — cần chạy để xác nhận các test pass. Giai đoạn 5 (CI) vẫn chưa bắt đầu; Giai đoạn 4 còn phần nhỏ chưa làm (xem nhật ký 2026-10-21)._
 
 > Khi 1 phiên kết thúc giữa chừng một task, ghi rõ ở đây: module đang làm, bước đã xong, bước tiếp theo, và bất kỳ quyết định/giả định nào đã đưa ra để phiên sau không phải đoán lại.
 
@@ -322,4 +322,59 @@ _Orders entity mutable pattern refactor hoàn thành toàn bộ. tsc --noEmit: 0
   - 10 domain method (`reserve`, `fail`, `ship`, `cancelWithRefund`, `failAsExpired`, `startPayment`, `confirmPayment`, `failPayment`, `refundExpiredPayment`, `withAudit`) đổi từ `return new Order({...})` sang `return this.mutate({...})`, trả về `this` thay vì instance mới.
   - 5 use-case và 1 worker loại bỏ biến trung gian (`const shippedOrder = ...`): `create-order-request`, `reserve-order-checkout-items`, `trigger-payment`, `update-order-status`, `reconcile-verified-gateway-result`, `orders-worker.service`.
   - `order.entity.spec.ts`: cập nhật test "does not mutate" → "mutates the original order"; cập nhật mô tả `it()` từ "returns new Order" → "mutates order in place and returns it"; thêm `expect(reserved).toBe(order)` để xác nhận cùng reference.
+  - `tsc --noEmit`: 0 lỗi.
+- 2026-10-29: **Orders module — structural refactor (BaseEntity, BaseDynamoDbRepository, OrderItemRepository, use-case injection cleanup)**
+  - **`src/common/base.entity.ts`** (mới): `BaseEntity<Props>` với `protected with(changes): this` dùng `Object.create` + `Object.assign` để clone không gọi constructor — tất cả entity extend class này.
+  - **`src/common/base-dynamodb.repository.ts`** (mới): `BaseDynamoDbRepository` với `protected executeTransaction(transactItems)` — tất cả DynamoDB repository extend class này và gọi `super(dynamoDbService)` trong constructor.
+  - **`src/orders/domain/order-item.repository.port.ts`** (mới): port `OrderItemRepositoryPort` với `createMany` + `findByOrderId`, token `ORDER_ITEM_REPOSITORY`.
+  - **`src/orders/infrastructure/dynamodb-order-item.repository.ts`** (mới): implement port trên, move logic `createOrderItems`/`findOrderItems` ra khỏi `DynamoDbOrderRepository`.
+  - **`OrderRepositoryPort`**: xoá `createOrderItems`/`findOrderItems` (chuyển sang port mới); thay `inventoryItems: ReservedInventoryItem[]` thành `inventoryTransactItems: Record<string, unknown>[]` trong 3 cross-table transaction methods (`cancelWithInventoryRelease`, `failWithInventoryRelease`, `expireWithInventoryRelease`).
+  - **`InventoryRepositoryPort`**: thêm `buildReleaseTransactItems(items, timestamp, actor): Record<string, unknown>[]` — logic build DynamoDB Update expression cho inventory release được move từ order repo sang inventory repo/infra.
+  - **`DynamoDbOrderRepository`**: không còn `orderItemsTableName`/`inventoryTableName`; transaction methods nhận pre-built inventory items từ use case; dùng `this.executeTransaction(...)` từ base class.
+  - **`DynamoDbInventoryRepository`**: implement `buildReleaseTransactItems`; extend `BaseDynamoDbRepository`.
+  - **Tất cả 6 DynamoDB repository** extend `BaseDynamoDbRepository`.
+  - **Tất cả entity** extend `BaseEntity<Props>` và bỏ `private mutate()` riêng.
+  - **Use-case injection**: `create-order-request.use-case.ts` inject `CART_REPOSITORY` + `COGNITO_USER_REPOSITORY` trực tiếp thay cho `GetOwnedCartUseCase`/`GetCartItemsUseCase`/`MarkCartExpiredUseCase`/`FindCustomerProfileByUsernameUseCase`; `reserve-order-checkout-items.use-case.ts` inject `INVENTORY_REPOSITORY` + `PRODUCT_REPOSITORY` + `ORDER_ITEM_REPOSITORY` thay cho `ReserveInventoryUseCase`/`FindOneProductUseCase`; `update-order-status` + `release-expired-order-reservation` inject `INVENTORY_REPOSITORY` + `ORDER_ITEM_REPOSITORY` để build inventory transact items.
+  - Các module (`CartsModule`, `InventoryModule`, `ProductsModule`, `UsersModule`) export thêm repository tokens cần thiết.
+  - `tsc --noEmit`: 0 lỗi.
+- 2026-10-29: **Tất cả entity — chuyển sang immutable pattern (return new instance từ domain methods)**
+  - `BaseEntity<Props>`: đổi `mutate()` (in-place) thành `with(changes): this` (clone) dùng `Object.create(Object.getPrototypeOf(this))` + `Object.assign`.
+  - **5 entity cập nhật**: `Order` (10 methods), `Cart` (`expire()`), `Category` (`delete()`), `InventoryRecord` (`reserve()`, `release()`), `Product` (`deactivate()`, `activate()`, `delete()`) — tất cả domain methods giờ `return this.with({...})`.
+  - **6 caller files** cập nhật để dùng return value: `create-order-request`, `reserve-order-checkout-items`, `trigger-payment`, `update-order-status`, `reconcile-verified-gateway-result`, `orders-worker.service`.
+  - **Entity spec files** cập nhật assertion + thêm test "does not mutate the original" xác nhận immutability.
+  - `tsc --noEmit`: 0 lỗi.
+- 2026-10-28: **Remaining modules — chuyển sang mutable entity pattern (Category, Product, Cart, InventoryRecord)**
+  - **`category.entity.ts`**: thêm `private mutate(changes: Partial<CategoryProps>): void`; `delete(deletedAt)` đổi từ `return new Category({...})` sang void + `this.mutate({status: 'DELETED', deletedAt, updatedAt: deletedAt})`; xoá `fromRecordV2()` không dùng.
+  - **`product.entity.ts`**: thêm `private mutate(changes: Partial<ProductProps>): void`; `deactivate(updatedAt: string)`, `activate(updatedAt: string)`, `delete(deletedAt: string)` thêm param `updatedAt`/`deletedAt` và thêm `this.mutate({status: ..., updatedAt, ...})` — trước đây chỉ validate, không mutate.
+  - **`cart.entity.ts`**: thêm `private mutate(changes: Partial<CartProps>): void`; `expire(updatedAt)` thêm `this.mutate({status: CartStatus.EXPIRED, updatedAt})` — trước đây chỉ validate.
+  - **`inventory.entity.ts`**: thêm `private mutate(changes: Partial<InventoryRecordProps>): void` vào `InventoryRecord`; `reserve(quantity)` thêm `this.mutate({availableQuantity: ...-quantity, reservedQuantity: ...+quantity, updatedAt})`; `release(quantity)` thêm `this.mutate({availableQuantity: ...+quantity, reservedQuantity: max(0, ...-quantity), updatedAt})` — trước đây cả hai chỉ validate.
+  - **Callers cập nhật**: `update-product.use-case.ts` truyền `timestamp` vào `deactivate(timestamp)`/`activate(timestamp)`; `delete-product.use-case.ts` truyền `timestamp` vào `delete(timestamp)`. Các caller khác (`delete-category`, `mark-cart-expired`, `reserve-inventory`) không đổi vì đã truyền đúng args.
+  - **Entity specs cập nhật** — đổi assertion từ "does not throw" → "mutates in place" + assert giá trị field sau call; xoá test "does not mutate original" (không còn đúng với mutable pattern):
+    - `category.entity.spec.ts`: 3 test `delete()` → 2 test (bỏ "does not mutate original")
+    - `product.entity.spec.ts`: tất cả test domain method thêm `updatedAt` arg + assert mutation
+    - `cart.entity.spec.ts`: `expire()` test assert `cart.status === EXPIRED` sau call
+    - `inventory.entity.spec.ts`: `reserve()` + `release()` test assert quantities thay đổi; thêm test "clamps reservedQuantity to 0"
+  - **Fix 3 lỗi test isolation** trong orders test suite (phát sinh do Orders entity đã mutable từ phiên trước nhưng tests dùng shared module-level Order instance bị mutate cross-test):
+    - `reserve-order-checkout-items.use-case.spec.ts`: `pendingOrder` module-level const → `makePendingOrder()` factory; `findById.mockResolvedValue(pendingOrder)` → `.mockImplementation(() => Promise.resolve(makePendingOrder()))`.
+    - `orders.integration.spec.ts` (ReleaseExpiredOrderReservationUseCase describe): thêm `expiredReservedOrder` local fixture với `paymentExpiresAt` trong quá khứ; trước đây dùng `reservedOrder` có `paymentExpiresAt` 1 giờ tương lai → `canExpireReservation()` luôn false → test "released toBe true" fail.
+    - `orders.integration.spec.ts` (CreateOrderRequestUseCase "creates the order" test): `GetCommand` mock đổi từ `resolves({status: RESERVED})` sang `resolvesOnce({status: PENDING}).resolves({status: RESERVED})` — lần 1 dùng bởi `ReserveOrderCheckoutItemsUseCase.findById` (cần PENDING để `order.reserve()` không throw), lần 2+ dùng bởi `CreateOrderRequestUseCase.findById` cuối cùng (trả RESERVED để assert đúng).
+  - `tsc --noEmit`: 0 lỗi. `npx jest`: 437/437 pass.
+- 2026-10-29: **Orders module — 5-yêu-cầu refactor lớn hoàn thành** (use cases không inject use case, BaseEntity generic, OrderItemRepositoryPort riêng, BaseDynamoDbRepository, domain methods trả `this`):
+  - **`src/common/base.entity.ts`** (mới): `abstract class BaseEntity<Props extends object>` với `protected mutate(changes: Partial<Props>): void` — tất cả entity extends từ đây (dù `mutate` đã có sẵn trong từng entity trước, nay gộp về base class).
+  - **`src/common/base-dynamodb.repository.ts`** (mới): `abstract class BaseDynamoDbRepository` với `protected async executeTransaction(transactItems): Promise<void>` dùng `TransactWriteCommand`. Tất cả DynamoDB repo (`DynamoDbOrderRepository`, `DynamoDbOrderItemRepository`, `DynamoDbInventoryRepository`, `DynamoDbCartRepository`, `DynamoDbProductRepository`, `DynamoDbCategoryRepository`, `DynamoDbUserAccountRepository`) extends class này.
+  - **`src/orders/domain/order-item.repository.port.ts`** (mới): `OrderItemRepositoryPort` với `createMany(items: OrderItem[]): Promise<void>` và `findByOrderId(orderId: string): Promise<OrderItem[]>`. DI token `ORDER_ITEM_REPOSITORY`.
+  - **`src/orders/infrastructure/dynamodb-order-item.repository.ts`** (mới): `DynamoDbOrderItemRepository implements OrderItemRepositoryPort` — `createMany` dùng `PutCommand` per item, `findByOrderId` dùng `QueryCommand` trên `orderId` key.
+  - **`src/inventory/domain/inventory.repository.port.ts`**: thêm type `InventoryReleaseItem = { productId: string; quantity: number }` và method `buildReleaseTransactItems(items, timestamp, actor): Record<string, unknown>[]` — trả pre-built DynamoDB Update items (domain-clean, không lộ AWS SDK type).
+  - **`src/inventory/infrastructure/dynamodb-inventory.repository.ts`**: implements `buildReleaseTransactItems` — map từng item thành `Update` expression tăng `availableQuantity`/giảm `reservedQuantity`; validation `items.length > 99` → `InvalidInputError` (chuyển từ `order.repository.ts`).
+  - **`src/orders/domain/order.repository.port.ts`**: xoá `createOrderItems`/`findOrderItems`; transaction methods đổi signature nhận `inventoryTransactItems: Record<string, unknown>[]` thay vì tự build inventory items.
+  - **`src/orders/infrastructure/dynamodb-order.repository.ts`**: extends `BaseDynamoDbRepository`; xoá `inventoryTableName`/`orderItemsTableName`/`buildReleaseInventoryTransactItems`/`assertTransactionSize`; transaction methods nhận pre-built items, cast `as unknown as NonNullable<TransactWriteCommandInput['TransactItems']>` để merge.
+  - **Use cases không inject use case nữa** (thay bằng repository port trực tiếp):
+    - `reserve-order-checkout-items.use-case.ts`: `(ORDER_REPOSITORY, ORDER_ITEM_REPOSITORY, INVENTORY_REPOSITORY, PRODUCT_REPOSITORY, ConfigService)` — thay `ReserveInventoryUseCase`→`inventoryRepository.reserve()`, `FindOneProductUseCase`→`productRepository.findOne()`, `orderItemRepository.createMany()` thay `orderRepository.createOrderItems()`, catch block gọi `inventoryRepository.buildReleaseTransactItems()` → `orderRepository.failWithInventoryRelease()`.
+    - `create-order-request.use-case.ts`: `(ORDER_REPOSITORY, CART_REPOSITORY, COGNITO_USER_REPOSITORY, ReserveOrderCheckoutItemsUseCase)` — thay `GetOwnedCartUseCase`→`cartRepository.findOne()`, `GetCartItemsUseCase`→`cartRepository.findItems()`, `MarkCartExpiredUseCase`→`cartRepository.updateStatus()`, `FindCustomerProfileByUsernameUseCase`→`cognitoUserRepository.getUserByUsername()`.
+    - `update-order-status.use-case.ts`: `(ORDER_REPOSITORY, ORDER_ITEM_REPOSITORY, INVENTORY_REPOSITORY, OrderEventsPublisher)` — cancel path gọi `orderItemRepository.findByOrderId()` + `inventoryRepository.buildReleaseTransactItems()` + `orderRepository.cancelWithInventoryRelease()`.
+    - `release-expired-order-reservation.use-case.ts`: `(ORDER_REPOSITORY, ORDER_ITEM_REPOSITORY, INVENTORY_REPOSITORY)` — gọi `orderItemRepository.findByOrderId()` + `inventoryRepository.buildReleaseTransactItems()` + `orderRepository.expireWithInventoryRelease()`.
+    - `find-one-order.use-case.ts`, `reconcile-verified-gateway-result.use-case.ts`, `resend-failed-order-email.use-case.ts`: thêm `ORDER_ITEM_REPOSITORY`; gọi `orderItemRepository.findByOrderId()` thay `orderRepository.findOrderItems()`.
+  - **Domain methods trả `this`** (không đổi hành vi — entity đã mutable, chỉ cập nhật return type annotation): tất cả 10 method của `Order` (`reserve`, `fail`, `ship`, `cancelWithRefund`, `failAsExpired`, `startPayment`, `confirmPayment`, `failPayment`, `refundExpiredPayment`, `withAudit`) đã trả `this`.
+  - **Module wiring**: `CartRepositoryPort`, `InventoryRepositoryPort`, `ProductRepositoryPort`, `CognitoUserPort` được export từ module tương ứng; `ORDER_ITEM_REPOSITORY` provider thêm vào `orders.module.ts` và `order-notification-worker.module.ts`.
+  - **3 test file cập nhật**: `orders.use-cases.spec.ts`, `reserve-order-checkout-items.use-case.spec.ts`, `orders.integration.spec.ts` — constructor args mới, factory mock functions mới (`createOrderItemRepositoryMock`, `createInventoryRepositoryMock`, `createCartRepositoryMock`, `createCognitoUserRepositoryMock`), assertions cập nhật (không còn `createOrderItems`/`findOrderItems`/old use-case mocks).
   - `tsc --noEmit`: 0 lỗi.

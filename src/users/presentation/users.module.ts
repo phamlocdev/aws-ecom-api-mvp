@@ -44,6 +44,6 @@ import { UsersController } from './users.controller'
     UpdateOwnProfileUseCase,
     UpdateUserPermissionsUseCase,
   ],
-  exports: [FindCustomerProfileByUsernameUseCase],
+  exports: [COGNITO_USER_REPOSITORY, FindCustomerProfileByUsernameUseCase],
 })
 export class UsersModule {}

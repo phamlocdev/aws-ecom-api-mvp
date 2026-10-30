@@ -62,9 +62,9 @@ export class UpdateProductUseCase {
 
     const timestamp = new Date().toISOString()
     if (changes.status === ProductStatus.INACTIVE) {
-      existingProduct.deactivate()
+      existingProduct.deactivate(timestamp)
     } else if (changes.status === ProductStatus.ACTIVE) {
-      existingProduct.activate()
+      existingProduct.activate(timestamp)
     }
     const actor = buildUserAuditMutationContext(user, 'Product updated')
     const updatedProduct = await this.productRepository.update(productId, updates, timestamp, actor)
