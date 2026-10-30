@@ -2,7 +2,7 @@
 
 > File này là trạng thái SỐNG — luôn đọc file này trước khi bắt đầu bất kỳ công việc refactor nào, và CẬP NHẬT lại trước khi kết thúc phiên. Kiến trúc đích và các giai đoạn xem ở [PLAN.md](./PLAN.md).
 
-Cập nhật lần cuối: 2026-10-29 (3) — `BaseDynamoDbRepository<TEntity>` generic với 4 abstract members (`tableName`, `primaryKeyName`, `fromRecord`, `toRecord`) + concrete `findById`, `save`, `executeTransaction` (public); `src/common/transact-item.type.ts` — custom `TransactItem` type không phụ thuộc AWS SDK; `BaseEntity` common fields đều required (không có `?`), entity classes bỏ `declare` re-declarations; `InventoryRecord.createdAt` promote thành required; `OrderRepositoryPort` bỏ 3 transaction methods → thay bằng `buildCancelTransactItem`, `buildFailTransactItem`, `buildExpireTransactItem` + `executeTransaction` (public); `InventoryRepositoryPort.buildReleaseTransactItems` return `TransactItem[]`; tất cả 7 repo implement 4 abstract members; use-case `ReleaseExpiredOrderReservationUseCase`, `UpdateOrderStatusUseCase`, `ReserveOrderCheckoutItemsUseCase` dùng builder pattern; tsc --noEmit: 0 lỗi
+Cập nhật lần cuối: 2026-10-30 — vi phạm use-case inject use-case đã xoá khỏi toàn bộ modules `carts`, `products`, `users`; mỗi use-case chỉ inject repository port (Symbol) và service; tsc --noEmit: 0 lỗi
 
 ## Trạng thái tổng quan
 
@@ -103,7 +103,7 @@ Trạng thái ô: ☐ Chưa · 🔄 Đang làm · ✅ Xong
 
 ## Việc đang dang dở (nếu phiên kết thúc giữa chừng)
 
-_Orders module refactor lớn (5 yêu cầu) đã hoàn thành hoàn toàn. tsc --noEmit: 0 lỗi. npx jest chưa được chạy lại sau refactor — cần chạy để xác nhận các test pass. Giai đoạn 5 (CI) vẫn chưa bắt đầu; Giai đoạn 4 còn phần nhỏ chưa làm (xem nhật ký 2026-10-21)._
+_Không có việc dang dở. Vi phạm use-case inject use-case đã xoá hoàn toàn khỏi `carts`, `products`, `users`. tsc --noEmit: 0 lỗi. Giai đoạn 5 (CI) vẫn chưa bắt đầu; Giai đoạn 4 còn phần nhỏ (`ses-event-processor`, xem nhật ký 2026-10-21)._
 
 > Khi 1 phiên kết thúc giữa chừng một task, ghi rõ ở đây: module đang làm, bước đã xong, bước tiếp theo, và bất kỳ quyết định/giả định nào đã đưa ra để phiên sau không phải đoán lại.
 
@@ -378,3 +378,21 @@ _Orders module refactor lớn (5 yêu cầu) đã hoàn thành hoàn toàn. tsc 
   - **Module wiring**: `CartRepositoryPort`, `InventoryRepositoryPort`, `ProductRepositoryPort`, `CognitoUserPort` được export từ module tương ứng; `ORDER_ITEM_REPOSITORY` provider thêm vào `orders.module.ts` và `order-notification-worker.module.ts`.
   - **3 test file cập nhật**: `orders.use-cases.spec.ts`, `reserve-order-checkout-items.use-case.spec.ts`, `orders.integration.spec.ts` — constructor args mới, factory mock functions mới (`createOrderItemRepositoryMock`, `createInventoryRepositoryMock`, `createCartRepositoryMock`, `createCognitoUserRepositoryMock`), assertions cập nhật (không còn `createOrderItems`/`findOrderItems`/old use-case mocks).
   - `tsc --noEmit`: 0 lỗi.
+- 2026-10-30: **Xoá toàn bộ vi phạm use-case inject use-case khỏi `carts`, `products`, `users`** — quy tắc: use-case CHỈ inject repository port (qua Symbol) và service, không được inject use-case khác.
+  - **`carts` — 4 use-case sửa**:
+    - `find-one-cart.use-case.ts`: bỏ `GetOwnedCartUseCase` + `GetCartItemsUseCase`; inject `CART_REPOSITORY` trực tiếp; inline logic findOne + auth check + findItems + `CartDetails.fromParts()`.
+    - `add-cart-item.use-case.ts`: bỏ `GetOwnedCartUseCase` + `FindOneCartUseCase`; chỉ giữ `CART_REPOSITORY`; inline findOne + auth + `cart.ensureUsable()` + putItem + touchCart + findItems + `CartDetails.fromParts()`.
+    - `update-cart-item.use-case.ts`: bỏ `GetOwnedCartUseCase` + `FindOneCartUseCase`; chỉ `CART_REPOSITORY`; inline tương tự.
+    - `remove-cart-item.use-case.ts`: bỏ `GetOwnedCartUseCase`; chỉ `CART_REPOSITORY`; inline findOne + auth + `cart.ensureUsable()` + removeItem + touchCart.
+  - **`products` — 3 use-case sửa**:
+    - `find-product-for-response.use-case.ts`: bỏ `FindOneProductUseCase`; inject `PRODUCT_REPOSITORY` + `UploadService`; inline findOne + DELETED check + `withAllImageReadUrls()`.
+    - `update-product.use-case.ts`: bỏ `FindOneProductUseCase`; inject `PRODUCT_REPOSITORY` + `UploadService` + `ProductEventsPublisher`; inline findOne + DELETED check.
+    - `delete-product.use-case.ts`: bỏ `FindOneProductUseCase`; inject `PRODUCT_REPOSITORY` + `UploadService` + `ProductEventsPublisher`; inline findOne + DELETED check.
+  - **`users` — 4 use-case / 1 util sửa**:
+    - `own-profile.util.ts`: `findCognitoProfileForAuthenticatedUser` đổi tham số từ `FindCustomerProfileByUsernameUseCase` → `CognitoUserPort`; inline `cognitoUserPort.getUserByUsername(user.username)`.
+    - `get-own-profile.use-case.ts`: bỏ `FindCustomerProfileByUsernameUseCase`; inject `COGNITO_USER_REPOSITORY` (`CognitoUserPort`); truyền port vào util.
+    - `update-own-profile.use-case.ts`: tương tự `get-own-profile`.
+    - `update-managed-user.use-case.ts`: bỏ `DisableManagedUserUseCase`; chỉ inject `COGNITO_USER_REPOSITORY` + `USER_ACCOUNT_REPOSITORY` + `EmailTrackingService`; inline disable logic (`cognitoUserPort.disableUser()` + `putUserAccount()` với status SUSPENDED).
+  - **Spec files cập nhật** (unit test + integration test): `carts.use-cases.spec.ts`, `carts.integration.spec.ts`, `products.use-cases.spec.ts`, `products.integration.spec.ts`, `users.use-cases.spec.ts`, `users.integration.spec.ts` — xoá tham số use-case khỏi constructor, sửa `cognitoUserPort` thay `findCustomerProfileByUsernameUseCase` trong `GetOwnProfileUseCase`/`UpdateOwnProfileUseCase`, xoá `disableManagedUserUseCase` khỏi `UpdateManagedUserUseCase`.
+  - **Pre-existing lỗi trong `orders` spec files đã sửa thêm** để đạt 0 lỗi TypeScript tổng thể: `UpdateOrderStatusUseCase` (2 chỗ thiếu `createDynamoTablesMock()` arg), `CreateOrderRequestUseCase` (rewrite hoàn toàn describe block với mock đúng 8 constructor args + `productRepository.findOne`/`inventoryRepository.reserve`/`orderItemRepository.createMany`/`repository.findById`), `OrderItem.fromRecord()` trong `orders.integration.spec.ts`.
+  - `tsc --noEmit`: 0 lỗi. Không có module nào còn vi phạm quy tắc use-case inject use-case.

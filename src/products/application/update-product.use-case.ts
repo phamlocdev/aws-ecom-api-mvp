@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { buildUserAuditMutationContext } from '../../audit/audit-actor'
 import { AuthenticatedUser } from '../../auth/auth.types'
-import { InvalidInputError } from '../../common/domain-error'
+import { InvalidInputError, NotFoundError } from '../../common/domain-error'
 import { UploadService } from '../../upload/upload.service'
 import { ProductEventsPublisher } from '../infrastructure/product-events.publisher'
 import { PRODUCT_REPOSITORY, ProductRepositoryPort } from '../domain/product.repository.port'
@@ -13,7 +13,6 @@ import {
   ProductImageInput,
 } from './product-image.util'
 import { publishProductMutationBestEffort } from './product-event.util'
-import { FindOneProductUseCase } from './find-one-product.use-case'
 
 export interface UpdateProductChanges {
   name?: string
@@ -32,8 +31,6 @@ export class UpdateProductUseCase {
   constructor(
     @Inject(PRODUCT_REPOSITORY)
     private readonly productRepository: ProductRepositoryPort,
-    @Inject(FindOneProductUseCase)
-    private readonly findOneProductUseCase: FindOneProductUseCase,
     @Inject(UploadService)
     private readonly uploadService: UploadService,
     @Inject(ProductEventsPublisher)
@@ -45,7 +42,11 @@ export class UpdateProductUseCase {
     productId: string,
     changes: UpdateProductChanges,
   ): Promise<Product> {
-    const existingProduct = await this.findOneProductUseCase.execute(productId)
+    const existingProduct = await this.productRepository.findOne(productId)
+    if (!existingProduct || existingProduct.status === ProductStatus.DELETED) {
+      throw new NotFoundError(`Product ${productId} was not found.`)
+    }
+
     const { images, ...productFieldUpdates } = changes
     const preparedImages = images !== undefined
       ? await prepareProductImages(this.uploadService, images)
@@ -87,5 +88,3 @@ export class UpdateProductUseCase {
     return updatedProduct
   }
 }
-
-

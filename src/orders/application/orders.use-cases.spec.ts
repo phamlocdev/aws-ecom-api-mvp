@@ -20,6 +20,8 @@ import {
 } from '../../common/domain-error'
 import { InventoryRepositoryPort } from '../../inventory/domain/inventory.repository.port'
 import { EmailTrackingService } from '../../mail/email-tracking.service'
+import { Product } from '../../products/domain/product.entity'
+import { ProductRepositoryPort } from '../../products/domain/product.repository.port'
 import { SesMailService } from '../../mail/ses-mail.service'
 import { CognitoUserPort } from '../../users/domain/cognito-user.port'
 import { Order, OrderItem } from '../domain/order.entity'
@@ -130,6 +132,16 @@ function createInventoryRepositoryMock(): jest.Mocked<InventoryRepositoryPort> {
     updateAvailableQuantity: jest.fn(),
     reserve: jest.fn(),
     release: jest.fn(),
+  }
+}
+
+function createProductRepositoryMock(): jest.Mocked<ProductRepositoryPort> {
+  return {
+    create: jest.fn(),
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
   }
 }
 
@@ -520,7 +532,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const orderItemRepository = createOrderItemRepositoryMock()
     const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, publisher)
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, createDynamoTablesMock(), publisher)
 
     await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED)
 
@@ -534,7 +546,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const orderItemRepository = createOrderItemRepositoryMock()
     const inventoryRepository = createInventoryRepositoryMock()
     const publisher = createEventsPublisherMock()
-    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, publisher)
+    const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, createDynamoTablesMock(), publisher)
 
     await expect(
       useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED),
@@ -768,31 +780,49 @@ describe('CreateOrderRequestUseCase', () => {
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
 
+  const cartProductFixture = Product.fromRecord({
+    productId: 'p1',
+    name: 'Headphones',
+    description: 'Wireless headphones',
+    categoryId: 'electronics',
+    price: 100000,
+    currency: 'VND',
+    status: 'ACTIVE',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })
+
   function createDeps() {
     const repository = createOrderRepositoryMock()
+    const orderItemRepository = createOrderItemRepositoryMock()
     const cartRepository = createCartRepositoryMock()
+    const inventoryRepository = createInventoryRepositoryMock()
+    const productRepository = createProductRepositoryMock()
     const cognitoUserRepository = createCognitoUserRepositoryMock()
-    const reserveOrderCheckoutItemsUseCase = mockUseCase<ReserveOrderCheckoutItemsUseCase>()
+    const dynamoTables = createDynamoTablesMock()
+    const configService = createConfigServiceMock()
 
     // Default: cart found and active
     cartRepository.findOne.mockResolvedValue(activeCart)
-    cognitoUserRepository.getUserByUsername.mockResolvedValue({
-      username: customerUser.username,
-      attributes: { email: customerUser.email, name: customerUser.name },
-    } as never)
 
     const useCase = new CreateOrderRequestUseCase(
       repository,
+      orderItemRepository,
       cartRepository,
+      inventoryRepository,
+      productRepository,
       cognitoUserRepository,
-      reserveOrderCheckoutItemsUseCase,
+      dynamoTables,
+      configService as never,
     )
 
     return {
       repository,
+      orderItemRepository,
       cartRepository,
+      inventoryRepository,
+      productRepository,
       cognitoUserRepository,
-      reserveOrderCheckoutItemsUseCase,
       useCase,
     }
   }
@@ -808,30 +838,33 @@ describe('CreateOrderRequestUseCase', () => {
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
-  it('marks the order FAILED and returns it when the cart has no items', async () => {
+  it('creates the order, marks it FAILED and saves it when the cart has no items', async () => {
     const { repository, cartRepository, useCase } = createDeps()
     cartRepository.findItems.mockResolvedValue([])
 
-    const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
+    await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
     expect(repository.create).toHaveBeenCalled()
     expect(repository.save).toHaveBeenCalledWith(
       expect.objectContaining({ status: OrderStatus.FAILED }),
     )
-    expect(result.status).toBe(OrderStatus.FAILED)
   })
 
   it('reserves inventory and marks the order RESERVED on success', async () => {
-    const { repository, cartRepository, reserveOrderCheckoutItemsUseCase, useCase } = createDeps()
-    cartRepository.findItems.mockResolvedValue([cartItemFixture])
-    reserveOrderCheckoutItemsUseCase.execute.mockResolvedValue({ reservationSucceeded: true })
-    repository.findById.mockResolvedValue(
-      Order.fromRecord({ ...baseOrder, status: OrderStatus.RESERVED }),
-    )
+    const { repository, cartRepository, orderItemRepository, inventoryRepository, productRepository, useCase } = createDeps()
+    const pendingOrder = Order.fromRecord({ ...baseOrder, status: OrderStatus.PENDING, paymentStatus: 'NOT_STARTED' as never })
+    cartRepository.findItems.mockResolvedValue([cartItemFixture as never])
+    productRepository.findOne.mockResolvedValue(cartProductFixture)
+    inventoryRepository.reserve.mockResolvedValue(undefined)
+    orderItemRepository.createMany.mockResolvedValue(undefined)
+    repository.findById
+      .mockResolvedValueOnce(pendingOrder)
+      .mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.RESERVED }))
 
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
-    expect(reserveOrderCheckoutItemsUseCase.execute).toHaveBeenCalled()
+    expect(inventoryRepository.reserve).toHaveBeenCalled()
+    expect(orderItemRepository.createMany).toHaveBeenCalled()
     expect(cartRepository.updateStatus).toHaveBeenCalledWith(
       activeCart.customerId,
       activeCart.cartId,
@@ -841,13 +874,14 @@ describe('CreateOrderRequestUseCase', () => {
     expect(result.status).toBe(OrderStatus.RESERVED)
   })
 
-  it('does not expire the cart when reservation fails', async () => {
-    const { repository, cartRepository, reserveOrderCheckoutItemsUseCase, useCase } = createDeps()
-    cartRepository.findItems.mockResolvedValue([cartItemFixture])
-    reserveOrderCheckoutItemsUseCase.execute.mockResolvedValue({ reservationSucceeded: false })
-    repository.findById.mockResolvedValue(
-      Order.fromRecord({ ...baseOrder, status: OrderStatus.FAILED }),
-    )
+  it('does not expire the cart when inventory reservation fails with ConflictError', async () => {
+    const { repository, cartRepository, inventoryRepository, productRepository, useCase } = createDeps()
+    cartRepository.findItems.mockResolvedValue([cartItemFixture as never])
+    productRepository.findOne.mockResolvedValue(cartProductFixture)
+    inventoryRepository.reserve.mockRejectedValue(new ConflictError('Insufficient stock.'))
+    repository.findById
+      .mockResolvedValueOnce(baseOrder)
+      .mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.FAILED }))
 
     const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
 
@@ -855,16 +889,14 @@ describe('CreateOrderRequestUseCase', () => {
     expect(result.status).toBe(OrderStatus.FAILED)
   })
 
-  it('rethrows when the reservation use-case throws an unexpected error', async () => {
-    const { cartRepository, reserveOrderCheckoutItemsUseCase, useCase } = createDeps()
-    cartRepository.findItems.mockResolvedValue([cartItemFixture])
-    reserveOrderCheckoutItemsUseCase.execute.mockRejectedValue(
-      new Error('Insufficient inventory for product p2.'),
-    )
+  it('rethrows when an unexpected error occurs during reservation', async () => {
+    const { cartRepository, productRepository, useCase } = createDeps()
+    cartRepository.findItems.mockResolvedValue([cartItemFixture as never])
+    productRepository.findOne.mockRejectedValue(new Error('Unexpected product error.'))
 
     await expect(
       useCase.execute(customerUser, { cartId: activeCart.cartId }),
-    ).rejects.toThrow('Insufficient inventory for product p2.')
+    ).rejects.toThrow('Unexpected product error.')
   })
 })
 

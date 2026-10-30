@@ -4,8 +4,8 @@ import { AuthenticatedUser } from '../../auth/auth.types'
 import { UploadService } from '../../upload/upload.service'
 import { CustomerProfile, UserAccount, UserProfile } from '../domain/user.entity'
 import { UserAccountRepositoryPort } from '../domain/user-account.repository.port'
+import { CognitoUserPort } from '../domain/cognito-user.port'
 import { resolvePasswordStatus } from '../domain/user.rules'
-import { FindCustomerProfileByUsernameUseCase } from './find-customer-profile-by-username.use-case'
 import { putUserAccount } from './put-user-account.util'
 
 const logger = new Logger('UsersService')
@@ -13,7 +13,7 @@ const logger = new Logger('UsersService')
 // Shared by GetOwnProfileUseCase/UpdateOwnProfileUseCase, matching the
 // pre-refactor UsersService private helpers exactly.
 export async function findCognitoProfileForAuthenticatedUser(
-  findCustomerProfileByUsernameUseCase: FindCustomerProfileByUsernameUseCase,
+  cognitoUserPort: CognitoUserPort,
   user: AuthenticatedUser,
   account: UserAccount | null,
 ): Promise<CustomerProfile | null> {
@@ -22,7 +22,13 @@ export async function findCognitoProfileForAuthenticatedUser(
   }
 
   try {
-    return await findCustomerProfileByUsernameUseCase.execute(user.username)
+    const record = await cognitoUserPort.getUserByUsername(user.username)
+    return {
+      username: user.username,
+      email: record.attributes.email,
+      name: record.attributes.name,
+      sub: record.attributes.sub,
+    }
   } catch (error) {
     logger.warn(
       JSON.stringify({

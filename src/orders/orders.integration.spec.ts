@@ -181,7 +181,7 @@ describe('orders use-cases (integration)', () => {
     paymentExpiresAt: Math.floor(Date.now() / 1000) + 3600,
   })
 
-  const reservedOrderItem: OrderItem = {
+  const reservedOrderItem = OrderItem.fromRecord({
     orderId: reservedOrder.orderId,
     lineId: '001-abcdefgh',
     productId: product.productId,
@@ -190,7 +190,7 @@ describe('orders use-cases (integration)', () => {
     quantity: 2,
     lineTotal: 200000,
     createdAt: '2026-01-01T00:00:00.000Z',
-  }
+  })
 
   beforeEach(() => {
     ddbMock.reset()

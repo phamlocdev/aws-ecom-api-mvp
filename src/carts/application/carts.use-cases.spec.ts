@@ -8,7 +8,6 @@ import { CreateCartUseCase } from './create-cart.use-case'
 import { FindAllCartsUseCase } from './find-all-carts.use-case'
 import { FindOneCartUseCase } from './find-one-cart.use-case'
 import { GetOwnedCartUseCase } from './get-owned-cart.use-case'
-import { GetCartItemsUseCase } from './get-cart-items.use-case'
 import { AddCartItemUseCase } from './add-cart-item.use-case'
 import { UpdateCartItemUseCase } from './update-cart-item.use-case'
 import { RemoveCartItemUseCase } from './remove-cart-item.use-case'
@@ -130,10 +129,7 @@ describe('FindOneCartUseCase', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
     ])
-    const useCase = new FindOneCartUseCase(
-      new GetOwnedCartUseCase(repository),
-      new GetCartItemsUseCase(repository),
-    )
+    const useCase = new FindOneCartUseCase(repository)
 
     const result = await useCase.execute(user, activeCart.cartId)
 
@@ -146,15 +142,7 @@ describe('AddCartItemUseCase', () => {
   it('throws InvalidInputError when the cart has expired', async () => {
     const repository = createRepositoryMock()
     repository.findOne.mockResolvedValue(expiredCart)
-    const findOneCartUseCase = new FindOneCartUseCase(
-      new GetOwnedCartUseCase(repository),
-      new GetCartItemsUseCase(repository),
-    )
-    const useCase = new AddCartItemUseCase(
-      repository,
-      new GetOwnedCartUseCase(repository),
-      findOneCartUseCase,
-    )
+    const useCase = new AddCartItemUseCase(repository)
 
     await expect(
       useCase.execute(user, expiredCart.cartId, { productId: 'p1', quantity: 1 }),
@@ -166,15 +154,7 @@ describe('AddCartItemUseCase', () => {
     const repository = createRepositoryMock()
     repository.findOne.mockResolvedValue(activeCart)
     repository.findItems.mockResolvedValue([])
-    const findOneCartUseCase = new FindOneCartUseCase(
-      new GetOwnedCartUseCase(repository),
-      new GetCartItemsUseCase(repository),
-    )
-    const useCase = new AddCartItemUseCase(
-      repository,
-      new GetOwnedCartUseCase(repository),
-      findOneCartUseCase,
-    )
+    const useCase = new AddCartItemUseCase(repository)
 
     const result = await useCase.execute(user, activeCart.cartId, { productId: 'p1', quantity: 2 })
 
@@ -198,15 +178,7 @@ describe('UpdateCartItemUseCase', () => {
     repository.updateItemQuantity.mockRejectedValue(
       new NotFoundError('Product missing is not in cart cart-1.'),
     )
-    const findOneCartUseCase = new FindOneCartUseCase(
-      new GetOwnedCartUseCase(repository),
-      new GetCartItemsUseCase(repository),
-    )
-    const useCase = new UpdateCartItemUseCase(
-      repository,
-      new GetOwnedCartUseCase(repository),
-      findOneCartUseCase,
-    )
+    const useCase = new UpdateCartItemUseCase(repository)
 
     await expect(
       useCase.execute(user, activeCart.cartId, 'missing', 3),
@@ -218,7 +190,7 @@ describe('RemoveCartItemUseCase', () => {
   it('throws InvalidInputError when the cart has expired', async () => {
     const repository = createRepositoryMock()
     repository.findOne.mockResolvedValue(expiredCart)
-    const useCase = new RemoveCartItemUseCase(repository, new GetOwnedCartUseCase(repository))
+    const useCase = new RemoveCartItemUseCase(repository)
 
     await expect(
       useCase.execute(user, expiredCart.cartId, 'p1'),
@@ -229,7 +201,7 @@ describe('RemoveCartItemUseCase', () => {
   it('removes the item and touches the cart', async () => {
     const repository = createRepositoryMock()
     repository.findOne.mockResolvedValue(activeCart)
-    const useCase = new RemoveCartItemUseCase(repository, new GetOwnedCartUseCase(repository))
+    const useCase = new RemoveCartItemUseCase(repository)
 
     await useCase.execute(user, activeCart.cartId, 'p1')
 

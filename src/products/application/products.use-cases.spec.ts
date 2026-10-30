@@ -180,9 +180,8 @@ describe('FindProductForResponseUseCase', () => {
     uploadService.createReadUrls.mockResolvedValue([
       { key: 'products/a/1.webp', readUrl: 'https://example.com/1', expiresInSeconds: 900 },
     ])
-    const findOneProductUseCase = new FindOneProductUseCase(repository)
     const useCase = new FindProductForResponseUseCase(
-      findOneProductUseCase,
+      repository,
       uploadService as unknown as UploadService,
     )
 
@@ -201,10 +200,8 @@ describe('UpdateProductUseCase', () => {
     const uploadService = createUploadServiceMock()
     const publisher = createPublisherMock()
     repository.findOne.mockResolvedValue(baseProduct)
-    const findOneProductUseCase = new FindOneProductUseCase(repository)
     const useCase = new UpdateProductUseCase(
       repository,
-      findOneProductUseCase,
       uploadService as unknown as UploadService,
       publisher,
     )
@@ -218,10 +215,8 @@ describe('UpdateProductUseCase', () => {
     const uploadService = createUploadServiceMock()
     const publisher = createPublisherMock()
     repository.findOne.mockResolvedValue(null)
-    const findOneProductUseCase = new FindOneProductUseCase(repository)
     const useCase = new UpdateProductUseCase(
       repository,
-      findOneProductUseCase,
       uploadService as unknown as UploadService,
       publisher,
     )
@@ -238,10 +233,8 @@ describe('UpdateProductUseCase', () => {
     repository.findOne.mockResolvedValue(baseProduct)
     const updated = Product.fromRecord({ ...(baseProduct as unknown as Record<string, unknown>), price: 999 })
     repository.update.mockResolvedValue(updated)
-    const findOneProductUseCase = new FindOneProductUseCase(repository)
     const useCase = new UpdateProductUseCase(
       repository,
-      findOneProductUseCase,
       uploadService as unknown as UploadService,
       publisher,
     )
@@ -265,10 +258,8 @@ describe('DeleteProductUseCase', () => {
     const uploadService = createUploadServiceMock()
     const publisher = createPublisherMock()
     repository.findOne.mockResolvedValue(null)
-    const findOneProductUseCase = new FindOneProductUseCase(repository)
     const useCase = new DeleteProductUseCase(
       repository,
-      findOneProductUseCase,
       uploadService as unknown as UploadService,
       publisher,
     )
@@ -287,10 +278,8 @@ describe('DeleteProductUseCase', () => {
     })
     repository.findOne.mockResolvedValue(productWithImages)
     repository.remove.mockResolvedValue(undefined)
-    const findOneProductUseCase = new FindOneProductUseCase(repository)
     const useCase = new DeleteProductUseCase(
       repository,
-      findOneProductUseCase,
       uploadService as unknown as UploadService,
       publisher,
     )

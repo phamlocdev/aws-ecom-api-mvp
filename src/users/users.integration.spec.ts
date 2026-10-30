@@ -190,7 +190,6 @@ describe('users use-cases (integration)', () => {
       cognitoUserPort,
       userAccountRepository,
       emailTrackingService as unknown as EmailTrackingService,
-      disableManagedUserUseCase,
     )
     resetManagedUserPasswordUseCase = new ResetManagedUserPasswordUseCase(
       cognitoUserPort,
@@ -214,12 +213,12 @@ describe('users use-cases (integration)', () => {
     getOwnProfileUseCase = new GetOwnProfileUseCase(
       userAccountRepository,
       uploadService as unknown as UploadService,
-      findCustomerProfileByUsernameUseCase,
+      cognitoUserPort,
     )
     updateOwnProfileUseCase = new UpdateOwnProfileUseCase(
       userAccountRepository,
       uploadService as unknown as UploadService,
-      findCustomerProfileByUsernameUseCase,
+      cognitoUserPort,
     )
   })
 

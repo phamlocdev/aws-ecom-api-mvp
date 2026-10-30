@@ -8,7 +8,6 @@ import {
   USER_ACCOUNT_REPOSITORY,
   UserAccountRepositoryPort,
 } from '../domain/user-account.repository.port'
-import { DisableManagedUserUseCase } from './disable-managed-user.use-case'
 import { findManagedUserBySub } from './managed-user.util'
 import { putUserAccount } from './put-user-account.util'
 
@@ -28,8 +27,6 @@ export class UpdateManagedUserUseCase {
     private readonly userAccountRepository: UserAccountRepositoryPort,
     @Inject(EmailTrackingService)
     private readonly emailTrackingService: EmailTrackingService,
-    @Inject(DisableManagedUserUseCase)
-    private readonly disableManagedUserUseCase: DisableManagedUserUseCase,
   ) {}
 
   async execute(
@@ -81,7 +78,16 @@ export class UpdateManagedUserUseCase {
     if (input.enabled === true && !user.enabled) {
       await this.cognitoUserPort.enableUser(user.username)
     } else if (input.enabled === false && user.enabled) {
-      await this.disableManagedUserUseCase.execute(userId, actor)
+      await this.cognitoUserPort.disableUser(user.username)
+      await putUserAccount(this.userAccountRepository, {
+        userId,
+        username: user.username,
+        email: input.email ?? user.email,
+        name: input.name ?? user.name,
+        permissions: user.permissions,
+        status: 'SUSPENDED',
+        auditActor: buildUserAuditMutationContext(actor, 'Managed user disabled'),
+      })
     }
 
     return findManagedUserBySub(

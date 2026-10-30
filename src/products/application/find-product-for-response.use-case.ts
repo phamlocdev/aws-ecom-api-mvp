@@ -1,22 +1,25 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { UploadService } from '../../upload/upload.service'
+import { NotFoundError } from '../../common/domain-error'
+import { PRODUCT_REPOSITORY, ProductRepositoryPort } from '../domain/product.repository.port'
 import { Product } from '../domain/product.entity'
-import { FindOneProductUseCase } from './find-one-product.use-case'
+import { ProductStatus } from '../domain/product-status.enum'
+import { UploadService } from '../../upload/upload.service'
 import { withAllImageReadUrls } from './product-image.util'
 
-// Backs the GET /products/:productId endpoint: same lookup/soft-delete rule
-// as FindOneProductUseCase, plus presigned read URLs for every image.
 @Injectable()
 export class FindProductForResponseUseCase {
   constructor(
-    @Inject(FindOneProductUseCase)
-    private readonly findOneProductUseCase: FindOneProductUseCase,
+    @Inject(PRODUCT_REPOSITORY)
+    private readonly productRepository: ProductRepositoryPort,
     @Inject(UploadService)
     private readonly uploadService: UploadService,
   ) {}
 
   async execute(productId: string): Promise<Product> {
-    const product = await this.findOneProductUseCase.execute(productId)
+    const product = await this.productRepository.findOne(productId)
+    if (!product || product.status === ProductStatus.DELETED) {
+      throw new NotFoundError(`Product ${productId} was not found.`)
+    }
     return withAllImageReadUrls(this.uploadService, product)
   }
 }

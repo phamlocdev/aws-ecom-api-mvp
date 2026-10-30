@@ -8,7 +8,6 @@ import { CognitoUserPort, CognitoUserRecord } from '../domain/cognito-user.port'
 import { UserAccount } from '../domain/user.entity'
 import { UserAccountRepositoryPort } from '../domain/user-account.repository.port'
 import { CreateManagedUserUseCase } from './create-managed-user.use-case'
-import { DisableManagedUserUseCase } from './disable-managed-user.use-case'
 import { FindAllUsersUseCase } from './find-all-users.use-case'
 import { FindCustomerProfileByUsernameUseCase } from './find-customer-profile-by-username.use-case'
 import { FindLoginAuditUseCase } from './find-login-audit.use-case'
@@ -203,16 +202,10 @@ describe('UpdateManagedUserUseCase / DisableManagedUserUseCase', () => {
     const cognitoUserPort = createCognitoPortMock()
     const userAccountRepository = createUserAccountRepositoryMock()
     const emailTrackingService = createEmailTrackingServiceMock()
-    const disableManagedUserUseCase = new DisableManagedUserUseCase(
-      cognitoUserPort,
-      userAccountRepository,
-      emailTrackingService,
-    )
     const useCase = new UpdateManagedUserUseCase(
       cognitoUserPort,
       userAccountRepository,
       emailTrackingService,
-      disableManagedUserUseCase,
     )
 
     await useCase.execute(actor, 'customer-1', { email: 'new@example.com' })
@@ -226,20 +219,14 @@ describe('UpdateManagedUserUseCase / DisableManagedUserUseCase', () => {
     )
   })
 
-  it('delegates to DisableManagedUserUseCase when enabled becomes false', async () => {
+  it('disables user in Cognito and suspends account when enabled becomes false', async () => {
     const cognitoUserPort = createCognitoPortMock()
     const userAccountRepository = createUserAccountRepositoryMock()
     const emailTrackingService = createEmailTrackingServiceMock()
-    const disableManagedUserUseCase = new DisableManagedUserUseCase(
-      cognitoUserPort,
-      userAccountRepository,
-      emailTrackingService,
-    )
     const useCase = new UpdateManagedUserUseCase(
       cognitoUserPort,
       userAccountRepository,
       emailTrackingService,
-      disableManagedUserUseCase,
     )
 
     await useCase.execute(actor, 'customer-1', { enabled: false })
@@ -255,16 +242,10 @@ describe('UpdateManagedUserUseCase / DisableManagedUserUseCase', () => {
     cognitoUserPort.listAllUsers.mockResolvedValue([])
     const userAccountRepository = createUserAccountRepositoryMock()
     const emailTrackingService = createEmailTrackingServiceMock()
-    const disableManagedUserUseCase = new DisableManagedUserUseCase(
-      cognitoUserPort,
-      userAccountRepository,
-      emailTrackingService,
-    )
     const useCase = new UpdateManagedUserUseCase(
       cognitoUserPort,
       userAccountRepository,
       emailTrackingService,
-      disableManagedUserUseCase,
     )
 
     await expect(useCase.execute(actor, 'missing', { name: 'X' })).rejects.toBeInstanceOf(
@@ -496,13 +477,10 @@ describe('GetOwnProfileUseCase / UpdateOwnProfileUseCase', () => {
       deleteObjectsBestEffort: jest.fn(),
     } as unknown as jest.Mocked<UploadService>
     const cognitoUserPort = createCognitoPortMock()
-    const findCustomerProfileByUsernameUseCase = new FindCustomerProfileByUsernameUseCase(
-      cognitoUserPort,
-    )
     const useCase = new GetOwnProfileUseCase(
       userAccountRepository,
       uploadService,
-      findCustomerProfileByUsernameUseCase,
+      cognitoUserPort,
     )
 
     const result = await useCase.execute(customer)
@@ -520,13 +498,10 @@ describe('GetOwnProfileUseCase / UpdateOwnProfileUseCase', () => {
       deleteObjectsBestEffort: jest.fn(),
     } as unknown as jest.Mocked<UploadService>
     const cognitoUserPort = createCognitoPortMock()
-    const findCustomerProfileByUsernameUseCase = new FindCustomerProfileByUsernameUseCase(
-      cognitoUserPort,
-    )
     const useCase = new UpdateOwnProfileUseCase(
       userAccountRepository,
       uploadService,
-      findCustomerProfileByUsernameUseCase,
+      cognitoUserPort,
     )
 
     await expect(

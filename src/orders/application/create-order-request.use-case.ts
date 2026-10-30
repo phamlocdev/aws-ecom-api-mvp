@@ -74,6 +74,7 @@ export class CreateOrderRequestUseCase {
     }
 
     const createActor = buildUserAuditMutationContext(user, 'Order created')
+
     const order = Order.create({
       customerId: user.sub,
       customerEmail,

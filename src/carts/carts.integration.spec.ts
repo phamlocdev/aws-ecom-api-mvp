@@ -18,7 +18,6 @@ import { CartStatus } from './domain/cart-status.enum'
 import { Cart } from './domain/cart.entity'
 import { CreateCartUseCase } from './application/create-cart.use-case'
 import { GetOwnedCartUseCase } from './application/get-owned-cart.use-case'
-import { GetCartItemsUseCase } from './application/get-cart-items.use-case'
 import { FindOneCartUseCase } from './application/find-one-cart.use-case'
 import { AddCartItemUseCase } from './application/add-cart-item.use-case'
 import { UpdateCartItemUseCase } from './application/update-cart-item.use-case'
@@ -83,15 +82,10 @@ describe('carts use-cases (post-refactor baseline)', () => {
     repository = new DynamoDbCartRepository(dynamoDbService, dynamoTables)
     createCartUseCase = new CreateCartUseCase(repository)
     getOwnedCartUseCase = new GetOwnedCartUseCase(repository)
-    const getCartItemsUseCase = new GetCartItemsUseCase(repository)
-    findOneCartUseCase = new FindOneCartUseCase(getOwnedCartUseCase, getCartItemsUseCase)
-    addCartItemUseCase = new AddCartItemUseCase(repository, getOwnedCartUseCase, findOneCartUseCase)
-    updateCartItemUseCase = new UpdateCartItemUseCase(
-      repository,
-      getOwnedCartUseCase,
-      findOneCartUseCase,
-    )
-    removeCartItemUseCase = new RemoveCartItemUseCase(repository, getOwnedCartUseCase)
+    findOneCartUseCase = new FindOneCartUseCase(repository)
+    addCartItemUseCase = new AddCartItemUseCase(repository)
+    updateCartItemUseCase = new UpdateCartItemUseCase(repository)
+    removeCartItemUseCase = new RemoveCartItemUseCase(repository)
     markCartExpiredUseCase = new MarkCartExpiredUseCase(repository)
   })
 

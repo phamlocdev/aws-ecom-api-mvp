@@ -91,18 +91,16 @@ describe('products use-cases (post-refactor baseline)', () => {
     )
     findOneProductUseCase = new FindOneProductUseCase(repository)
     findProductForResponseUseCase = new FindProductForResponseUseCase(
-      findOneProductUseCase,
+      repository,
       uploadServiceInjected,
     )
     updateProductUseCase = new UpdateProductUseCase(
       repository,
-      findOneProductUseCase,
       uploadServiceInjected,
       productEventsPublisher,
     )
     deleteProductUseCase = new DeleteProductUseCase(
       repository,
-      findOneProductUseCase,
       uploadServiceInjected,
       productEventsPublisher,
     )
