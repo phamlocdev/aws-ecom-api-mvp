@@ -7,7 +7,7 @@ const InventoryRecordPropsSchema = z.object({
   productId: z.string(),
   availableQuantity: z.number(),
   reservedQuantity: z.number(),
-  createdAt: z.string(),
+  createdAt: z.string().optional().default(''),
   lastModifiedByType: z.string().optional(),
   lastModifiedById: z.string().optional(),
   lastModifiedByEmail: z.string().optional(),
