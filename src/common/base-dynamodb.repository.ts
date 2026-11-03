@@ -117,4 +117,3 @@ export abstract class BaseDynamoDbRepository<TEntity> {
     }
   }
 }
-

@@ -36,12 +36,9 @@ export class DynamoDbOrderRepository
 
   async create(order: Order): Promise<void> {
     try {
-      await this.putRecord(
-        this.tableName,
-        order.toRecord(),
-        'attribute_not_exists(#orderId)',
-        { '#orderId': 'orderId' },
-      )
+      await this.putRecord(this.tableName, order.toRecord(), 'attribute_not_exists(#orderId)', {
+        '#orderId': 'orderId',
+      })
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
         throw new ConflictError(`Order ${order.orderId} already exists.`)
@@ -99,4 +96,3 @@ export class DynamoDbOrderRepository
     }
   }
 }
-
