@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   const productResponse = await documentClient.send(
     new GetCommand({
       TableName: runtimeEnv.PRODUCTS_TABLE,
-      Key: { productId },
+      Key: { id: productId },
     }),
   )
 

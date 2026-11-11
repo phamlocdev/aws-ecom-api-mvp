@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config'
 import { DynamoDbModule } from '../dynamodb/dynamodb.module'
 import { MailModule } from '../mail/mail.module'
 import { validateRuntimeEnv } from '../config/env.validation'
+import { USER_ACCOUNT_REPOSITORY } from '../users/domain/user-account.repository.port'
+import { DynamoDbUserAccountRepository } from '../users/infrastructure/dynamodb-user-account.repository'
 import { CustomEmailSenderService } from './custom-email-sender.service'
 import { PostAuthenticationService } from './post-authentication.service'
 import { PreAuthenticationService } from './pre-authentication.service'
@@ -25,6 +27,7 @@ import { PreTokenGenerationService } from './pre-token-generation.service'
     PreAuthenticationService,
     PreSignUpService,
     PreTokenGenerationService,
+    { provide: USER_ACCOUNT_REPOSITORY, useClass: DynamoDbUserAccountRepository },
   ],
   exports: [
     CustomEmailSenderService,

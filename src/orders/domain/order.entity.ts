@@ -1,0 +1,401 @@
+import { randomUUID } from 'crypto'
+import { z } from 'zod'
+import { OrderStatus } from './order-status.enum'
+import { PaymentStatus } from './payment-status.enum'
+import type { EmailType } from '../../mail/mail.types'
+import { normalizeAdditionalReceivingEmails, toEpochSeconds } from './order.rules'
+import { InvalidInputError } from '../../common/domain-error'
+import type { AuditMutationContext } from '../../audit/audit-actor'
+import { BaseEntity } from '../../common/base.entity'
+import { OrderItem, type OrderItemPatch } from './order-item.entity'
+export { OrderItem, type CreateOrderItemData, type OrderItemPatch } from './order-item.entity'
+
+export const ORDERS_ENTITY_TYPE = 'ORDER'
+
+const OrderPropsSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  customerEmail: z.string().optional(),
+  customerName: z.string().optional(),
+  additionalReceivingEmails: z.array(z.string()).optional(),
+  cartId: z.string(),
+  status: z.enum(['PENDING', 'RESERVED', 'CONFIRMED', 'SHIPPED', 'CANCELLED', 'FAILED', 'EXPIRED']),
+  entityType: z.string(),
+  deduplicationKey: z.string(),
+  paymentStatus: z.enum(['NOT_STARTED', 'PROCESSING', 'PAID', 'FAILED']),
+  paymentAttemptId: z.string().optional(),
+  paymentRequestedAt: z.string().optional(),
+  paidAt: z.string().optional(),
+  paymentTransactionId: z.string().optional(),
+  paymentFailureReason: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  shippedAt: z.string().optional(),
+  cancelledAt: z.string().optional(),
+  reservedAt: z.string().optional(),
+  paymentExpiresAt: z.number().optional(),
+  failureReason: z.string().optional(),
+  totalAmount: z.number().optional(),
+  lastModifiedByType: z.string().optional(),
+  lastModifiedById: z.string().optional(),
+  lastModifiedByEmail: z.string().optional(),
+  lastModifiedReason: z.string().optional(),
+})
+
+type OrderProps = {
+  id: string
+  customerId: string
+  customerEmail?: string
+  customerName?: string
+  additionalReceivingEmails?: string[]
+  cartId: string
+  status: OrderStatus
+  entityType: string
+  deduplicationKey: string
+  paymentStatus: PaymentStatus
+  paymentAttemptId?: string
+  paymentRequestedAt?: string
+  paidAt?: string
+  paymentTransactionId?: string
+  paymentFailureReason?: string
+  createdAt: string
+  updatedAt: string
+  shippedAt?: string
+  cancelledAt?: string
+  reservedAt?: string
+  paymentExpiresAt?: number
+  failureReason?: string
+  totalAmount?: number
+  lastModifiedByType?: string
+  lastModifiedById?: string
+  lastModifiedByEmail?: string
+  lastModifiedReason?: string
+  items?: OrderItem[]
+}
+
+export type CreateOrderData = {
+  customerId: string
+  customerEmail?: string
+  customerName?: string
+  additionalReceivingEmails?: string[]
+  cartId: string
+  lastModifiedByType?: string
+  lastModifiedById?: string
+  lastModifiedByEmail?: string
+  lastModifiedReason?: string
+}
+
+export class Order extends BaseEntity<OrderProps> {
+  declare readonly id: string
+  readonly customerId!: string
+  readonly customerEmail?: string
+  readonly customerName?: string
+  readonly additionalReceivingEmails?: string[]
+  readonly cartId!: string
+  readonly status!: OrderStatus
+  readonly entityType!: string
+  readonly deduplicationKey!: string
+  readonly paymentStatus!: PaymentStatus
+  readonly paymentAttemptId?: string
+  readonly paymentRequestedAt?: string
+  readonly paidAt?: string
+  readonly paymentTransactionId?: string
+  readonly paymentFailureReason?: string
+  readonly shippedAt?: string
+  readonly cancelledAt?: string
+  readonly reservedAt?: string
+  readonly paymentExpiresAt?: number
+  readonly failureReason?: string
+  readonly totalAmount?: number
+  readonly items?: OrderItem[]
+
+  private constructor(props: OrderProps) {
+    super()
+    Object.assign(this, props)
+  }
+
+  toRecord(): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries({
+        id: this.id,
+        customerId: this.customerId,
+        cartId: this.cartId,
+        status: this.status,
+        entityType: this.entityType,
+        deduplicationKey: this.deduplicationKey,
+        paymentStatus: this.paymentStatus,
+        createdAt: this.createdAt,
+        updatedAt: this.updatedAt,
+        customerEmail: this.customerEmail,
+        customerName: this.customerName,
+        additionalReceivingEmails: this.additionalReceivingEmails,
+        paymentAttemptId: this.paymentAttemptId,
+        paymentRequestedAt: this.paymentRequestedAt,
+        paidAt: this.paidAt,
+        paymentTransactionId: this.paymentTransactionId,
+        paymentFailureReason: this.paymentFailureReason,
+        shippedAt: this.shippedAt,
+        cancelledAt: this.cancelledAt,
+        reservedAt: this.reservedAt,
+        paymentExpiresAt: this.paymentExpiresAt,
+        failureReason: this.failureReason,
+        totalAmount: this.totalAmount,
+        lastModifiedByType: this.lastModifiedByType,
+        lastModifiedById: this.lastModifiedById,
+        lastModifiedByEmail: this.lastModifiedByEmail,
+        lastModifiedReason: this.lastModifiedReason,
+      }).filter(([, v]) => v !== undefined),
+    )
+  }
+
+  static create(data: CreateOrderData): Order {
+    const timestamp = new Date().toISOString()
+    return new Order({
+      id: randomUUID(),
+      customerId: data.customerId,
+      customerEmail: data.customerEmail,
+      customerName: data.customerName,
+      additionalReceivingEmails: normalizeAdditionalReceivingEmails(data.additionalReceivingEmails),
+      cartId: data.cartId,
+      status: OrderStatus.PENDING,
+      entityType: ORDERS_ENTITY_TYPE,
+      deduplicationKey: randomUUID(),
+      paymentStatus: PaymentStatus.NOT_STARTED,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastModifiedByType: data.lastModifiedByType,
+      lastModifiedById: data.lastModifiedById,
+      lastModifiedByEmail: data.lastModifiedByEmail,
+      lastModifiedReason: data.lastModifiedReason,
+    })
+  }
+
+  static fromRecord(item: Record<string, unknown>): Order {
+    const parsed = OrderPropsSchema.parse(item)
+    return new Order({
+      ...parsed,
+      status: parsed.status as OrderStatus,
+      paymentStatus: parsed.paymentStatus as PaymentStatus,
+    })
+  }
+
+  isPaymentExpired(): boolean {
+    return Boolean(this.paymentExpiresAt && this.paymentExpiresAt <= toEpochSeconds(Date.now()))
+  }
+
+  get isPaid(): boolean {
+    return this.paymentStatus === PaymentStatus.PAID
+  }
+
+  get isCancelled(): boolean {
+    return this.status === OrderStatus.CANCELLED
+  }
+
+  get isShipped(): boolean {
+    return this.status === OrderStatus.SHIPPED
+  }
+
+  get isInTerminalState(): boolean {
+    return [OrderStatus.CANCELLED, OrderStatus.FAILED, OrderStatus.EXPIRED].includes(this.status)
+  }
+
+  // --- Guard methods ---
+
+  canBeShipped(): boolean {
+    return this.status === OrderStatus.CONFIRMED && this.paymentStatus === PaymentStatus.PAID
+  }
+
+  canBeCancelled(): boolean {
+    return this.status === OrderStatus.CONFIRMED && this.paymentStatus === PaymentStatus.PAID
+  }
+
+  canTriggerPayment(): boolean {
+    return (
+      this.status === OrderStatus.RESERVED &&
+      this.paymentStatus !== PaymentStatus.PAID &&
+      this.totalAmount !== undefined &&
+      this.paymentExpiresAt !== undefined &&
+      !this.isPaymentExpired()
+    )
+  }
+
+  canExpireReservation(): boolean {
+    return this.status === OrderStatus.RESERVED && this.isPaymentExpired()
+  }
+
+  isReadyToProcessPayment(): boolean {
+    return this.status === OrderStatus.RESERVED && this.paymentStatus === PaymentStatus.PROCESSING
+  }
+
+  // --- State transition methods (validate → mutate this → return this for chaining) ---
+
+  reserve(totalAmount: number, paymentExpiresAt: number, reservedAt: string): this {
+    if (this.status !== OrderStatus.PENDING) {
+      throw new InvalidInputError(`Order cannot be reserved from status ${this.status}`)
+    }
+    return this.with({
+      status: OrderStatus.RESERVED,
+      totalAmount,
+      paymentExpiresAt,
+      reservedAt,
+      updatedAt: reservedAt,
+    })
+  }
+
+  fail(reason: string, updatedAt: string): this {
+    if (this.isInTerminalState) {
+      throw new InvalidInputError(`Order is already in terminal state ${this.status}`)
+    }
+    return this.with({ status: OrderStatus.FAILED, failureReason: reason, updatedAt })
+  }
+
+  ship(shippedAt: string): this {
+    if (!this.canBeShipped()) {
+      throw new InvalidInputError(`Order cannot be shipped from status ${this.status}`)
+    }
+    return this.with({ status: OrderStatus.SHIPPED, shippedAt, updatedAt: shippedAt })
+  }
+
+  cancelWithRefund(cancelledAt: string): this {
+    if (!this.canBeCancelled()) {
+      throw new InvalidInputError(`Order cannot be cancelled from status ${this.status}`)
+    }
+    return this.with({ status: OrderStatus.CANCELLED, cancelledAt, updatedAt: cancelledAt })
+  }
+
+  failAsExpired(reason: string, updatedAt: string): this {
+    if (this.isInTerminalState) {
+      throw new InvalidInputError(`Order is already in terminal state ${this.status}`)
+    }
+    return this.with({ status: OrderStatus.EXPIRED, failureReason: reason, updatedAt })
+  }
+
+  startPayment(paymentAttemptId: string, requestedAt: string): this {
+    if (this.status !== OrderStatus.RESERVED) {
+      throw new InvalidInputError(`Order cannot start payment in status ${this.status}`)
+    }
+    if (this.paymentStatus === PaymentStatus.PAID) {
+      throw new InvalidInputError('Order payment is already paid.')
+    }
+    if (this.isPaymentExpired()) {
+      throw new InvalidInputError('Order payment window has expired.')
+    }
+    return this.with({
+      paymentStatus: PaymentStatus.PROCESSING,
+      paymentRequestedAt: requestedAt,
+      paymentAttemptId,
+      paymentFailureReason: undefined,
+      paymentTransactionId: undefined,
+      paidAt: undefined,
+      updatedAt: requestedAt,
+    })
+  }
+
+  confirmPayment(paymentAttemptId: string, transactionId: string, paidAt: string): this {
+    if (this.status !== OrderStatus.RESERVED) {
+      throw new InvalidInputError(`Order cannot confirm payment in status ${this.status}`)
+    }
+    if (this.paymentStatus !== PaymentStatus.PROCESSING) {
+      throw new InvalidInputError('Order payment is not in PROCESSING state.')
+    }
+    if (this.paymentAttemptId !== paymentAttemptId) {
+      throw new InvalidInputError('Payment attempt ID mismatch.')
+    }
+    return this.with({
+      status: OrderStatus.CONFIRMED,
+      paymentStatus: PaymentStatus.PAID,
+      paymentTransactionId: transactionId,
+      paidAt,
+      updatedAt: paidAt,
+    })
+  }
+
+  failPayment(paymentAttemptId: string, failureReason: string): this {
+    if (this.paymentStatus !== PaymentStatus.PROCESSING) {
+      throw new InvalidInputError('Order payment is not in PROCESSING state.')
+    }
+    if (this.paymentAttemptId !== paymentAttemptId) {
+      throw new InvalidInputError('Payment attempt ID mismatch.')
+    }
+    return this.with({
+      paymentStatus: PaymentStatus.FAILED,
+      paymentFailureReason: failureReason,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  refundExpiredPayment(transactionId: string, failureReason: string): this {
+    return this.with({
+      status: OrderStatus.EXPIRED,
+      paymentStatus: PaymentStatus.FAILED,
+      paymentTransactionId: transactionId,
+      paymentFailureReason: failureReason,
+      failureReason,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  withAudit(actor: AuditMutationContext): this {
+    return this.with({
+      lastModifiedByType: actor.actorType,
+      lastModifiedById: actor.actorId ?? 'unknown',
+      lastModifiedByEmail: actor.actorEmail ?? 'unknown',
+      lastModifiedReason: actor.reason,
+    })
+  }
+
+  withItems(items: OrderItem[]): this {
+    return this.with({ items })
+  }
+
+  updateItem(lineId: string, patch: OrderItemPatch): this {
+    if (!this.items) {
+      throw new InvalidInputError('Order items are not loaded')
+    }
+    if (!this.items.some((i) => i.lineId === lineId)) {
+      throw new InvalidInputError(`Order item ${lineId} not found`)
+    }
+    const updatedItems = this.items.map((i) => (i.lineId === lineId ? i.applyPatch(patch) : i))
+    return this.with({
+      items: updatedItems,
+      totalAmount: Order.computeTotal(updatedItems),
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  static computeTotal(items: Pick<OrderItem, 'lineTotal'>[]): number {
+    return items.reduce((total, item) => total + item.lineTotal, 0)
+  }
+}
+
+export interface OrderDetails extends Order {
+  items: OrderItem[]
+}
+
+export interface TriggerPaymentResult {
+  orderId: string
+  paymentStatus: PaymentStatus
+  paymentUrl: string
+  paymentExpiresAt?: number
+}
+
+export interface VnpayReturnResult {
+  redirectUrl: string
+}
+
+export interface PlaceOrderMessage {
+  orderId: string
+  customerId: string
+  cartId: string
+  deduplicationKey: string
+  requestedAt: string
+}
+
+export interface ResendOrderEmailResult {
+  orderId: string
+  emailType: EmailType
+  recipientEmails: string[]
+  resentCount: number
+  status: string
+  reason?: string
+}

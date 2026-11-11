@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { SNSEvent } from 'aws-lambda'
+import { isConditionalCheckFailure } from '../common/dynamodb-errors'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
-import { EmailTracking } from './mail.types'
+import { EmailTracking } from './domain/email-tracking.entity'
 
 type SesEventType = 'Send' | 'Delivery' | 'Bounce' | 'Complaint' | 'Reject' | 'Rendering Failure'
 
@@ -56,10 +57,10 @@ export class SesEventProcessorService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.tableName = configService.get<string>('EMAIL_TRACKING_TABLE') ?? 'email-tracking'
+    this.tableName = dynamoTables.emailTracking
   }
 
   async handleSesEventBatch(event: SNSEvent): Promise<void> {
@@ -333,11 +334,3 @@ function normalizeEmails(emails: Array<string | undefined> | undefined): string[
   )
 }
 
-function isConditionalCheckFailure(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    error.name === 'ConditionalCheckFailedException'
-  )
-}

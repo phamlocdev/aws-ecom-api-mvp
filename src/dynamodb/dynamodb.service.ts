@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { DescribeTableCommand } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import {
   createDynamoDbClient,
   createDynamoDbDocumentClient,
@@ -13,23 +14,22 @@ export class DynamoDbService {
   readonly documentClient: DynamoDBDocumentClient
 
   private readonly client
-  private readonly healthCheckTableName?: string
+  private readonly healthCheckTableName: string
 
-  constructor(@Inject(ConfigService) configService: ConfigService) {
+  constructor(
+    @Inject(ConfigService) configService: ConfigService,
+    @Inject(DynamoTablesService) dynamoTables: DynamoTablesService,
+  ) {
     const settings = getDynamoDbSettings({
       AWS_REGION: configService.get<string>('AWS_REGION'),
       AWS_DEFAULT_REGION: configService.get<string>('AWS_DEFAULT_REGION'),
     })
     this.client = createDynamoDbClient(settings)
     this.documentClient = createDynamoDbDocumentClient(settings)
-    this.healthCheckTableName = configService.get<string>('PRODUCTS_TABLE')
+    this.healthCheckTableName = dynamoTables.products
   }
 
   async checkConnection(): Promise<void> {
-    if (!this.healthCheckTableName) {
-      throw new Error('PRODUCTS_TABLE is required for DynamoDB health check.')
-    }
-
     await this.client.send(new DescribeTableCommand({ TableName: this.healthCheckTableName }))
   }
 }

@@ -153,7 +153,7 @@ export class SesMailService {
     return this.sendTemplatedEmail({
       emailType: 'ORDER_CONFIRMATION',
       contextType: 'ORDER',
-      contextId: input.order.orderId,
+      contextId: input.order.id,
       recipientEmails,
       subject: this.orderConfirmationSubject,
       templateView: buildOrderConfirmationTemplateView(input),
@@ -173,7 +173,7 @@ export class SesMailService {
     return this.sendTemplatedEmail({
       emailType: 'SHIPPED_ORDER_NOTIFICATION',
       contextType: 'ORDER',
-      contextId: input.order.orderId,
+      contextId: input.order.id,
       recipientEmails,
       subject: this.shippedOrderNotificationSubject,
       templateView: buildShippedOrderNotificationTemplateView(input),
@@ -194,7 +194,7 @@ export class SesMailService {
     return this.sendTemplatedEmail({
       emailType: 'CANCELLED_ORDER_NOTIFICATION',
       contextType: 'ORDER',
-      contextId: input.order.orderId,
+      contextId: input.order.id,
       recipientEmails,
       subject: this.cancelledOrderNotificationSubject,
       templateView: buildCancelledOrderNotificationTemplateView(input),
@@ -426,7 +426,7 @@ function buildOrderConfirmationTemplateView(
 
   return {
     customerName: input.order.customerName?.trim() || 'bạn',
-    orderId: input.order.orderId,
+    orderId: input.order.id,
     paidAt,
     paymentTransactionId: input.order.paymentTransactionId ?? 'N/A',
     totalAmount: formatCurrency(input.order.totalAmount ?? 0),
@@ -439,7 +439,7 @@ function buildShippedOrderNotificationTemplateView(
 ): ShippedOrderNotificationTemplateView {
   return {
     customerName: input.order.customerName?.trim() || 'bạn',
-    orderId: input.order.orderId,
+    orderId: input.order.id,
     shippedAt: formatOrderTimestamp(input.shippedAt),
     totalAmount: formatCurrency(input.order.totalAmount ?? 0),
     items: buildOrderItemTemplateViews(input.items),
@@ -451,7 +451,7 @@ function buildCancelledOrderNotificationTemplateView(
 ): CancelledOrderNotificationTemplateView {
   return {
     customerName: input.order.customerName?.trim() || 'bạn',
-    orderId: input.order.orderId,
+    orderId: input.order.id,
     cancelledAt: formatOrderTimestamp(input.cancelledAt),
     totalAmount: formatCurrency(input.order.totalAmount ?? 0),
     items: buildOrderItemTemplateViews(input.items),

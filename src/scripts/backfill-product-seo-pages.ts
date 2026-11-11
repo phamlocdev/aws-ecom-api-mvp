@@ -13,7 +13,7 @@ const EVENTBRIDGE_PUT_EVENTS_BATCH_SIZE = 10
 const SCAN_PAGE_SIZE = 100
 
 type ProductKey = {
-  productId: string
+  id: string
 }
 
 async function main(): Promise<void> {
@@ -45,18 +45,18 @@ async function main(): Promise<void> {
     const response = await documentClient.send(
       new ScanCommand({
         TableName: productsTable,
-        ProjectionExpression: 'productId',
+        ProjectionExpression: 'id',
         Limit: remaining ? Math.min(remaining, SCAN_PAGE_SIZE) : SCAN_PAGE_SIZE,
         ExclusiveStartKey: lastEvaluatedKey,
       }),
     )
 
-    const products = ((response.Items ?? []) as ProductKey[]).filter((item) => item.productId)
+    const products = ((response.Items ?? []) as ProductKey[]).filter((item) => item.id)
     scannedCount += products.length
 
     if (dryRun) {
       for (const product of products) {
-        console.log(`[dry-run] Would publish ${PRODUCT_UPDATED_DETAIL_TYPE} for ${product.productId}.`)
+        console.log(`[dry-run] Would publish ${PRODUCT_UPDATED_DETAIL_TYPE} for ${product.id}.`)
       }
     } else {
       publishedCount += await publishProductUpdatedEvents(eventBridgeClient, eventBusName, products)
@@ -87,7 +87,7 @@ async function publishProductUpdatedEvents(
           EventBusName: eventBusName,
           Source: PRODUCT_EVENT_SOURCE,
           DetailType: PRODUCT_UPDATED_DETAIL_TYPE,
-          Detail: JSON.stringify({ productId: product.productId }),
+          Detail: JSON.stringify({ productId: product.id }),
         })),
       }),
     )

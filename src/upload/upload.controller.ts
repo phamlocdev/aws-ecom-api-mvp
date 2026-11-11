@@ -10,7 +10,6 @@ import {
 import { AuthenticatedRequest } from '../auth/auth.types'
 import { Role } from '../auth/roles.enum'
 import { Roles } from '../auth/roles.decorator'
-import { DtoValidationPipe } from '../validation/dto-validation.pipe'
 import { PresignUploadRequestDto, PresignUploadResponseDto } from './dto/presign-upload.dto'
 import { UploadService } from './upload.service'
 
@@ -28,7 +27,7 @@ export class UploadController {
   @ApiForbiddenResponse({ description: 'The authenticated user cannot upload for this target.' })
   presign(
     @Req() request: AuthenticatedRequest,
-    @Body(new DtoValidationPipe(PresignUploadRequestDto)) dto: PresignUploadRequestDto,
+    @Body() dto: PresignUploadRequestDto,
   ): Promise<PresignUploadResponseDto> {
     return this.uploadService.createPresignedUploadPolicies(dto, request.user!)
   }

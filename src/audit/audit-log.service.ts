@@ -1,23 +1,22 @@
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { unmarshall } from '@aws-sdk/util-dynamodb'
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { AttributeValue } from '@aws-sdk/client-dynamodb'
 import type { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda'
+import { InvalidInputError } from '../common/domain-error'
+import { isConditionalCheckFailure } from '../common/dynamodb-errors'
+import { DynamoTablesService } from '../config/dynamo-tables.service'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
+import {
+  AuditEntityType,
+  AUDIT_ENTITY_TYPES,
+  AuditLogItem,
+  AuditLogQueryResult,
+} from './domain/audit-log.entity'
 
 const AUDIT_RETENTION_SECONDS = 365 * 24 * 60 * 60
 const ENTITY_TYPE_OCCURRED_AT_INDEX = 'GSI_EntityTypeOccurredAt'
 
-export const AUDIT_ENTITY_TYPES = [
-  'ORDER',
-  'PRODUCT',
-  'CATEGORY',
-  'INVENTORY',
-  'USER_ACCOUNT',
-] as const
-
-export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number]
 type AuditEventName = 'INSERT' | 'MODIFY' | 'REMOVE'
 type AuditActorType = 'customer' | 'admin' | 'system' | 'unknown'
 type AuditFieldChange = { before?: unknown; after?: unknown }
@@ -79,32 +78,6 @@ const AUDIT_ENTITY_CONFIGS: Record<AuditEntityType, AuditEntityConfig> = {
   },
 }
 
-export interface AuditLogItem {
-  entityKey: string
-  occurredAtAuditId: string
-  auditId: string
-  entityType: AuditEntityType
-  entityId: string
-  sourceTable?: string
-  eventName: AuditEventName
-  occurredAt: string
-  actorType: AuditActorType
-  actorId?: string
-  actorEmail?: string
-  reason?: string
-  diff: AuditDiff
-  before: Record<string, unknown>
-  after: Record<string, unknown>
-  keys?: Record<string, unknown>
-  schemaVersion: number
-  expiresAt: number
-}
-
-export interface AuditLogQueryResult {
-  items: AuditLogItem[]
-  nextCursor: string | null
-}
-
 export interface DynamoDbStreamRecord {
   eventID?: string
   eventName?: string
@@ -135,10 +108,10 @@ export class AuditLogService {
   constructor(
     @Inject(DynamoDbService)
     private readonly dynamoDbService: DynamoDbService,
-    @Inject(ConfigService)
-    configService: ConfigService,
+    @Inject(DynamoTablesService)
+    dynamoTables: DynamoTablesService,
   ) {
-    this.auditLogTableName = configService.get<string>('AUDIT_LOG_TABLE') ?? 'audit-log'
+    this.auditLogTableName = dynamoTables.auditLog
   }
 
   async handleBatch(event: SQSEvent): Promise<SQSBatchResponse> {
@@ -189,12 +162,12 @@ export class AuditLogService {
         Limit: limit,
         ExclusiveStartKey: decodeCursor(input.cursor),
       }),
-    )) as { Items?: AuditLogItem[]; LastEvaluatedKey?: Record<string, unknown> }
+    )) as { Items?: Record<string, unknown>[]; LastEvaluatedKey?: Record<string, unknown> }
 
-    return {
-      items: response.Items ?? [],
-      nextCursor: encodeCursor(response.LastEvaluatedKey),
-    }
+    return AuditLogQueryResult.fromParts(
+      (response.Items ?? []).map(AuditLogItem.fromRecord),
+      encodeCursor(response.LastEvaluatedKey),
+    )
   }
 
   private async processSqsRecord(record: SQSRecord): Promise<void> {
@@ -221,7 +194,7 @@ export async function putAuditLogItem(
     await client.send(
       new PutCommand({
         TableName: tableName,
-        Item: item,
+        Item: { ...item },
         ConditionExpression:
           'attribute_not_exists(#entityKey) AND attribute_not_exists(#occurredAtAuditId)',
         ExpressionAttributeNames: {
@@ -265,7 +238,7 @@ export function buildAuditLogItem(envelope: AuditPipeEnvelope): AuditLogItem | u
   const occurredAt = resolveOccurredAt(record, newImage)
   const expiresAt = Math.floor(new Date(occurredAt).getTime() / 1000) + AUDIT_RETENTION_SECONDS
 
-  return {
+  return AuditLogItem.create({
     entityKey: buildEntityKey(entityType, entityId),
     occurredAtAuditId: `${occurredAt}#${auditId}`,
     auditId,
@@ -281,7 +254,7 @@ export function buildAuditLogItem(envelope: AuditPipeEnvelope): AuditLogItem | u
     ...(Object.keys(keys).length > 0 ? { keys } : {}),
     schemaVersion: 1,
     expiresAt,
-  }
+  })
 }
 
 export function buildAuditDiff(
@@ -342,7 +315,7 @@ function parseAuditEntityType(value: unknown): AuditEntityType {
   if (typeof value === 'string' && AUDIT_ENTITY_TYPES.includes(value as AuditEntityType)) {
     return value as AuditEntityType
   }
-  throw new BadRequestException(`Unsupported audit entityType: ${String(value ?? '')}`)
+  throw new InvalidInputError(`Unsupported audit entityType: ${String(value ?? '')}`)
 }
 
 function isAuditEventName(value: unknown): value is AuditEventName {
@@ -711,14 +684,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isConditionalCheckFailure(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    error.name === 'ConditionalCheckFailedException'
-  )
-}
 
 function encodeCursor(value: Record<string, unknown> | undefined): string | null {
   if (!value) {
@@ -736,6 +701,6 @@ function decodeCursor(value: string | undefined): Record<string, unknown> | unde
   try {
     return JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<string, unknown>
   } catch {
-    throw new BadRequestException('cursor is invalid.')
+    throw new InvalidInputError('cursor is invalid.')
   }
 }

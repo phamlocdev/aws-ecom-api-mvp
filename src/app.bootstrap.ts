@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core'
 import { NestExpressApplication } from '@nestjs/platform-express'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from './app.module'
+import { DomainExceptionFilter } from './common/domain-exception.filter'
 
 const { eventContext } = require('@codegenie/serverless-express/src/middleware') as {
   eventContext: (options?: {
@@ -32,6 +33,8 @@ export async function createNestApp(
       forbidNonWhitelisted: true,
     }),
   )
+
+  app.useGlobalFilters(new DomainExceptionFilter())
 
   app.use(eventContext({ reqPropKey: 'apiGateway' }))
 

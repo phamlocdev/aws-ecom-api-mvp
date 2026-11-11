@@ -1,29 +1,21 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import type { PreAuthenticationTriggerEvent } from 'aws-lambda'
-import { DynamoDbService } from '../dynamodb/dynamodb.service'
-import { UserAccountStatus } from '../users/user.types'
-
-type UserAccountRecord = {
-  userId: string
-  status?: UserAccountStatus
-}
+import {
+  USER_ACCOUNT_REPOSITORY,
+  UserAccountRepositoryPort,
+} from '../users/domain/user-account.repository.port'
+import { UserAccountStatus } from '../users/domain/user.entity'
 
 const BLOCKED_STATUSES = new Set<UserAccountStatus>(['SUSPENDED', 'PENDING_APPROVAL', 'DELETED'])
 
 @Injectable()
 export class PreAuthenticationService {
   private readonly logger = new Logger(PreAuthenticationService.name)
-  private readonly userAccountsTableName: string
 
   constructor(
-    @Inject(ConfigService) configService: ConfigService,
-    @Inject(DynamoDbService)
-    private readonly dynamoDbService: DynamoDbService,
-  ) {
-    this.userAccountsTableName = configService.get<string>('USER_ACCOUNTS_TABLE') ?? 'user-accounts'
-  }
+    @Inject(USER_ACCOUNT_REPOSITORY)
+    private readonly userAccountRepository: UserAccountRepositoryPort,
+  ) {}
 
   async handle(event: PreAuthenticationTriggerEvent): Promise<PreAuthenticationTriggerEvent> {
     const userId = event.request.userAttributes.sub
@@ -41,13 +33,7 @@ export class PreAuthenticationService {
       return event
     }
 
-    const response = await this.dynamoDbService.documentClient.send(
-      new GetCommand({
-        TableName: this.userAccountsTableName,
-        Key: { userId },
-      }),
-    )
-    const account = response.Item as UserAccountRecord | undefined
+    const account = await this.userAccountRepository.findById(userId)
     const status = account?.status
 
     if (status && BLOCKED_STATUSES.has(status)) {

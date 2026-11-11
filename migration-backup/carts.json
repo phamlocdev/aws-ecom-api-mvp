@@ -1,0 +1,98 @@
+[
+  {
+    "createdAt": "2026-10-21T05:01:21.264Z",
+    "customerId": "194ac5cc-4091-70c4-1f2a-d6bed0072580",
+    "expiresAt": 1795150881,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-21T05:01:23.973Z",
+    "cartId": "441c2447-a7c9-4fb1-8565-6daf855410d9"
+  },
+  {
+    "createdAt": "2026-10-22T09:43:44.950Z",
+    "customerId": "29aa152c-3021-7041-ddfe-0b45bad102b6",
+    "expiresAt": 1795254224,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-22T09:43:47.656Z",
+    "cartId": "34c7be8e-50fa-440e-b90a-b7a56fb3be6c"
+  },
+  {
+    "createdAt": "2026-10-22T09:48:15.180Z",
+    "customerId": "29aa152c-3021-7041-ddfe-0b45bad102b6",
+    "expiresAt": 1795254495,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-22T09:48:17.691Z",
+    "cartId": "6a5f8039-143e-4e7d-9614-1dc14e5c641e"
+  },
+  {
+    "createdAt": "2026-10-22T09:51:10.486Z",
+    "customerId": "29aa152c-3021-7041-ddfe-0b45bad102b6",
+    "expiresAt": 1795254670,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-22T09:51:11.874Z",
+    "cartId": "e84bd1bf-27a9-4406-ac96-df51a10e90c5"
+  },
+  {
+    "createdAt": "2026-10-22T09:47:54.513Z",
+    "customerId": "29aa152c-3021-7041-ddfe-0b45bad102b6",
+    "expiresAt": 1795254474,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-22T09:48:04.634Z",
+    "cartId": "ea3c8c55-0bfb-4734-be2c-35d1b4a5be7a"
+  },
+  {
+    "createdAt": "2026-10-12T07:24:40.757Z",
+    "customerId": "e90a65bc-f041-7076-3dfa-a4144e9a3de6",
+    "expiresAt": 1794381880,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-12T07:24:46.714Z",
+    "cartId": "660e48d2-134a-44e2-823e-deb9643fee83"
+  },
+  {
+    "createdAt": "2026-11-03T06:46:02.192Z",
+    "customerId": "59aab56c-e0a1-70f7-0fcb-4fc266e1f260",
+    "expiresAt": 1796280362,
+    "status": "ACTIVE",
+    "updatedAt": "2026-11-03T06:46:02.521Z",
+    "cartId": "093484e9-c72a-4e71-b11b-b6683f173d68"
+  },
+  {
+    "createdAt": "2026-11-03T06:48:00.723Z",
+    "customerId": "59aab56c-e0a1-70f7-0fcb-4fc266e1f260",
+    "expiresAt": 1796280480,
+    "status": "EXPIRED",
+    "updatedAt": "2026-11-03T07:29:31.382Z",
+    "cartId": "11459d70-a76e-4515-b122-49689887ccc0"
+  },
+  {
+    "createdAt": "2026-10-27T08:46:02.066Z",
+    "customerId": "59aab56c-e0a1-70f7-0fcb-4fc266e1f260",
+    "expiresAt": 1795682762,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-27T08:46:06.366Z",
+    "cartId": "6c9dba04-b589-4dc9-8c4d-0076b3f07b86"
+  },
+  {
+    "createdAt": "2026-11-03T06:46:36.262Z",
+    "customerId": "59aab56c-e0a1-70f7-0fcb-4fc266e1f260",
+    "expiresAt": 1796280396,
+    "status": "ACTIVE",
+    "updatedAt": "2026-11-03T06:46:36.549Z",
+    "cartId": "87a8ccd7-3051-4b71-94b8-38417132367a"
+  },
+  {
+    "createdAt": "2026-10-29T02:25:50.685Z",
+    "customerId": "59aab56c-e0a1-70f7-0fcb-4fc266e1f260",
+    "expiresAt": 1795832750,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-29T02:26:11.764Z",
+    "cartId": "b5aa54ea-bb5e-465e-9c19-9a02c0ee32c0"
+  },
+  {
+    "createdAt": "2026-10-12T07:23:58.145Z",
+    "customerId": "59aab56c-e0a1-70f7-0fcb-4fc266e1f260",
+    "expiresAt": 1794381838,
+    "status": "EXPIRED",
+    "updatedAt": "2026-10-12T07:24:00.503Z",
+    "cartId": "c5c74b89-b96e-40bd-91c7-e543d4781144"
+  }
+]

@@ -115,7 +115,7 @@ export class ClientStack extends cdk.Stack {
 
     const productSeoGenerator = new nodejs.NodejsFunction(this, 'ProductSeoGenerator', {
       runtime: lambda.Runtime.NODEJS_24_X,
-      entry: sourceEntryPath('product-seo-generator.ts'),
+      entry: sourceEntryPath('workers', 'product-seo-generator.ts'),
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,

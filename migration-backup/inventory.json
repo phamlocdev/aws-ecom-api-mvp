@@ -1,0 +1,638 @@
+[
+  {
+    "availableQuantity": 33,
+    "lastModifiedByEmail": "unknown",
+    "lastModifiedById": "orders-service",
+    "lastModifiedByType": "system",
+    "lastModifiedReason": "Inventory reserved for order",
+    "productId": "5cd1a40c-d84c-5153-ac48-982d1280e6ce",
+    "reservedQuantity": 8,
+    "updatedAt": "2026-10-12T07:24:46.674Z"
+  },
+  {
+    "productId": "4848fb78-4d16-55e6-ae78-72d3e40fe6d3",
+    "lastModifiedByType": "system",
+    "updatedAt": "2026-10-27T08:46:06.324Z",
+    "lastModifiedById": "orders-service",
+    "lastModifiedReason": "Inventory reserved for order",
+    "lastModifiedByEmail": "unknown",
+    "reservedQuantity": 6,
+    "availableQuantity": 41
+  },
+  {
+    "availableQuantity": 8,
+    "lastModifiedByEmail": "unknown",
+    "lastModifiedById": "orders-service",
+    "lastModifiedByType": "system",
+    "lastModifiedReason": "Order reserved",
+    "productId": "2f11f8b6-7ef9-52e6-8ee3-0b5bc2461ec4",
+    "reservedQuantity": 1,
+    "updatedAt": "2026-11-03T07:29:31.283Z"
+  },
+  {
+    "availableQuantity": 0,
+    "reservedQuantity": 0,
+    "productId": "2b1e8d6a-8e24-54cb-bc0b-cebf9a07202f",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 36,
+    "productId": "84b431ad-f485-5e61-84ac-f4bb61abf7a9",
+    "reservedQuantity": 2,
+    "updatedAt": "2026-09-29T02:21:11.525Z"
+  },
+  {
+    "availableQuantity": 9,
+    "productId": "382a02db-a079-5eab-90bc-f08f274f7769",
+    "reservedQuantity": 1,
+    "updatedAt": "2026-09-28T09:52:26.158Z"
+  },
+  {
+    "productId": "38db58c3-232b-573e-bfef-37969ceccfb8",
+    "availableQuantity": 3,
+    "lastModifiedByType": "system",
+    "reservedQuantity": 0,
+    "lastModifiedById": "reservation-expiry-poller",
+    "updatedAt": "2026-10-08T02:28:13.813Z",
+    "lastModifiedByEmail": "unknown",
+    "lastModifiedReason": "Payment expired"
+  },
+  {
+    "reservedQuantity": 2,
+    "availableQuantity": 42,
+    "updatedAt": "2026-10-29T02:26:11.704Z",
+    "lastModifiedByType": "system",
+    "lastModifiedById": "orders-service",
+    "lastModifiedReason": "Inventory reserved for order",
+    "productId": "c9d48c73-7901-594c-a167-fd673d697e81",
+    "lastModifiedByEmail": "unknown"
+  },
+  {
+    "availableQuantity": 2,
+    "productId": "e9cd6fe8-bd2b-5e34-8f5d-65c14ab6f9c0",
+    "reservedQuantity": 1,
+    "updatedAt": "2026-09-29T02:23:18.191Z"
+  },
+  {
+    "updatedAt": "2026-10-22T09:56:13.823Z",
+    "lastModifiedByType": "system",
+    "productId": "3afbd03e-c083-55c2-b5d6-890fd492db27",
+    "reservedQuantity": 0,
+    "lastModifiedById": "reservation-expiry-poller",
+    "lastModifiedByEmail": "unknown",
+    "lastModifiedReason": "Payment expired",
+    "availableQuantity": 41
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 8,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "8c9efc5a-5039-5760-8b59-eb4da93125d9"
+  },
+  {
+    "availableQuantity": 3,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "d562439b-fcd7-59fd-88e2-f81fb3ad286d"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 41,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "7be2c1bb-0eff-5e73-8c91-6e8aa5e91d93"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 47,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "a580eaa8-07ad-59e3-ba60-79e9c279d475"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "productId": "81ac8ca9-4b63-5ed2-bfa5-bc42cb5de23f",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "productId": "97bc5299-92cb-5965-87ee-7e0460380109",
+    "updatedAt": "2026-10-21T05:07:13.790Z",
+    "lastModifiedByType": "system",
+    "reservedQuantity": 0,
+    "lastModifiedById": "reservation-expiry-poller",
+    "availableQuantity": 38,
+    "lastModifiedByEmail": "unknown",
+    "lastModifiedReason": "Payment expired"
+  },
+  {
+    "availableQuantity": 9,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "6773651f-7f91-5c77-a98a-25bcf836ff87"
+  },
+  {
+    "availableQuantity": 38,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "280d54e4-be8f-5432-befd-8eb2326dbfb3"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 9,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "475b0325-4bb0-5761-a622-8567210d0a0b"
+  },
+  {
+    "availableQuantity": 41,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "8389bd2f-f227-5392-bcb6-1062c54d8288"
+  },
+  {
+    "availableQuantity": 2,
+    "reservedQuantity": 0,
+    "productId": "ff7963e7-7344-566d-a8dc-29b80b10bc41",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 0,
+    "reservedQuantity": 0,
+    "productId": "3431b48d-8b5b-5a90-b3cf-b3ac2f0c444a",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 47,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "a7fa49d2-4030-55c8-9863-1aef7ee73dc4"
+  },
+  {
+    "availableQuantity": 3,
+    "reservedQuantity": 0,
+    "productId": "dcb27205-6a41-513c-b997-d5879bcd92a7",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 0,
+    "productId": "59e56f68-8385-582f-97b8-ad0c2d2de2bc",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 3,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "0097cd76-3a82-5c59-8613-34530f3ee3f9"
+  },
+  {
+    "availableQuantity": 10,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "7eb51283-73a1-5b99-b173-2ec53065cc58"
+  },
+  {
+    "availableQuantity": 44,
+    "reservedQuantity": 0,
+    "productId": "db2888d3-2aa3-5874-bd7c-a71d3dcfdce8",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 9,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "c7c0dfc1-9bb2-5489-b00d-9bbc3bb54d03"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 10,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "e5bd4ffc-f769-548b-aabb-ee094937dee2"
+  },
+  {
+    "availableQuantity": 44,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "58929879-0d43-58c3-9bd9-77cb0059147c"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 3,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "d03e5872-01bd-581a-9453-7931c23f0795"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 44,
+    "productId": "8fc9c714-da5f-5d3e-81ff-660f1f844b19",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 3,
+    "productId": "e2b8e253-254f-5e23-be40-34795457ceb0",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 0,
+    "reservedQuantity": 0,
+    "productId": "c6e0eb66-1248-5e62-a1d5-e0475518e3d2",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "a3dec899-c2f1-556d-a6bf-e8e5f7b26c95"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 9,
+    "productId": "0c847ab7-e306-58ab-a019-23b3517fb5cd",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 10,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "4d751a33-6dcd-5c56-b05e-ed7978950d63"
+  },
+  {
+    "availableQuantity": 38,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "b271928d-b739-5b00-8077-72e79d85a611"
+  },
+  {
+    "availableQuantity": 47,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "38986bf5-450d-57ef-bc60-0a9412c42382"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "productId": "cef9f4d6-1927-5961-a9f2-e6adc73a02d4",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 0,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "5987d32b-040b-5482-87e3-03fafe3a909c"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 47,
+    "productId": "71bcab2f-22d5-5213-9dd1-1f917ad6b6be",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 41,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "47bb8bef-f5d7-5147-968a-1f95dd25c106"
+  },
+  {
+    "availableQuantity": 0,
+    "reservedQuantity": 0,
+    "productId": "032c59e6-7b4e-5419-aa19-7f64df5840f5",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 47,
+    "reservedQuantity": 0,
+    "productId": "c3e7d1c3-3cb1-548d-8896-be1d0a8716d3",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 9,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "90fd01a3-419b-5855-af14-7a7ba364a1f5"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 47,
+    "productId": "46b7178b-9ce3-588c-81a5-d7f38e54f76e",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 44,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "ebd5e306-c545-51c2-9587-e96d3567f790"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 47,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "9ab2f657-ad9b-5db9-8bc5-8fc9e0b20bfd"
+  },
+  {
+    "availableQuantity": 2,
+    "reservedQuantity": 0,
+    "productId": "af6e9d91-a938-5716-b447-f24caf3ce8d4",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "c8da9a94-6b4c-5fc6-9037-3332ff8167d1"
+  },
+  {
+    "availableQuantity": 9,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "28eea456-a5c0-52cc-a02a-1f6d663c21de"
+  },
+  {
+    "availableQuantity": 41,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "c1610030-03a3-5692-993d-756bd03c21e3"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 2,
+    "productId": "66b7ea2b-015f-55b2-9d6e-8164cefc7414",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 41,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "9c4ac30b-afdf-5cab-a8a5-3985fcf853a5"
+  },
+  {
+    "availableQuantity": 3,
+    "reservedQuantity": 0,
+    "productId": "234ace1d-b297-5ade-9a31-783f4d2eb3e4",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 38,
+    "productId": "432199b5-4eb6-5bb5-bfa9-0988aaf53502",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 41,
+    "reservedQuantity": 0,
+    "productId": "54586663-699f-513c-9444-dbc53a3b1297",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 2,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "b4333340-a422-5bec-a4ac-0ba341726e71"
+  },
+  {
+    "availableQuantity": 38,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "f2685112-e37e-538e-bf9c-943f126e0f1a"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 2,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "5d810d10-7b02-529c-a8c8-5bdfffa6a9e4"
+  },
+  {
+    "availableQuantity": 10,
+    "reservedQuantity": 0,
+    "productId": "eeaa761d-70b0-56b1-b39b-ddee1ffa4bb7",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 38,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "dceb4aaf-91d0-5a2f-a053-08ce29dd4ed1"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 10,
+    "productId": "bfc5f42c-4121-5a3d-942b-a95dca95e97a",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 44,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "2b79c2a6-e4d7-5b7a-9301-fa7db2e92a22"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 44,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "db5019fe-d611-50db-b9fb-7df02d6c367d"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 10,
+    "productId": "7c9040f5-c2c5-5b99-9ab3-e53a70682e31",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "lastModifiedByType": "system",
+    "lastModifiedByEmail": "unknown",
+    "lastModifiedReason": "Payment expired",
+    "availableQuantity": 38,
+    "lastModifiedById": "reservation-expiry-poller",
+    "productId": "e3fc4284-a4f5-5114-ba99-afe9c86e42d5",
+    "reservedQuantity": 0,
+    "updatedAt": "2026-10-08T02:29:14.076Z"
+  },
+  {
+    "availableQuantity": 44,
+    "reservedQuantity": 0,
+    "productId": "6fef063e-1fad-554b-a774-c7c081f6b081",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 2,
+    "reservedQuantity": 0,
+    "productId": "48f7e407-4697-58de-9ab9-cab70a3def56",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "productId": "e19084e2-a357-54b4-bb29-82638c60791f",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 38,
+    "reservedQuantity": 0,
+    "productId": "2dc9e652-16a4-5d10-9c7d-5fa55423022f",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 2,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "774b6135-bf86-5497-9a6b-55c171bdfa89"
+  },
+  {
+    "availableQuantity": 0,
+    "reservedQuantity": 0,
+    "productId": "e9afc5f5-8a76-5f31-9fe0-2b40c5f226b2",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "f1d43d04-b6cf-587c-8c8a-8aeb912e3515"
+  },
+  {
+    "availableQuantity": 41,
+    "reservedQuantity": 0,
+    "productId": "d6f00445-b7c3-5af3-9755-f58b61d53c87",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 10,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "a738a0bc-97a3-5fd0-976c-be2bf689d7e6"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 0,
+    "productId": "10b511fa-892d-5172-aa92-bbb4e902840d",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 10,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "6ed8451a-4cf6-5509-b379-0a1bbb64e847"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 47,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "9674c36e-12b8-5cc2-805b-9169c1eacf46"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 2,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "0febb2ec-6d0f-588e-b468-53bc19bf0cbc"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 44,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "b848998e-2b24-5fe2-a8ec-b1dded4a0ab6"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "productId": "7c39bcac-9e55-547f-9a73-285d765a1582",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 9,
+    "productId": "7676e276-a3f6-53c6-b049-5edfeeba8c1d",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 41,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "e007fb4e-06c7-5a7f-bfc7-b4e4e0741115"
+  },
+  {
+    "availableQuantity": 38,
+    "lastModifiedReason": "Payment expired",
+    "productId": "2fb20bd4-683e-5ef2-b76b-b2492e734c27",
+    "lastModifiedByType": "system",
+    "lastModifiedByEmail": "unknown",
+    "lastModifiedById": "reservation-expiry-poller",
+    "reservedQuantity": 0,
+    "updatedAt": "2026-10-08T02:26:14.180Z"
+  },
+  {
+    "availableQuantity": 0,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "4ed771c1-6bbc-5f0a-ad35-f402c3931f70"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 8,
+    "productId": "9755db38-e0aa-5819-9392-660e712d4c0a",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 2,
+    "productId": "36e295b1-72bf-510d-a7af-b3043b72bdcb",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 10,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "4c5cf472-3ca1-5f18-ae7d-b76830232eda"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 2,
+    "productId": "8a717ce6-df97-50dc-beed-1845dd5a3bd6",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 9,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "7f4008ee-93bf-5210-bb28-bdae300755f2"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 47,
+    "productId": "ac8fc1da-b66f-5415-93bf-cc6cc03180f0",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 2,
+    "productId": "2ec7572e-81f3-50c7-879a-3eeea8fcae0e",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 3,
+    "productId": "44be57d8-7c54-513b-b392-dfaa57fe292f",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "reservedQuantity": 0,
+    "availableQuantity": 44,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "1d559345-bedd-547d-a6b0-90c186c12199"
+  },
+  {
+    "availableQuantity": 8,
+    "reservedQuantity": 0,
+    "productId": "08052539-9fd4-5691-a186-99d5e6cc71d1",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "availableQuantity": 9,
+    "reservedQuantity": 0,
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "productId": "7b9a9a94-8fac-5ec6-a35b-5da50fe25b9c"
+  },
+  {
+    "availableQuantity": 3,
+    "reservedQuantity": 0,
+    "productId": "7dcc6e8d-c42d-54a1-ad3f-00d6b3bf2e62",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  }
+]

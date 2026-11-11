@@ -1,4 +1,4 @@
-import type { Order, OrderItem } from '../orders/orders.types'
+import type { Order, OrderItem } from '../orders/domain/order.entity'
 
 export interface SendOrderConfirmationEmailInput {
   order: Order
@@ -82,52 +82,6 @@ export type CognitoAuthEmailType =
   | 'COGNITO_ACCOUNT_TAKEOVER_NOTIFICATION'
 
 export type EmailContextType = 'ORDER' | 'USER'
-
-export interface EmailTracking {
-  emailId: string
-  emailType: EmailType
-  recipientEmail: string
-  status: EmailDeliveryStatus // PENDING, SENT, DELIVERED, BOUNCED, COMPLAINED,...
-
-  contextType: EmailContextType // USER | ORDER | INVOICE | PAYMENT
-  contextId: string // userId | orderId | invoiceId | paymentId
-  contextKey: string
-
-  sesMessageId?: string // The message ID returned by SES when the email is sent
-  attemptNumber: number
-  resendOfEmailId?: string
-  lastSesEventAt?: string
-
-  bounceType?: 'Permanent' | 'Transient' | 'Undetermined'
-  bounceSubType?: string
-
-  complaintSubType?: string
-  failureReason?: string
-
-  configurationSetName?: string
-
-  createdAt: string
-  updatedAt: string
-  sentAt?: string
-  deliveredAt?: string
-  bouncedAt?: string
-  complainedAt?: string
-  failedAt?: string
-}
-
-export interface EmailTrackingView extends EmailTracking {
-  isRetryable: boolean
-}
-
-export interface EmailDeliverySummary {
-  recipientEmail: string
-  emailType: EmailType
-  status: EmailDeliveryStatus
-  updatedAt: string
-  emailId: string
-  isRetryable: boolean
-  attemptNumber: number
-}
 
 export type EmailDeliveryStatistics = Record<EmailType, Record<EmailDeliveryStatus, number>>
 

@@ -27,7 +27,12 @@
     "client:hosting:env:sync": "npx ts-node src/scripts/sync-client-hosting-env.ts",
     "client:hosting:env:sync:optional": "npx ts-node src/scripts/sync-client-hosting-env.ts --optional",
     "format": "prettier --write \"src/**/*.ts\" \"*.{json,md,yml}\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,md,yml}\""
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,md,yml}\"",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "lint:fix": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --fix",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage"
   },
   "dependencies": {
     "@aws-crypto/client-node": "^5.0.2",
@@ -64,18 +69,31 @@
     "@aws-sdk/client-apigatewayv2": "^3.1107.0",
     "@aws-sdk/client-cloudformation": "^3.1107.0",
     "@aws-sdk/client-lambda": "^3.1107.0",
+    "@eslint/js": "^10.0.1",
     "@nestjs/cli": "^11.0.24",
     "@nestjs/schematics": "^11.1.0",
+    "@nestjs/testing": "^11.2.7",
     "@types/aws-lambda": "^8.10.162",
     "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.13.3",
+    "@types/supertest": "^6.0.3",
     "aws-cdk": "^2.1136.0",
     "aws-cdk-lib": "^2.264.0",
+    "aws-sdk-client-mock": "^4.1.0",
     "constructs": "^10.8.1",
     "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.7",
+    "globals": "^17.13.0",
+    "jest": "^30.5.2",
     "prettier": "^3.9.6",
+    "supertest": "^7.3.1",
+    "ts-jest": "^29.4.15",
     "ts-loader": "^9.6.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.2"
   }
 }

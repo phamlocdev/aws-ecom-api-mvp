@@ -1,0 +1,72 @@
+[
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Skin, body, and grooming essentials.",
+    "name": "Beauty",
+    "categoryId": "beauty",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Functional pieces for daily home use.",
+    "name": "Home Living",
+    "categoryId": "home-living",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Family play and hobby items.",
+    "name": "Toys Games",
+    "categoryId": "toys-games",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Gear for training and outdoor routines.",
+    "name": "Sports Outdoors",
+    "categoryId": "sports-outdoors",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Audio, mobile, and desktop accessories.",
+    "name": "Electronics",
+    "categoryId": "electronics",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Planning, note taking, and reading accessories.",
+    "name": "Books Stationery",
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "categoryId": "books-stationery"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Workspace gear for focus and comfort.",
+    "name": "Office",
+    "categoryId": "office",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Daily supplies for cats and dogs.",
+    "name": "Pets",
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "categoryId": "pets"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Prep tools and tableware for home cooking.",
+    "name": "Kitchen Dining",
+    "updatedAt": "2026-09-25T04:00:07.469Z",
+    "categoryId": "kitchen-dining"
+  },
+  {
+    "createdAt": "2026-09-25T04:00:07.469Z",
+    "description": "Everyday clothing and accessories.",
+    "name": "Fashion",
+    "categoryId": "fashion",
+    "updatedAt": "2026-09-25T04:00:07.469Z"
+  }
+]
