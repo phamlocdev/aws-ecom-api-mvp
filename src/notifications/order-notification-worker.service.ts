@@ -53,22 +53,22 @@ export class OrderNotificationWorkerService {
 
     if (order.status !== OrderStatus.SHIPPED || order.paymentStatus !== PaymentStatus.PAID) {
       this.logger.warn(
-        `Skipped shipped notification for order ${order.orderId}: status=${order.status}, paymentStatus=${order.paymentStatus}.`,
+        `Skipped shipped notification for order ${order.id}: status=${order.status}, paymentStatus=${order.paymentStatus}.`,
       )
       return
     }
 
     const hasActiveTracking = await this.emailTrackingService.hasActiveTracking({
       contextType: 'ORDER',
-      contextId: order.orderId,
+      contextId: order.id,
       emailType: 'SHIPPED_ORDER_NOTIFICATION',
     })
     if (hasActiveTracking) {
-      this.logger.log(`Skipped duplicate shipped notification for order ${order.orderId}.`)
+      this.logger.log(`Skipped duplicate shipped notification for order ${order.id}.`)
       return
     }
 
-    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.id)
     const result = await this.sesMailService.sendShippedOrderNotificationEmail({
       order,
       items,
@@ -77,18 +77,18 @@ export class OrderNotificationWorkerService {
     })
 
     if (result.status === 'SENT') {
-      this.logger.log(`Shipped notification email sent for order ${order.orderId}.`)
+      this.logger.log(`Shipped notification email sent for order ${order.id}.`)
       return
     }
 
     if (result.status === 'FAILED' && isRetryableNotificationFailure(result.reason)) {
       throw new Error(
-        `Retryable shipped notification failure for order ${order.orderId}: ${result.reason}`,
+        `Retryable shipped notification failure for order ${order.id}: ${result.reason}`,
       )
     }
 
     this.logger.warn(
-      `Best-effort shipped notification for order ${order.orderId} finished with status=${result.status}: ${result.reason ?? 'unknown-reason'}.`,
+      `Best-effort shipped notification for order ${order.id} finished with status=${result.status}: ${result.reason ?? 'unknown-reason'}.`,
     )
   }
 
@@ -110,22 +110,22 @@ export class OrderNotificationWorkerService {
 
     if (order.status !== OrderStatus.CANCELLED || order.paymentStatus !== PaymentStatus.PAID) {
       this.logger.warn(
-        `Skipped cancelled notification for order ${order.orderId}: status=${order.status}, paymentStatus=${order.paymentStatus}.`,
+        `Skipped cancelled notification for order ${order.id}: status=${order.status}, paymentStatus=${order.paymentStatus}.`,
       )
       return
     }
 
     const hasActiveTracking = await this.emailTrackingService.hasActiveTracking({
       contextType: 'ORDER',
-      contextId: order.orderId,
+      contextId: order.id,
       emailType: 'CANCELLED_ORDER_NOTIFICATION',
     })
     if (hasActiveTracking) {
-      this.logger.log(`Skipped duplicate cancelled notification for order ${order.orderId}.`)
+      this.logger.log(`Skipped duplicate cancelled notification for order ${order.id}.`)
       return
     }
 
-    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.id)
     const result = await this.sesMailService.sendCancelledOrderNotificationEmail({
       order,
       items,
@@ -134,18 +134,18 @@ export class OrderNotificationWorkerService {
     })
 
     if (result.status === 'SENT') {
-      this.logger.log(`Cancelled notification email sent for order ${order.orderId}.`)
+      this.logger.log(`Cancelled notification email sent for order ${order.id}.`)
       return
     }
 
     if (result.status === 'FAILED' && isRetryableNotificationFailure(result.reason)) {
       throw new Error(
-        `Retryable cancelled notification failure for order ${order.orderId}: ${result.reason}`,
+        `Retryable cancelled notification failure for order ${order.id}: ${result.reason}`,
       )
     }
 
     this.logger.warn(
-      `Best-effort cancelled notification for order ${order.orderId} finished with status=${result.status}: ${result.reason ?? 'unknown-reason'}.`,
+      `Best-effort cancelled notification for order ${order.id} finished with status=${result.status}: ${result.reason ?? 'unknown-reason'}.`,
     )
   }
 

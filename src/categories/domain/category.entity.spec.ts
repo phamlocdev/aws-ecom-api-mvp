@@ -53,7 +53,7 @@ describe('Category.delete()', () => {
     const category = makeCategory({ status: 'ACTIVE', name: 'Electronics', categoryId: 'cat-42' })
     const deleted = category.delete('2024-06-01T00:00:00.000Z')
     expect(deleted.name).toBe('Electronics')
-    expect(deleted.categoryId).toBe('cat-42')
+    expect(deleted.id).toBe('cat-42')
   })
 
   it('throws InvalidInputError when category is already DELETED', () => {

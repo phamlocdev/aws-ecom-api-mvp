@@ -94,10 +94,10 @@ export class ServerStack extends cdk.Stack {
       auditLogQueue: messaging.auditLogQueue,
       auditLogDlq: messaging.auditLogDlq,
       sources: [
-        { entityType: 'ORDER', idField: 'orderId', table: data.ordersTable },
-        { entityType: 'PRODUCT', idField: 'productId', table: data.productsTable },
-        { entityType: 'CATEGORY', idField: 'categoryId', table: data.categoriesTable },
-        { entityType: 'INVENTORY', idField: 'productId', table: data.inventoryTable },
+        { entityType: 'ORDER', idField: 'id', table: data.ordersTable },
+        { entityType: 'PRODUCT', idField: 'id', table: data.productsTable },
+        { entityType: 'CATEGORY', idField: 'id', table: data.categoriesTable },
+        { entityType: 'INVENTORY', idField: 'id', table: data.inventoryTable },
         { entityType: 'USER_ACCOUNT', idField: 'userId', table: data.userAccountsTable },
       ],
     })

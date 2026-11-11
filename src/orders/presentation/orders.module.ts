@@ -24,6 +24,7 @@ import { ReleaseExpiredOrderReservationUseCase } from '../application/release-ex
 import { ResendFailedOrderEmailUseCase } from '../application/resend-failed-order-email.use-case'
 import { ReserveOrderCheckoutItemsUseCase } from '../application/reserve-order-checkout-items.use-case'
 import { TriggerPaymentUseCase } from '../application/trigger-payment.use-case'
+import { UpdateOrderItemUseCase } from '../application/update-order-item.use-case'
 import { UpdateOrderStatusUseCase } from '../application/update-order-status.use-case'
 import { OrdersController } from './orders.controller'
 import { PaymentsController } from './payments.controller'
@@ -50,6 +51,7 @@ import { PaymentsController } from './payments.controller'
     ResendFailedOrderEmailUseCase,
     ReserveOrderCheckoutItemsUseCase,
     TriggerPaymentUseCase,
+    UpdateOrderItemUseCase,
     UpdateOrderStatusUseCase,
   ],
   exports: [

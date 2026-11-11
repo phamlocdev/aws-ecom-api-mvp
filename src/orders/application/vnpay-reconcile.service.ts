@@ -140,7 +140,7 @@ export class VnpayReconcileService {
 
     if (!order.paymentAttemptId) {
       this.logger.error(
-        `Order ${order.orderId} is missing paymentAttemptId while failing VNPay payment.`,
+        `Order ${order.id} is missing paymentAttemptId while failing VNPay payment.`,
       )
       return IpnUnknownError
     }
@@ -172,19 +172,19 @@ export class VnpayReconcileService {
 
     if (!paymentRequestedAt || !Number.isFinite(transactionNo)) {
       this.logger.error(
-        `Cannot auto-refund late VNPay payment for order ${order.orderId}: missing paymentRequestedAt or transactionNo.`,
+        `Cannot auto-refund late VNPay payment for order ${order.id}: missing paymentRequestedAt or transactionNo.`,
       )
       return IpnUnknownError
     }
 
     const transactionDate = new Date(paymentRequestedAt)
-    const orderInfo = buildPaymentOrderInfo(order.orderId)
+    const orderInfo = buildPaymentOrderInfo(order.id)
 
     try {
       const queryResult = await this.vnpayService.queryOrderPayment({
         clientIp: this.vnpayService.getApiIpAddress(),
         createDate: transactionDate,
-        orderId: order.orderId,
+        orderId: order.id,
         orderInfo,
         transactionDate,
         transactionNo,
@@ -192,7 +192,7 @@ export class VnpayReconcileService {
 
       if (!queryResult.isVerified || !queryResult.isSuccess) {
         this.logger.error(
-          `VNPay queryDr verification failed for expired order ${order.orderId}: ${queryResult.message}`,
+          `VNPay queryDr verification failed for expired order ${order.id}: ${queryResult.message}`,
         )
         return IpnUnknownError
       }
@@ -202,16 +202,16 @@ export class VnpayReconcileService {
         clientIp: this.vnpayService.getApiIpAddress(),
         createBy: AUTO_REFUND_CREATE_BY,
         createDate: transactionDate,
-        orderId: order.orderId,
+        orderId: order.id,
         orderInfo,
-        refundReason: buildAutoRefundReason(order.orderId),
+        refundReason: buildAutoRefundReason(order.id),
         transactionDate,
         transactionNo: Number(queryResult.vnp_TransactionNo ?? transactionNo),
       })
 
       if (!refundResult.isVerified || !refundResult.isSuccess) {
         this.logger.error(
-          `VNPay refund failed for expired order ${order.orderId}: ${refundResult.message}`,
+          `VNPay refund failed for expired order ${order.id}: ${refundResult.message}`,
         )
         return IpnUnknownError
       }
@@ -226,7 +226,7 @@ export class VnpayReconcileService {
       return IpnSuccess
     } catch (error) {
       this.logger.error(
-        `Failed to auto-refund late VNPay payment for order ${order.orderId}.`,
+        `Failed to auto-refund late VNPay payment for order ${order.id}.`,
         error,
       )
       return IpnUnknownError
@@ -244,28 +244,28 @@ export class VnpayReconcileService {
     }
 
     const hasActiveTracking = await this.emailTrackingService.hasActiveOrderConfirmationTracking(
-      order.orderId,
+      order.id,
     )
     if (hasActiveTracking) {
       return
     }
 
     try {
-      const items = await this.orderItemRepository.findByOrderId(order.orderId)
+      const items = await this.orderItemRepository.findByOrderId(order.id)
       const result = await this.sesMailService.sendOrderConfirmationEmail({ order, items })
 
       if (result.status === ORDER_CONFIRMATION_EMAIL_SKIPPED) {
         this.logger.warn(
-          `Skipped order confirmation email for order ${order.orderId}: ${result.reason ?? 'unknown-reason'}.`,
+          `Skipped order confirmation email for order ${order.id}: ${result.reason ?? 'unknown-reason'}.`,
         )
       }
 
       if (result.status === ORDER_CONFIRMATION_EMAIL_SENT) {
-        this.logger.log(`Order confirmation email sent for order ${order.orderId}.`)
+        this.logger.log(`Order confirmation email sent for order ${order.id}.`)
       }
     } catch (error) {
       this.logger.error(
-        `Unexpected failure while processing order confirmation email for ${order.orderId}.`,
+        `Unexpected failure while processing order confirmation email for ${order.id}.`,
         error,
       )
     }
@@ -274,7 +274,7 @@ export class VnpayReconcileService {
   private async releaseExpiredReservation(order: Order): Promise<void> {
     if (!order.canExpireReservation()) return
 
-    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.id)
     if (items.length === 0) return
 
     const timestamp = new Date().toISOString()

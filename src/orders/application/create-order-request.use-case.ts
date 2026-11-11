@@ -90,13 +90,13 @@ export class CreateOrderRequestUseCase {
     await this.orderRepository.create(order)
 
     this.logger.log(
-      `>>>>>> [START]: Processing order ${order.orderId} for cart ${order.cartId} and customer ${order.customerId}.`,
+      `>>>>>> [START]: Processing order ${order.id} for cart ${order.cartId} and customer ${order.customerId}.`,
     )
 
-    const cartItems = await this.cartRepository.findItems(cart.cartId)
+    const cartItems = await this.cartRepository.findItems(cart.id)
     if (cartItems.length === 0) {
       this.logger.warn(
-        `>>>>>> [WARN]: Order ${order.orderId} failed because cart ${cart.cartId} has no items.`,
+        `>>>>>> [WARN]: Order ${order.id} failed because cart ${cart.id} has no items.`,
       )
       const failed = order
         .fail('Cart has no items.', new Date().toISOString())
@@ -106,20 +106,20 @@ export class CreateOrderRequestUseCase {
     }
 
     const reservationSucceeded = await this.reserveItems(
-      order.orderId,
+      order.id,
       cartItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
     )
 
     if (reservationSucceeded) {
       await this.cartRepository.updateStatus(
         cart.customerId,
-        cart.cartId,
+        cart.id,
         CartStatus.EXPIRED,
         new Date().toISOString(),
       )
     }
 
-    const finalOrder = await this.orderRepository.findById(order.orderId)
+    const finalOrder = await this.orderRepository.findById(order.id)
     return finalOrder ?? order
   }
 
@@ -150,7 +150,7 @@ export class CreateOrderRequestUseCase {
         OrderItem.create({
           orderId,
           lineId: `${String(index + 1).padStart(3, '0')}-${randomUUID().slice(0, 8)}`,
-          productId: product.productId,
+          productId: product.id,
           productName: product.name,
           imageUrl: product.imageUrl,
           unitPrice: product.price,

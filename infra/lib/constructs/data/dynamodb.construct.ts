@@ -22,26 +22,26 @@ export class DynamoDbConstruct extends Construct {
     super(scope, id)
     const infraEnv = getAwsInfraEnv()
 
-    this.productsTable = new dynamodb.Table(this, 'ProductsTable', {
+    this.productsTable = new dynamodb.Table(this, 'ProductsTableV2', {
       tableName: infraEnv.productsTableName,
-      partitionKey: { name: 'productId', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
-    this.categoriesTable = new dynamodb.Table(this, 'CategoriesTable', {
+    this.categoriesTable = new dynamodb.Table(this, 'CategoriesTableV2', {
       tableName: infraEnv.categoriesTableName,
-      partitionKey: { name: 'categoryId', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
-    this.cartsTable = new dynamodb.Table(this, 'CartsTable', {
+    this.cartsTable = new dynamodb.Table(this, 'CartsTableV2', {
       tableName: infraEnv.cartsTableName,
       partitionKey: { name: 'customerId', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'cartId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: 'expiresAt',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -55,9 +55,9 @@ export class DynamoDbConstruct extends Construct {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
-    this.ordersTable = new dynamodb.Table(this, 'OrdersTable', {
+    this.ordersTable = new dynamodb.Table(this, 'OrdersTableV2', {
       tableName: infraEnv.ordersTableName,
-      partitionKey: { name: 'orderId', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -141,9 +141,9 @@ export class DynamoDbConstruct extends Construct {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
 
-    this.inventoryTable = new dynamodb.Table(this, 'InventoryTable', {
+    this.inventoryTable = new dynamodb.Table(this, 'InventoryTableV2', {
       tableName: infraEnv.inventoryTableName,
-      partitionKey: { name: 'productId', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,

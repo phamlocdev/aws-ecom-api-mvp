@@ -31,6 +31,6 @@ export function deriveCartStatus(cart: Cart): Cart {
 /** Throws InvalidInputError if the cart can no longer be mutated (expired). */
 export function ensureCartUsable(cart: Cart): void {
   if (cart.expiresAt <= toEpochSeconds(Date.now()) || cart.status === CartStatus.EXPIRED) {
-    throw new InvalidInputError(`Cart ${cart.cartId} has expired.`)
+    throw new InvalidInputError(`Cart ${cart.id} has expired.`)
   }
 }

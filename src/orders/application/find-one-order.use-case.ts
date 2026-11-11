@@ -26,7 +26,7 @@ export class FindOneOrderUseCase {
       throw new ForbiddenDomainError('You do not have access to this order.')
     }
 
-    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.id)
     return Object.assign(order, { items })
   }
 }

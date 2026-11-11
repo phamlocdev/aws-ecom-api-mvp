@@ -82,7 +82,7 @@ export class ReserveOrderCheckoutItemsUseCase {
         OrderItem.create({
           orderId: input.orderId,
           lineId: `${String(index + 1).padStart(3, '0')}-${randomUUID().slice(0, 8)}`,
-          productId: product.productId,
+          productId: product.id,
           productName: product.name,
           imageUrl: product.imageUrl,
           unitPrice: product.price,

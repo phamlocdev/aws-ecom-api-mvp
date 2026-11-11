@@ -14,7 +14,7 @@ export class DynamoDbCartRepository
   implements CartRepositoryPort
 {
   protected readonly tableName: string
-  protected readonly primaryKeyName = 'cartId'
+  protected readonly primaryKeyName = 'id'
   private readonly cartItemsTableName: string
 
   constructor(
@@ -40,8 +40,8 @@ export class DynamoDbCartRepository
     await this.putRecord(
       this.tableName,
       { ...cart },
-      'attribute_not_exists(#customerId) AND attribute_not_exists(#cartId)',
-      { '#customerId': 'customerId', '#cartId': 'cartId' },
+      'attribute_not_exists(#customerId) AND attribute_not_exists(#id)',
+      { '#customerId': 'customerId', '#id': 'id' },
     )
   }
 
@@ -57,7 +57,7 @@ export class DynamoDbCartRepository
   }
 
   async findOne(customerId: string, cartId: string): Promise<Cart | null> {
-    const item = await this.getItem(this.tableName, { customerId, cartId })
+    const item = await this.getItem(this.tableName, { customerId, id: cartId })
     return item ? Cart.fromRecord(item) : null
   }
 
@@ -122,11 +122,10 @@ export class DynamoDbCartRepository
   ): Promise<void> {
     await this.updateItem(
       this.tableName,
-      { customerId, cartId },
+      { customerId, id: cartId },
       'SET #status = :status, #updatedAt = :updatedAt',
       { '#status': 'status', '#updatedAt': 'updatedAt' },
       { ':status': status, ':updatedAt': updatedAt },
     )
   }
 }
-

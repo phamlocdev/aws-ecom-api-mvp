@@ -7,13 +7,13 @@ import { normalizeAdditionalReceivingEmails, toEpochSeconds } from './order.rule
 import { InvalidInputError } from '../../common/domain-error'
 import type { AuditMutationContext } from '../../audit/audit-actor'
 import { BaseEntity } from '../../common/base.entity'
-import { OrderItem } from './order-item.entity'
-export { OrderItem, type CreateOrderItemData } from './order-item.entity'
+import { OrderItem, type OrderItemPatch } from './order-item.entity'
+export { OrderItem, type CreateOrderItemData, type OrderItemPatch } from './order-item.entity'
 
 export const ORDERS_ENTITY_TYPE = 'ORDER'
 
 const OrderPropsSchema = z.object({
-  orderId: z.string(),
+  id: z.string(),
   customerId: z.string(),
   customerEmail: z.string().optional(),
   customerName: z.string().optional(),
@@ -43,7 +43,7 @@ const OrderPropsSchema = z.object({
 })
 
 type OrderProps = {
-  orderId: string
+  id: string
   customerId: string
   customerEmail?: string
   customerName?: string
@@ -70,6 +70,7 @@ type OrderProps = {
   lastModifiedById?: string
   lastModifiedByEmail?: string
   lastModifiedReason?: string
+  items?: OrderItem[]
 }
 
 export type CreateOrderData = {
@@ -85,7 +86,7 @@ export type CreateOrderData = {
 }
 
 export class Order extends BaseEntity<OrderProps> {
-  readonly orderId!: string
+  declare readonly id: string
   readonly customerId!: string
   readonly customerEmail?: string
   readonly customerName?: string
@@ -106,6 +107,7 @@ export class Order extends BaseEntity<OrderProps> {
   readonly paymentExpiresAt?: number
   readonly failureReason?: string
   readonly totalAmount?: number
+  readonly items?: OrderItem[]
 
   private constructor(props: OrderProps) {
     super()
@@ -115,7 +117,7 @@ export class Order extends BaseEntity<OrderProps> {
   toRecord(): Record<string, unknown> {
     return Object.fromEntries(
       Object.entries({
-        orderId: this.orderId,
+        id: this.id,
         customerId: this.customerId,
         cartId: this.cartId,
         status: this.status,
@@ -149,7 +151,7 @@ export class Order extends BaseEntity<OrderProps> {
   static create(data: CreateOrderData): Order {
     const timestamp = new Date().toISOString()
     return new Order({
-      orderId: randomUUID(),
+      id: randomUUID(),
       customerId: data.customerId,
       customerEmail: data.customerEmail,
       customerName: data.customerName,
@@ -339,6 +341,25 @@ export class Order extends BaseEntity<OrderProps> {
       lastModifiedById: actor.actorId ?? 'unknown',
       lastModifiedByEmail: actor.actorEmail ?? 'unknown',
       lastModifiedReason: actor.reason,
+    })
+  }
+
+  withItems(items: OrderItem[]): this {
+    return this.with({ items })
+  }
+
+  updateItem(lineId: string, patch: OrderItemPatch): this {
+    if (!this.items) {
+      throw new InvalidInputError('Order items are not loaded')
+    }
+    if (!this.items.some((i) => i.lineId === lineId)) {
+      throw new InvalidInputError(`Order item ${lineId} not found`)
+    }
+    const updatedItems = this.items.map((i) => (i.lineId === lineId ? i.applyPatch(patch) : i))
+    return this.with({
+      items: updatedItems,
+      totalAmount: Order.computeTotal(updatedItems),
+      updatedAt: new Date().toISOString(),
     })
   }
 

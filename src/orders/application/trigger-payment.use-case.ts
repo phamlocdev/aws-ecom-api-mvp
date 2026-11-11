@@ -84,7 +84,7 @@ export class TriggerPaymentUseCase {
   private async releaseExpiredReservation(order: Order): Promise<void> {
     if (!order.canExpireReservation()) return
 
-    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.id)
     if (items.length === 0) return
 
     const timestamp = new Date().toISOString()

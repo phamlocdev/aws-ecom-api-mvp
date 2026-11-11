@@ -3,7 +3,7 @@ import { InvalidInputError } from '../../common/domain-error'
 import { BaseEntity } from '../../common/base.entity'
 
 const CategoryPropsSchema = z.object({
-  categoryId: z.string(),
+  id: z.string(),
   name: z.string(),
   description: z.string().optional(),
   status: z.enum(['ACTIVE', 'DELETED']).default('ACTIVE'),
@@ -19,7 +19,7 @@ const CategoryPropsSchema = z.object({
 type CategoryProps = z.infer<typeof CategoryPropsSchema>
 
 export type CreateCategoryData = {
-  categoryId: string
+  id: string
   name: string
   description?: string
   lastModifiedByType?: string
@@ -29,7 +29,7 @@ export type CreateCategoryData = {
 }
 
 export class Category extends BaseEntity<CategoryProps> {
-  readonly categoryId!: string
+  declare readonly id: string
   readonly name!: string
   readonly description?: string
   readonly status!: 'ACTIVE' | 'DELETED'
@@ -64,7 +64,7 @@ export class Category extends BaseEntity<CategoryProps> {
 
   delete(deletedAt: string): this {
     if (!this.isActive) {
-      throw new InvalidInputError(`Category ${this.categoryId} is not active.`)
+      throw new InvalidInputError(`Category ${this.id} is not active.`)
     }
     return this.with({ status: 'DELETED' as const, deletedAt, updatedAt: deletedAt })
   }

@@ -51,19 +51,19 @@ export class CreateProductUseCase {
       ...toAuditMutationAttributes(actor),
     })
     const initialInventory: InitialProductInventory = {
-      productId: product.productId,
+      productId: product.id,
       availableQuantity: input.availableQuantity ?? 0,
       reservedQuantity: 0,
       updatedAt: product.createdAt,
       ...toAuditMutationAttributes({ ...actor, reason: 'Initial inventory created' }),
     }
 
-    await this.productRepository.create(product, initialInventory)
+    await this.productRepository.createWithInventory(product, initialInventory)
     await publishProductMutationBestEffort(
       this.productEventsPublisher,
       this.logger,
       'created',
-      product.productId,
+      product.id,
     )
     return product
   }

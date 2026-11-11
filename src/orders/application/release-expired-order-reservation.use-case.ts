@@ -28,7 +28,7 @@ export class ReleaseExpiredOrderReservationUseCase {
       return false
     }
 
-    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.id)
     if (items.length === 0) {
       return false
     }

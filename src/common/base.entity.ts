@@ -1,4 +1,5 @@
 export abstract class BaseEntity<Props extends object> {
+  declare readonly id: string
   declare readonly createdAt: string
   declare readonly updatedAt: string
   declare readonly lastModifiedByType: string

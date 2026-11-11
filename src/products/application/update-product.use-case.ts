@@ -83,7 +83,7 @@ export class UpdateProductUseCase {
       this.productEventsPublisher,
       this.logger,
       'updated',
-      updatedProduct.productId,
+      updatedProduct.id,
     )
     return updatedProduct
   }

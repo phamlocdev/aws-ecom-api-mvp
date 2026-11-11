@@ -1,13 +1,11 @@
+import { Page } from '../../common/page.type'
 import { TransactItem } from '../../common/transact-item.type'
 import { Order } from './order.entity'
 import { OrderStatus } from './order-status.enum'
 
 export const ORDER_REPOSITORY = Symbol('ORDER_REPOSITORY')
 
-export interface OrderPage {
-  items: Order[]
-  lastEvaluatedKey?: Record<string, unknown>
-}
+export type OrderPage = Page<Order>
 
 export interface OrderListFilter {
   isAdminOrManager: boolean
@@ -22,7 +20,7 @@ export interface OrderListFilter {
  * NestJS/AWS SDK type so the application layer can depend on it directly.
  */
 export interface OrderRepositoryPort {
-  /** Throws ConflictError if order.orderId already exists. */
+  /** Throws ConflictError if order.id already exists. */
   create(order: Order): Promise<void>
 
   /** Full overwrite — persists all fields from order.toRecord(). */
@@ -48,4 +46,10 @@ export interface OrderRepositoryPort {
    * Throws ConflictError when any condition expression fails.
    */
   executeTransaction(items: TransactItem[]): Promise<void>
+
+  /** Loads the order and all its items in one call. Returns null if not found. */
+  findByIdWithItems(orderId: string): Promise<Order | null>
+
+  /** Saves the order and overwrites its loaded items (eventual consistency). */
+  saveWithItems(order: Order): Promise<void>
 }

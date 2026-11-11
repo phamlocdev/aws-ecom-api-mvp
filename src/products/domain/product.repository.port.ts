@@ -39,9 +39,9 @@ export interface ProductRepositoryPort {
   /**
    * Writes the product and its initial inventory row atomically (DynamoDB
    * transaction spanning the products and inventory tables). Throws
-   * ConflictError if product.productId already exists.
+   * ConflictError if product.id already exists.
    */
-  create(product: Product, initialInventory: InitialProductInventory): Promise<void>
+  createWithInventory(product: Product, initialInventory: InitialProductInventory): Promise<void>
 
   /**
    * Returns up to `limit` items matching the given filters. Soft-deleted

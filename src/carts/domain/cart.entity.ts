@@ -6,7 +6,7 @@ import { BaseEntity } from '../../common/base.entity'
 
 const CartPropsSchema = z.object({
   customerId: z.string(),
-  cartId: z.string(),
+  id: z.string(),
   status: z.enum(['ACTIVE', 'EXPIRED']),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -19,7 +19,7 @@ const CartPropsSchema = z.object({
 
 type CartProps = {
   customerId: string
-  cartId: string
+  id: string
   status: CartStatus
   createdAt: string
   updatedAt: string
@@ -55,7 +55,7 @@ export type CreateCartItemData = {
 
 export class Cart extends BaseEntity<CartProps> {
   readonly customerId!: string
-  readonly cartId!: string
+  declare readonly id: string
   readonly status!: CartStatus
   readonly expiresAt!: number
 
@@ -67,7 +67,7 @@ export class Cart extends BaseEntity<CartProps> {
   static create(data: CreateCartData): Cart {
     const timestamp = new Date().toISOString()
     return new Cart({
-      cartId: randomUUID(),
+      id: randomUUID(),
       status: CartStatus.ACTIVE,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -90,14 +90,14 @@ export class Cart extends BaseEntity<CartProps> {
 
   expire(updatedAt: string): this {
     if (this.status !== CartStatus.ACTIVE) {
-      throw new InvalidInputError(`Cart ${this.cartId} is not active.`)
+      throw new InvalidInputError(`Cart ${this.id} is not active.`)
     }
     return this.with({ status: CartStatus.EXPIRED, updatedAt })
   }
 
   ensureUsable(): this {
     if (this.isExpired) {
-      throw new InvalidInputError(`Cart ${this.cartId} has expired.`)
+      throw new InvalidInputError(`Cart ${this.id} has expired.`)
     }
     return this
   }

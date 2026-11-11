@@ -1,5 +1,12 @@
 import { z } from 'zod'
 
+export type OrderItemPatch = {
+  unitPrice?: number
+  quantity?: number
+  productName?: string
+  imageUrl?: string
+}
+
 const OrderItemPropsSchema = z.object({
   orderId: z.string(),
   lineId: z.string(),
@@ -57,6 +64,22 @@ export class OrderItem {
 
   static create(data: CreateOrderItemData): OrderItem {
     return new OrderItem(data)
+  }
+
+  applyPatch(patch: OrderItemPatch): OrderItem {
+    const quantity = patch.quantity ?? this.quantity
+    const unitPrice = patch.unitPrice ?? this.unitPrice
+    return OrderItem.create({
+      orderId: this.orderId,
+      lineId: this.lineId,
+      productId: this.productId,
+      productName: patch.productName ?? this.productName,
+      imageUrl: patch.imageUrl !== undefined ? patch.imageUrl : this.imageUrl,
+      unitPrice,
+      quantity,
+      lineTotal: quantity * unitPrice,
+      createdAt: this.createdAt,
+    })
   }
 
   static fromRecord(item: Record<string, unknown>): OrderItem {

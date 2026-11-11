@@ -12,8 +12,9 @@ import { ConflictError } from './domain-error'
 import { isConditionalCheckFailure, isTransactionCanceled } from './dynamodb-errors'
 import { TransactItem } from './transact-item.type'
 import { DynamoDbService } from '../dynamodb/dynamodb.service'
+import { Page } from './page.type'
 
-export abstract class BaseDynamoDbRepository<TEntity> {
+export abstract class BaseDynamoDbRepository<TEntity extends object, TFilter = never> {
   protected abstract readonly tableName: string
   protected abstract readonly primaryKeyName: string
   protected abstract fromRecord(item: Record<string, unknown>): TEntity
@@ -26,10 +27,6 @@ export abstract class BaseDynamoDbRepository<TEntity> {
     return item ? this.fromRecord(item) : null
   }
 
-  async save(entity: TEntity): Promise<void> {
-    await this.putRecord(this.tableName, this.toRecord(entity))
-  }
-
   protected async getItem<T = Record<string, unknown>>(
     tableName: string,
     key: Record<string, unknown>,
@@ -38,6 +35,46 @@ export abstract class BaseDynamoDbRepository<TEntity> {
       new GetCommand({ TableName: tableName, Key: key }),
     )
     return (response.Item as T) ?? null
+  }
+
+  protected buildQuery(
+    _filter: TFilter,
+    _startKey?: Record<string, unknown>,
+  ): Record<string, unknown> {
+    throw new Error(`${this.constructor.name} must implement buildQuery to use findMany`)
+  }
+
+  async findMany(
+    filter: TFilter,
+    limit: number,
+    exclusiveStartKey?: Record<string, unknown>,
+  ): Promise<Page<TEntity>> {
+    const response = await this.queryItems({
+      TableName: this.tableName,
+      Limit: limit,
+      ...this.buildQuery(filter, exclusiveStartKey),
+    } as QueryCommandInput)
+    return {
+      items: (response.Items ?? []).map(item => this.fromRecord(item)),
+      lastEvaluatedKey: response.LastEvaluatedKey as Record<string, unknown> | undefined,
+    }
+  }
+
+  async save(entity: TEntity): Promise<void> {
+    await this.putRecord(this.tableName, this.toRecord(entity))
+  }
+
+  async create(entity: TEntity & { id: string }): Promise<void> {
+    try {
+      await this.putRecord(this.tableName, this.toRecord(entity), 'attribute_not_exists(#key)', {
+        '#key': this.primaryKeyName,
+      })
+    } catch (error) {
+      if (isConditionalCheckFailure(error)) {
+        throw new ConflictError(`${this.tableName}/${entity.id} already exists.`)
+      }
+      throw error
+    }
   }
 
   protected async putRecord(

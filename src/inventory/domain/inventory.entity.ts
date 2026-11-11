@@ -22,13 +22,14 @@ export type CreateInventoryRecordData = Omit<InventoryRecordProps, 'updatedAt' |
 }
 
 export class InventoryRecord extends BaseEntity<InventoryRecordProps> {
+  declare readonly id: string
   readonly productId!: string
   readonly availableQuantity!: number
   readonly reservedQuantity!: number
 
   protected constructor(props: InventoryRecordProps) {
     super()
-    Object.assign(this, props)
+    Object.assign(this, props, { id: props.productId })
   }
 
   static create(data: CreateInventoryRecordData): InventoryRecord {

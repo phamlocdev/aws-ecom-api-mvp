@@ -96,9 +96,9 @@ describe('CreateProductUseCase', () => {
     })
     expect(repository.create).toHaveBeenCalledWith(
       result,
-      expect.objectContaining({ productId: result.productId, availableQuantity: 10, reservedQuantity: 0 }),
+      expect.objectContaining({ productId: result.id, availableQuantity: 10, reservedQuantity: 0 }),
     )
-    expect(publisher.publishProductCreated).toHaveBeenCalledWith({ productId: result.productId })
+    expect(publisher.publishProductCreated).toHaveBeenCalledWith({ productId: result.id })
   })
 
   it('propagates ConflictError raised by the repository', async () => {

@@ -90,7 +90,7 @@ const baseOrder = Order.fromRecord({
 })
 
 const baseOrderItem = OrderItem.fromRecord({
-  orderId: baseOrder.orderId,
+  orderId: baseOrder.id,
   lineId: '001-abcdefgh',
   productId: 'p1',
   productName: 'Headphones',
@@ -108,6 +108,8 @@ function createOrderRepositoryMock(): jest.Mocked<OrderRepositoryPort> {
     findMany: jest.fn(),
     findExpiredReserved: jest.fn(),
     executeTransaction: jest.fn().mockResolvedValue(undefined),
+    findByIdWithItems: jest.fn(),
+    saveWithItems: jest.fn(),
   }
 }
 
@@ -288,7 +290,7 @@ describe('ReleaseExpiredOrderReservationUseCase', () => {
 
     await useCase.execute(expiredOrder)
 
-    expect(orderItemRepository.findByOrderId).toHaveBeenCalledWith(expiredOrder.orderId)
+    expect(orderItemRepository.findByOrderId).toHaveBeenCalledWith(expiredOrder.id)
     expect(repository.executeTransaction).not.toHaveBeenCalled()
   })
 
@@ -361,7 +363,7 @@ describe('FindOneOrderUseCase', () => {
     repository.findById.mockResolvedValue(Order.fromRecord({ ...baseOrder, customerId: 'someone-else' }))
     const useCase = new FindOneOrderUseCase(repository, orderItemRepository)
 
-    await expect(useCase.execute(customerUser, baseOrder.orderId)).rejects.toBeInstanceOf(
+    await expect(useCase.execute(customerUser, baseOrder.id)).rejects.toBeInstanceOf(
       ForbiddenDomainError,
     )
   })
@@ -373,7 +375,7 @@ describe('FindOneOrderUseCase', () => {
     orderItemRepository.findByOrderId.mockResolvedValue([baseOrderItem])
     const useCase = new FindOneOrderUseCase(repository, orderItemRepository)
 
-    const result = await useCase.execute(customerUser, baseOrder.orderId)
+    const result = await useCase.execute(customerUser, baseOrder.id)
 
     expect(result.items).toEqual([baseOrderItem])
   })
@@ -406,10 +408,10 @@ describe('GetOrderEmailTrackingUseCase', () => {
       emailTrackingService as never,
     )
 
-    await useCase.execute(baseOrder.orderId)
+    await useCase.execute(baseOrder.id)
 
-    expect(repository.findById).toHaveBeenCalledWith(baseOrder.orderId)
-    expect(emailTrackingService.findByContext).toHaveBeenCalledWith('ORDER', baseOrder.orderId, [
+    expect(repository.findById).toHaveBeenCalledWith(baseOrder.id)
+    expect(emailTrackingService.findByContext).toHaveBeenCalledWith('ORDER', baseOrder.id, [
       'ORDER_CONFIRMATION',
       'SHIPPED_ORDER_NOTIFICATION',
       'CANCELLED_ORDER_NOTIFICATION',
@@ -444,7 +446,7 @@ describe('ResendFailedOrderEmailUseCase', () => {
     )
 
     await expect(
-      useCase.execute(baseOrder.orderId, 'WELCOME_NEW_CUSTOMER', 'a@example.com'),
+      useCase.execute(baseOrder.id, 'WELCOME_NEW_CUSTOMER', 'a@example.com'),
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
@@ -462,7 +464,7 @@ describe('ResendFailedOrderEmailUseCase', () => {
     )
 
     await expect(
-      useCase.execute(baseOrder.orderId, 'ORDER_CONFIRMATION', '   '),
+      useCase.execute(baseOrder.id, 'ORDER_CONFIRMATION', '   '),
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
@@ -480,7 +482,7 @@ describe('ResendFailedOrderEmailUseCase', () => {
       sesMailService as never,
     )
 
-    const result = await useCase.execute(baseOrder.orderId, 'ORDER_CONFIRMATION', 'a@example.com')
+    const result = await useCase.execute(baseOrder.id, 'ORDER_CONFIRMATION', 'a@example.com')
 
     expect(result).toMatchObject({
       status: 'SKIPPED',
@@ -507,7 +509,7 @@ describe('ResendFailedOrderEmailUseCase', () => {
       sesMailService as never,
     )
 
-    const result = await useCase.execute(baseOrder.orderId, 'ORDER_CONFIRMATION', 'A@Example.com')
+    const result = await useCase.execute(baseOrder.id, 'ORDER_CONFIRMATION', 'A@Example.com')
 
     expect(sesMailService.sendOrderConfirmationEmail).toHaveBeenCalledWith(
       expect.objectContaining({ recipientEmails: ['a@example.com'], resendOfEmailId: 'email-1' }),
@@ -534,7 +536,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const publisher = createEventsPublisherMock()
     const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, createDynamoTablesMock(), publisher)
 
-    await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED)
+    await useCase.execute(adminUser, baseOrder.id, OrderStatus.SHIPPED)
 
     expect(repository.save).not.toHaveBeenCalled()
     expect(publisher.publishOrderShipped).not.toHaveBeenCalled()
@@ -549,7 +551,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, createDynamoTablesMock(), publisher)
 
     await expect(
-      useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED),
+      useCase.execute(adminUser, baseOrder.id, OrderStatus.SHIPPED),
     ).rejects.toBeInstanceOf(InvalidInputError)
     expect(repository.save).not.toHaveBeenCalled()
   })
@@ -571,13 +573,13 @@ describe('UpdateOrderStatusUseCase', () => {
     const dynamoTables = createDynamoTablesMock()
     const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
-    const result = await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.SHIPPED)
+    const result = await useCase.execute(adminUser, baseOrder.id, OrderStatus.SHIPPED)
 
     expect(repository.save).toHaveBeenCalledWith(
       expect.objectContaining({ status: OrderStatus.SHIPPED }),
     )
     expect(publisher.publishOrderShipped).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: baseOrder.orderId }),
+      expect.objectContaining({ orderId: baseOrder.id }),
     )
     expect(result).toEqual(shippedOrder)
   })
@@ -593,7 +595,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const dynamoTables = createDynamoTablesMock()
     const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
-    await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CANCELLED)
+    await useCase.execute(adminUser, baseOrder.id, OrderStatus.CANCELLED)
 
     expect(repository.executeTransaction).not.toHaveBeenCalled()
     expect(publisher.publishOrderCancelled).not.toHaveBeenCalled()
@@ -609,7 +611,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
     await expect(
-      useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CANCELLED),
+      useCase.execute(adminUser, baseOrder.id, OrderStatus.CANCELLED),
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
@@ -634,7 +636,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const dynamoTables = createDynamoTablesMock()
     const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
-    const result = await useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CANCELLED)
+    const result = await useCase.execute(adminUser, baseOrder.id, OrderStatus.CANCELLED)
 
     expect(repository.executeTransaction).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -642,7 +644,7 @@ describe('UpdateOrderStatusUseCase', () => {
       ]),
     )
     expect(publisher.publishOrderCancelled).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: baseOrder.orderId }),
+      expect.objectContaining({ orderId: baseOrder.id }),
     )
     expect(result).toEqual(cancelledOrder)
   })
@@ -656,7 +658,7 @@ describe('UpdateOrderStatusUseCase', () => {
     const useCase = new UpdateOrderStatusUseCase(repository, orderItemRepository, inventoryRepository, dynamoTables, publisher)
 
     expect(() =>
-      useCase.execute(adminUser, baseOrder.orderId, OrderStatus.CONFIRMED),
+      useCase.execute(adminUser, baseOrder.id, OrderStatus.CONFIRMED),
     ).toThrow(InvalidInputError)
   })
 })
@@ -689,7 +691,7 @@ describe('TriggerPaymentUseCase', () => {
     )
 
     await expect(
-      useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
+      useCase.execute(customerUser, baseOrder.id, '127.0.0.1'),
     ).rejects.toBeInstanceOf(ForbiddenDomainError)
   })
 
@@ -700,7 +702,7 @@ describe('TriggerPaymentUseCase', () => {
     )
 
     await expect(
-      useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
+      useCase.execute(customerUser, baseOrder.id, '127.0.0.1'),
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
@@ -711,7 +713,7 @@ describe('TriggerPaymentUseCase', () => {
     )
 
     await expect(
-      useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
+      useCase.execute(customerUser, baseOrder.id, '127.0.0.1'),
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
@@ -722,7 +724,7 @@ describe('TriggerPaymentUseCase', () => {
     )
 
     await expect(
-      useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
+      useCase.execute(customerUser, baseOrder.id, '127.0.0.1'),
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
@@ -736,16 +738,16 @@ describe('TriggerPaymentUseCase', () => {
     orderItemRepository.findByOrderId.mockResolvedValue([])
 
     await expect(
-      useCase.execute(customerUser, baseOrder.orderId, '127.0.0.1'),
+      useCase.execute(customerUser, baseOrder.id, '127.0.0.1'),
     ).rejects.toBeInstanceOf(ConflictError)
-    expect(orderItemRepository.findByOrderId).toHaveBeenCalledWith(expiredOrder.orderId)
+    expect(orderItemRepository.findByOrderId).toHaveBeenCalledWith(expiredOrder.id)
   })
 
   it('builds a payment url and saves the order with PROCESSING status for a valid reserved order', async () => {
     const { repository, vnpayService, useCase } = createDeps()
     repository.findById.mockResolvedValue(baseOrder)
 
-    const result = await useCase.execute(customerUser, baseOrder.orderId, '203.0.113.5')
+    const result = await useCase.execute(customerUser, baseOrder.id, '203.0.113.5')
 
     expect(vnpayService.buildOrderPaymentUrl).toHaveBeenCalledWith(
       expect.objectContaining({ amount: baseOrder.totalAmount, clientIp: '203.0.113.5' }),
@@ -754,7 +756,7 @@ describe('TriggerPaymentUseCase', () => {
       expect.objectContaining({ paymentStatus: PaymentStatus.PROCESSING }),
     )
     expect(result).toMatchObject({
-      orderId: baseOrder.orderId,
+      orderId: baseOrder.id,
       paymentStatus: PaymentStatus.PROCESSING,
       paymentUrl: 'https://vnpay.example/pay',
     })
@@ -764,7 +766,7 @@ describe('TriggerPaymentUseCase', () => {
 describe('CreateOrderRequestUseCase', () => {
   const activeCart = Cart.fromRecord({
     customerId: customerUser.sub,
-    cartId: 'cart-1',
+    id: 'cart-1',
     status: CartStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -772,7 +774,7 @@ describe('CreateOrderRequestUseCase', () => {
   })
 
   const cartItemFixture = {
-    cartId: activeCart.cartId,
+    cartId: activeCart.id,
     customerId: customerUser.sub,
     productId: 'p1',
     quantity: 2,
@@ -781,7 +783,7 @@ describe('CreateOrderRequestUseCase', () => {
   }
 
   const cartProductFixture = Product.fromRecord({
-    productId: 'p1',
+    id: 'p1',
     name: 'Headphones',
     description: 'Wireless headphones',
     categoryId: 'electronics',
@@ -834,7 +836,7 @@ describe('CreateOrderRequestUseCase', () => {
     )
 
     await expect(
-      useCase.execute(customerUser, { cartId: activeCart.cartId }),
+      useCase.execute(customerUser, { cartId: activeCart.id }),
     ).rejects.toBeInstanceOf(InvalidInputError)
   })
 
@@ -842,7 +844,7 @@ describe('CreateOrderRequestUseCase', () => {
     const { repository, cartRepository, useCase } = createDeps()
     cartRepository.findItems.mockResolvedValue([])
 
-    await useCase.execute(customerUser, { cartId: activeCart.cartId })
+    await useCase.execute(customerUser, { cartId: activeCart.id })
 
     expect(repository.create).toHaveBeenCalled()
     expect(repository.save).toHaveBeenCalledWith(
@@ -861,13 +863,13 @@ describe('CreateOrderRequestUseCase', () => {
       .mockResolvedValueOnce(pendingOrder)
       .mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.RESERVED }))
 
-    const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
+    const result = await useCase.execute(customerUser, { cartId: activeCart.id })
 
     expect(inventoryRepository.reserve).toHaveBeenCalled()
     expect(orderItemRepository.createMany).toHaveBeenCalled()
     expect(cartRepository.updateStatus).toHaveBeenCalledWith(
       activeCart.customerId,
-      activeCart.cartId,
+      activeCart.id,
       CartStatus.EXPIRED,
       expect.any(String),
     )
@@ -883,7 +885,7 @@ describe('CreateOrderRequestUseCase', () => {
       .mockResolvedValueOnce(baseOrder)
       .mockResolvedValue(Order.fromRecord({ ...baseOrder, status: OrderStatus.FAILED }))
 
-    const result = await useCase.execute(customerUser, { cartId: activeCart.cartId })
+    const result = await useCase.execute(customerUser, { cartId: activeCart.id })
 
     expect(cartRepository.updateStatus).not.toHaveBeenCalled()
     expect(result.status).toBe(OrderStatus.FAILED)
@@ -895,7 +897,7 @@ describe('CreateOrderRequestUseCase', () => {
     productRepository.findOne.mockRejectedValue(new Error('Unexpected product error.'))
 
     await expect(
-      useCase.execute(customerUser, { cartId: activeCart.cartId }),
+      useCase.execute(customerUser, { cartId: activeCart.id }),
     ).rejects.toThrow('Unexpected product error.')
   })
 })
@@ -934,7 +936,7 @@ describe('VnpayReconcileService', () => {
     isSuccess: true,
     isVerified: true,
     message: 'Success',
-    vnp_TxnRef: baseOrder.orderId,
+    vnp_TxnRef: baseOrder.id,
     vnp_Amount: baseOrder.totalAmount as number,
     vnp_OrderInfo: 'Thanh toan don hang order-1',
     vnp_TransactionNo: 123456,
@@ -1043,13 +1045,13 @@ describe('HandleVnpayReturnUseCase', () => {
       isVerified: true,
       isSuccess: true,
       message: 'Success',
-      vnp_TxnRef: baseOrder.orderId,
+      vnp_TxnRef: baseOrder.id,
     } as never)
     const reconcileService = mockUseCase<VnpayReconcileService>()
     reconcileService.execute.mockResolvedValue(IpnSuccess)
     const useCase = new HandleVnpayReturnUseCase(vnpayService as never, reconcileService)
 
-    const result = await useCase.execute({ vnp_TxnRef: baseOrder.orderId })
+    const result = await useCase.execute({ vnp_TxnRef: baseOrder.id })
 
     expect(reconcileService.execute).toHaveBeenCalledWith(expect.anything(), 'return')
     expect(result.redirectUrl).toBe('https://storefront.example/return')

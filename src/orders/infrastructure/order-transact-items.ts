@@ -18,7 +18,7 @@ export function buildOrderFailTransactItem(
   return {
     Update: {
       TableName: tableName,
-      Key: { orderId },
+      Key: { id: orderId },
       UpdateExpression: `SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
       ExpressionAttributeNames: {
         '#status': 'status',
@@ -55,7 +55,7 @@ export function buildOrderExpireTransactItem(
   return {
     Update: {
       TableName: tableName,
-      Key: { orderId: order.orderId },
+      Key: { id: order.id },
       UpdateExpression: `SET #status = :status, #failureReason = :failureReason, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
       ConditionExpression:
         '#status = :reserved AND #paymentStatus <> :paid AND #paymentExpiresAt = :paymentExpiresAt',

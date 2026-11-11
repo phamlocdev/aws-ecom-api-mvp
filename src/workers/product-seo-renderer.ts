@@ -5,7 +5,7 @@ export type ProductSeoImage = {
 }
 
 export type ProductSeoData = {
-  productId: string
+  id: string
   name: string
   description: string
   categoryId: string
@@ -27,7 +27,7 @@ export function renderProductSeoHtml(
 ): string {
   const clientBaseUrl = options.clientBaseUrl.replace(/\/$/, '')
   const mediaPublicBaseUrl = options.mediaPublicBaseUrl?.replace(/\/$/, '')
-  const productUrl = `${clientBaseUrl}/products/${encodeURIComponent(product.productId)}`
+  const productUrl = `${clientBaseUrl}/products/${encodeURIComponent(product.id)}`
   const title = `${product.name} | DynamoDB MVP Storefront`
   const description = product.description || `${product.name} product details.`
   const publicImageUrl = getProductSeoImageUrl(product, mediaPublicBaseUrl)
@@ -36,7 +36,7 @@ export function renderProductSeoHtml(
     '@type': 'Product',
     name: product.name,
     description,
-    sku: product.productId,
+    sku: product.id,
     category: product.categoryId,
     ...(publicImageUrl ? { image: [publicImageUrl] } : {}),
     offers: {

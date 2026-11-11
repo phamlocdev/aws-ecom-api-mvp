@@ -47,6 +47,8 @@ function createDeps() {
     findMany: jest.fn(),
     findExpiredReserved: jest.fn(),
     executeTransaction: jest.fn().mockResolvedValue(undefined),
+    findByIdWithItems: jest.fn(),
+    saveWithItems: jest.fn(),
   }
 
   const orderItemRepository: jest.Mocked<OrderItemRepositoryPort> = {

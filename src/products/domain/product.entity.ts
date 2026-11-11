@@ -37,7 +37,7 @@ export class ProductImage {
 }
 
 const ProductPropsSchema = z.object({
-  productId: z.string(),
+  id: z.string(),
   name: z.string(),
   description: z.string(),
   categoryId: z.string(),
@@ -56,7 +56,7 @@ const ProductPropsSchema = z.object({
 })
 
 type ProductProps = {
-  productId: string
+  id: string
   name: string
   description: string
   categoryId: string
@@ -90,7 +90,7 @@ export type CreateProductData = {
 }
 
 export class Product extends BaseEntity<ProductProps> {
-  readonly productId!: string
+  declare readonly id: string
   readonly name!: string
   readonly description!: string
   readonly categoryId!: string
@@ -109,7 +109,7 @@ export class Product extends BaseEntity<ProductProps> {
   static create({ status, ...rest }: CreateProductData): Product {
     const timestamp = new Date().toISOString()
     return new Product({
-      productId: randomUUID(),
+      id: randomUUID(),
       currency: 'VND',
       status: status ?? ProductStatus.ACTIVE,
       createdAt: timestamp,
@@ -137,21 +137,21 @@ export class Product extends BaseEntity<ProductProps> {
 
   deactivate(updatedAt: string): this {
     if (!this.isActive) {
-      throw new InvalidInputError(`Product ${this.productId} is not active.`)
+      throw new InvalidInputError(`Product ${this.id} is not active.`)
     }
     return this.with({ status: ProductStatus.INACTIVE, updatedAt })
   }
 
   activate(updatedAt: string): this {
     if (this.status !== ProductStatus.INACTIVE) {
-      throw new InvalidInputError(`Product ${this.productId} is not inactive.`)
+      throw new InvalidInputError(`Product ${this.id} is not inactive.`)
     }
     return this.with({ status: ProductStatus.ACTIVE, updatedAt })
   }
 
   delete(deletedAt: string): this {
     if (this.isDeleted) {
-      throw new InvalidInputError(`Product ${this.productId} is already deleted.`)
+      throw new InvalidInputError(`Product ${this.id} is already deleted.`)
     }
     return this.with({ status: ProductStatus.DELETED, deletedAt, updatedAt: deletedAt })
   }

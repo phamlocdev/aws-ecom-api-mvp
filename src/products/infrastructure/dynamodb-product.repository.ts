@@ -32,7 +32,7 @@ export class DynamoDbProductRepository
   implements ProductRepositoryPort
 {
   protected readonly tableName: string
-  protected readonly primaryKeyName = 'productId'
+  protected readonly primaryKeyName = 'id'
   private readonly inventoryTableName: string
 
   constructor(
@@ -54,15 +54,15 @@ export class DynamoDbProductRepository
     return { ...entity }
   }
 
-  async create(product: Product, initialInventory: InitialProductInventory): Promise<void> {
+  async createWithInventory(product: Product, initialInventory: InitialProductInventory): Promise<void> {
     try {
       await this.executeTransaction([
         {
           Put: {
             TableName: this.tableName,
             Item: { ...product },
-            ConditionExpression: 'attribute_not_exists(#productId)',
-            ExpressionAttributeNames: { '#productId': 'productId' },
+            ConditionExpression: 'attribute_not_exists(#id)',
+            ExpressionAttributeNames: { '#id': 'id' },
           },
         },
         {
@@ -116,7 +116,7 @@ export class DynamoDbProductRepository
   }
 
   async findOne(productId: string): Promise<Product | null> {
-    const item = await this.getItem(this.tableName, { productId })
+    const item = await this.getItem(this.tableName, { id: productId })
     return item ? Product.fromRecord(item) : null
   }
 
@@ -127,7 +127,7 @@ export class DynamoDbProductRepository
     audit: AuditMutationContext,
   ): Promise<Product> {
     const expressionAttributeNames: Record<string, string> = {
-      '#productId': 'productId',
+      '#id': 'id',
       '#status': 'status',
       '#updatedAt': 'updatedAt',
       ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
@@ -151,11 +151,11 @@ export class DynamoDbProductRepository
     try {
       const attributes = await this.updateItem(
         this.tableName,
-        { productId },
+        { id: productId },
         `SET ${updateParts.join(', ')}`,
         expressionAttributeNames,
         expressionAttributeValues,
-        'attribute_exists(#productId) AND #status <> :deleted',
+        'attribute_exists(#id) AND #status <> :deleted',
         'ALL_NEW',
       )
       return Product.fromRecord(attributes!)
@@ -171,10 +171,10 @@ export class DynamoDbProductRepository
     try {
       await this.updateItem(
         this.tableName,
-        { productId },
+        { id: productId },
         `SET #status = :deleted, #deletedAt = :deletedAt, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
         {
-          '#productId': 'productId',
+          '#id': 'id',
           '#status': 'status',
           '#deletedAt': 'deletedAt',
           '#updatedAt': 'updatedAt',
@@ -186,7 +186,7 @@ export class DynamoDbProductRepository
           ':updatedAt': deletedAt,
           ...toAuditMutationExpressionValues(audit),
         },
-        'attribute_exists(#productId) AND #status <> :deleted',
+        'attribute_exists(#id) AND #status <> :deleted',
       )
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
@@ -252,4 +252,3 @@ function buildProductFilterExpression(filters: ProductFilters): ProductFilterExp
     ExpressionAttributeValues: values,
   }
 }
-

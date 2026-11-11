@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { ScanCommand } from '@aws-sdk/lib-dynamodb'
 import { BaseDynamoDbRepository } from '../../common/base-dynamodb.repository'
-import { ConflictError, NotFoundError } from '../../common/domain-error'
+import { NotFoundError } from '../../common/domain-error'
 import { isConditionalCheckFailure } from '../../common/dynamodb-errors'
 import {
   AUDIT_ACTOR_ATTRIBUTE_NAMES,
@@ -24,7 +24,7 @@ export class DynamoDbCategoryRepository
   implements CategoryRepositoryPort
 {
   protected readonly tableName: string
-  protected readonly primaryKeyName = 'categoryId'
+  protected readonly primaryKeyName = 'id'
 
   constructor(
     @Inject(DynamoDbService)
@@ -42,22 +42,6 @@ export class DynamoDbCategoryRepository
 
   protected toRecord(entity: Category): Record<string, unknown> {
     return { ...entity }
-  }
-
-  async create(category: Category): Promise<void> {
-    try {
-      await this.putRecord(
-        this.tableName,
-        { ...category },
-        'attribute_not_exists(#categoryId)',
-        { '#categoryId': 'categoryId' },
-      )
-    } catch (error) {
-      if (isConditionalCheckFailure(error)) {
-        throw new ConflictError(`Category ${category.categoryId} already exists.`)
-      }
-      throw error
-    }
   }
 
   async findAll(limit: number, startKey?: Record<string, unknown> | null): Promise<CategoryPage> {
@@ -78,7 +62,7 @@ export class DynamoDbCategoryRepository
   }
 
   async findOne(categoryId: string): Promise<Category | null> {
-    const item = await this.getItem(this.tableName, { categoryId })
+    const item = await this.getItem(this.tableName, { id: categoryId })
     return item ? Category.fromRecord(item) : null
   }
 
@@ -89,7 +73,7 @@ export class DynamoDbCategoryRepository
     audit: AuditMutationContext,
   ): Promise<Category> {
     const expressionAttributeNames: Record<string, string> = {
-      '#categoryId': 'categoryId',
+      '#id': 'id',
       '#status': 'status',
       '#updatedAt': 'updatedAt',
       ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
@@ -113,11 +97,11 @@ export class DynamoDbCategoryRepository
     try {
       const attributes = await this.updateItem(
         this.tableName,
-        { categoryId },
+        { id: categoryId },
         `SET ${updateParts.join(', ')}`,
         expressionAttributeNames,
         expressionAttributeValues,
-        'attribute_exists(#categoryId) AND #status <> :deleted',
+        'attribute_exists(#id) AND #status <> :deleted',
         'ALL_NEW',
       )
       return Category.fromRecord(attributes!)
@@ -133,10 +117,10 @@ export class DynamoDbCategoryRepository
     try {
       await this.updateItem(
         this.tableName,
-        { categoryId },
+        { id: categoryId },
         `SET #status = :deleted, #deletedAt = :deletedAt, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
         {
-          '#categoryId': 'categoryId',
+          '#id': 'id',
           '#status': 'status',
           '#deletedAt': 'deletedAt',
           '#updatedAt': 'updatedAt',
@@ -148,7 +132,7 @@ export class DynamoDbCategoryRepository
           ':updatedAt': deletedAt,
           ...toAuditMutationExpressionValues(audit),
         },
-        'attribute_exists(#categoryId) AND #status <> :deleted',
+        'attribute_exists(#id) AND #status <> :deleted',
       )
     } catch (error) {
       if (isConditionalCheckFailure(error)) {
@@ -158,4 +142,3 @@ export class DynamoDbCategoryRepository
     }
   }
 }
-

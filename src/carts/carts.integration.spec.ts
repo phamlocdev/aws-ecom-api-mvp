@@ -51,7 +51,7 @@ describe('carts use-cases (post-refactor baseline)', () => {
 
   const activeCart = Cart.fromRecord({
     customerId: user.sub,
-    cartId: 'cart-1',
+    id: 'cart-1',
     status: CartStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -60,7 +60,7 @@ describe('carts use-cases (post-refactor baseline)', () => {
 
   const expiredCart = Cart.fromRecord({
     customerId: user.sub,
-    cartId: 'cart-expired',
+    id: 'cart-expired',
     status: CartStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -115,7 +115,7 @@ describe('carts use-cases (post-refactor baseline)', () => {
     it('isExpired returns true once the TTL has passed, even if stored status is ACTIVE', async () => {
       ddbMock.on(GetCommand).resolves({ Item: expiredCart })
 
-      const cart = await getOwnedCartUseCase.execute(user.sub, expiredCart.cartId)
+      const cart = await getOwnedCartUseCase.execute(user.sub, expiredCart.id)
 
       expect(cart.isExpired).toBe(true)
     })
@@ -124,7 +124,7 @@ describe('carts use-cases (post-refactor baseline)', () => {
       ddbMock.on(GetCommand).resolves({ Item: { ...activeCart, customerId: 'someone-else' } })
 
       await expect(
-        getOwnedCartUseCase.execute(user.sub, activeCart.cartId),
+        getOwnedCartUseCase.execute(user.sub, activeCart.id),
       ).rejects.toBeInstanceOf(UnauthorizedDomainError)
     })
   })
@@ -134,7 +134,7 @@ describe('carts use-cases (post-refactor baseline)', () => {
       ddbMock.on(GetCommand).resolves({ Item: expiredCart })
 
       await expect(
-        addCartItemUseCase.execute(user, expiredCart.cartId, { productId: 'p1', quantity: 1 }),
+        addCartItemUseCase.execute(user, expiredCart.id, { productId: 'p1', quantity: 1 }),
       ).rejects.toBeInstanceOf(InvalidInputError)
     })
 
@@ -144,13 +144,13 @@ describe('carts use-cases (post-refactor baseline)', () => {
       ddbMock.on(UpdateCommand).resolves({})
       ddbMock.on(QueryCommand).resolves({ Items: [] })
 
-      await addCartItemUseCase.execute(user, activeCart.cartId, { productId: 'p1', quantity: 2 })
+      await addCartItemUseCase.execute(user, activeCart.id, { productId: 'p1', quantity: 2 })
 
       const putCalls = ddbMock.commandCalls(PutCommand)
       expect(putCalls).toHaveLength(1)
       expect(putCalls[0].args[0].input.TableName).toBe('cart-items-test')
       expect(putCalls[0].args[0].input.Item).toMatchObject({
-        cartId: activeCart.cartId,
+        cartId: activeCart.id,
         productId: 'p1',
         quantity: 2,
       })
@@ -170,7 +170,7 @@ describe('carts use-cases (post-refactor baseline)', () => {
       )
 
       await expect(
-        updateCartItemUseCase.execute(user, activeCart.cartId, 'missing-product', 1),
+        updateCartItemUseCase.execute(user, activeCart.id, 'missing-product', 1),
       ).rejects.toBeInstanceOf(NotFoundError)
     })
   })
@@ -185,7 +185,7 @@ describe('carts use-cases (post-refactor baseline)', () => {
       )
 
       await expect(
-        removeCartItemUseCase.execute(user, activeCart.cartId, 'missing-product'),
+        removeCartItemUseCase.execute(user, activeCart.id, 'missing-product'),
       ).rejects.toBeInstanceOf(NotFoundError)
     })
   })

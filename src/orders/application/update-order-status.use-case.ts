@@ -71,12 +71,12 @@ export class UpdateOrderStatusUseCase {
     const updatedOrder = await this.getOrderOrThrow(orderId)
     try {
       await this.orderEventsPublisher.publishOrderShipped({
-        orderId: updatedOrder.orderId,
+        orderId: updatedOrder.id,
         shippedAt,
       })
     } catch (error) {
       this.logger.error(
-        `Failed to publish shipped event for order ${updatedOrder.orderId} shippedAt=${shippedAt}.`,
+        `Failed to publish shipped event for order ${updatedOrder.id} shippedAt=${shippedAt}.`,
         error,
       )
       throw error
@@ -98,7 +98,7 @@ export class UpdateOrderStatusUseCase {
       throw new InvalidInputError('Only paid confirmed orders can be cancelled.')
     }
 
-    const items = await this.orderItemRepository.findByOrderId(order.orderId)
+    const items = await this.orderItemRepository.findByOrderId(order.id)
     const aggregatedItems = aggregateReservedQuantities(
       items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
     )
@@ -118,13 +118,13 @@ export class UpdateOrderStatusUseCase {
     const updatedOrder = await this.getOrderOrThrow(orderId)
     try {
       await this.orderEventsPublisher.publishOrderCancelled({
-        orderId: updatedOrder.orderId,
+        orderId: updatedOrder.id,
         cancelledAt,
         totalAmount: updatedOrder.totalAmount ?? 0,
       })
     } catch (error) {
       this.logger.error(
-        `Failed to publish cancelled event for order ${updatedOrder.orderId} cancelledAt=${cancelledAt}.`,
+        `Failed to publish cancelled event for order ${updatedOrder.id} cancelledAt=${cancelledAt}.`,
         error,
       )
       throw error

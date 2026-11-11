@@ -7,7 +7,7 @@ import { deriveCartStatus } from '../domain/cart.rules'
 export async function touchCart(cartRepository: CartRepositoryPort, cart: Cart): Promise<void> {
   await cartRepository.updateStatus(
     cart.customerId,
-    cart.cartId,
+    cart.id,
     deriveCartStatus(cart).status,
     new Date().toISOString(),
   )

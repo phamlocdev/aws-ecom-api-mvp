@@ -68,7 +68,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
     it('reserves stock with a conditional UpdateCommand requiring enough availableQuantity', async () => {
       ddbMock
         .on(GetCommand)
-        .resolves({ Item: { productId: 'p1', availableQuantity: 5, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' } })
+        .resolves({ Item: { id: 'p1', productId: 'p1', availableQuantity: 5, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' } })
       ddbMock.on(UpdateCommand).resolves({})
 
       await reserveInventoryUseCase.execute('p1', 3)
@@ -83,7 +83,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
     it('throws ConflictError when DynamoDB rejects the reservation (insufficient stock)', async () => {
       ddbMock
         .on(GetCommand)
-        .resolves({ Item: { productId: 'p1', availableQuantity: 1, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' } })
+        .resolves({ Item: { id: 'p1', productId: 'p1', availableQuantity: 1, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' } })
       ddbMock.on(UpdateCommand).rejects(
         Object.assign(new Error('conditional check failed'), {
           name: 'ConditionalCheckFailedException',
@@ -110,7 +110,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
     it('joins the product with its inventory record', async () => {
       ddbMock.on(GetCommand, { TableName: 'products-test' }).resolves({
         Item: {
-          productId: 'p1',
+          id: 'p1',
           name: 'Headphones',
           description: 'Wireless headphones',
           categoryId: 'cat-1',
@@ -146,7 +146,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
     it('creates a zeroed inventory record on the fly when none exists yet', async () => {
       ddbMock.on(GetCommand, { TableName: 'products-test' }).resolves({
         Item: {
-          productId: 'p2',
+          id: 'p2',
           name: 'Keyboard',
           description: 'Mechanical keyboard',
           categoryId: 'cat-1',
@@ -191,7 +191,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
     it('persists the new quantity via a conditional UpdateCommand and returns the joined summary', async () => {
       ddbMock.on(GetCommand, { TableName: 'products-test' }).resolves({
         Item: {
-          productId: 'p1',
+          id: 'p1',
           name: 'Headphones',
           description: 'Wireless headphones',
           categoryId: 'cat-1',
@@ -220,7 +220,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
       expect(updateCalls).toHaveLength(1)
       const input = updateCalls[0].args[0].input
       expect(input.TableName).toBe('inventory-test')
-      expect(input.ConditionExpression).toBe('attribute_exists(#productId)')
+      expect(input.ConditionExpression).toBe('attribute_exists(id)')
       expect(input.ExpressionAttributeValues).toMatchObject({ ':availableQuantity': 10 })
       expect(summary).toMatchObject({ productId: 'p1', availableQuantity: 10 })
     })
@@ -231,7 +231,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
       ddbMock.on(ScanCommand, { TableName: 'products-test' }).resolves({
         Items: [
           {
-            productId: 'p1',
+            id: 'p1',
             name: 'Headphones',
             description: 'Wireless headphones',
             categoryId: 'cat-1',
@@ -246,7 +246,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
         LastEvaluatedKey: undefined,
       })
       ddbMock.on(GetCommand, { TableName: 'inventory-test' }).resolves({
-        Item: { productId: 'p1', availableQuantity: 2, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' },
+        Item: { id: 'p1', productId: 'p1', availableQuantity: 2, reservedQuantity: 0, updatedAt: '2026-01-01T00:00:00.000Z' },
       })
 
       const result = await findAllInventoriesUseCase.execute({ limit: 10 })
@@ -260,12 +260,12 @@ describe('inventory use-cases (post-refactor baseline)', () => {
 
     it('batches lookups by productIds without scanning when productIds is provided', async () => {
       ddbMock
-        .on(BatchGetCommand, { RequestItems: { 'products-test': { Keys: [{ productId: 'p1' }] } } })
+        .on(BatchGetCommand, { RequestItems: { 'products-test': { Keys: [{ id: 'p1' }] } } })
         .resolves({
           Responses: {
             'products-test': [
               {
-                productId: 'p1',
+                id: 'p1',
                 name: 'Headphones',
                 description: 'Wireless headphones',
                 categoryId: 'cat-1',
@@ -280,7 +280,7 @@ describe('inventory use-cases (post-refactor baseline)', () => {
         })
       ddbMock
         .on(BatchGetCommand, {
-          RequestItems: { 'inventory-test': { Keys: [{ productId: 'p1' }] } },
+          RequestItems: { 'inventory-test': { Keys: [{ id: 'p1' }] } },
         })
         .resolves({
           Responses: {

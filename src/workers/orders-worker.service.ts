@@ -82,7 +82,7 @@ export class OrdersWorkerService {
           reservationsReleased += 1
         } else {
           this.logger.warn(
-            `Skipped releasing expired reservation for order ${order.orderId}; order or inventory conditions changed.`,
+            `Skipped releasing expired reservation for order ${order.id}; order or inventory conditions changed.`,
           )
         }
       }
@@ -118,7 +118,7 @@ export class OrdersWorkerService {
       return
     }
 
-    const cartItems = await this.getCartItemsUseCase.execute(cart.cartId)
+    const cartItems = await this.getCartItemsUseCase.execute(cart.id)
     if (cartItems.length === 0) {
       const actor = systemAuditMutationContext('place-order-worker', 'Cart has no items.')
       const failed = order.fail('Cart has no items.', new Date().toISOString()).withAudit(actor)
@@ -127,7 +127,7 @@ export class OrdersWorkerService {
     }
 
     const { reservationSucceeded } = await this.reserveOrderCheckoutItemsUseCase.execute({
-      orderId: order.orderId,
+      orderId: order.id,
       cartItems: cartItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
       actorId: 'place-order-worker',
     })

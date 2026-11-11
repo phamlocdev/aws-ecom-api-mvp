@@ -28,7 +28,7 @@ const user: AuthenticatedUser = {
 
 const activeCart = Cart.fromRecord({
   customerId: user.sub,
-  cartId: 'cart-1',
+  id: 'cart-1',
   status: CartStatus.ACTIVE,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
@@ -37,7 +37,7 @@ const activeCart = Cart.fromRecord({
 
 const expiredCart = Cart.fromRecord({
   customerId: user.sub,
-  cartId: 'cart-expired',
+  id: 'cart-expired',
   status: CartStatus.ACTIVE,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
@@ -99,7 +99,7 @@ describe('GetOwnedCartUseCase', () => {
     )
     const useCase = new GetOwnedCartUseCase(repository)
 
-    await expect(useCase.execute(user.sub, activeCart.cartId)).rejects.toBeInstanceOf(
+    await expect(useCase.execute(user.sub, activeCart.id)).rejects.toBeInstanceOf(
       UnauthorizedDomainError,
     )
   })
@@ -109,7 +109,7 @@ describe('GetOwnedCartUseCase', () => {
     repository.findOne.mockResolvedValue(expiredCart)
     const useCase = new GetOwnedCartUseCase(repository)
 
-    const result = await useCase.execute(user.sub, expiredCart.cartId)
+    const result = await useCase.execute(user.sub, expiredCart.id)
 
     expect(result.isExpired).toBe(true)
   })
@@ -121,7 +121,7 @@ describe('FindOneCartUseCase', () => {
     repository.findOne.mockResolvedValue(activeCart)
     repository.findItems.mockResolvedValue([
       CartItem.fromRecord({
-        cartId: activeCart.cartId,
+        cartId: activeCart.id,
         customerId: user.sub,
         productId: 'p1',
         quantity: 2,
@@ -131,10 +131,10 @@ describe('FindOneCartUseCase', () => {
     ])
     const useCase = new FindOneCartUseCase(repository)
 
-    const result = await useCase.execute(user, activeCart.cartId)
+    const result = await useCase.execute(user, activeCart.id)
 
     expect(result.items).toHaveLength(1)
-    expect(result.cartId).toBe(activeCart.cartId)
+    expect(result.id).toBe(activeCart.id)
   })
 })
 
@@ -145,7 +145,7 @@ describe('AddCartItemUseCase', () => {
     const useCase = new AddCartItemUseCase(repository)
 
     await expect(
-      useCase.execute(user, expiredCart.cartId, { productId: 'p1', quantity: 1 }),
+      useCase.execute(user, expiredCart.id, { productId: 'p1', quantity: 1 }),
     ).rejects.toBeInstanceOf(InvalidInputError)
     expect(repository.putItem).not.toHaveBeenCalled()
   })
@@ -156,18 +156,18 @@ describe('AddCartItemUseCase', () => {
     repository.findItems.mockResolvedValue([])
     const useCase = new AddCartItemUseCase(repository)
 
-    const result = await useCase.execute(user, activeCart.cartId, { productId: 'p1', quantity: 2 })
+    const result = await useCase.execute(user, activeCart.id, { productId: 'p1', quantity: 2 })
 
     expect(repository.putItem).toHaveBeenCalledWith(
-      expect.objectContaining({ cartId: activeCart.cartId, productId: 'p1', quantity: 2 }),
+      expect.objectContaining({ cartId: activeCart.id, productId: 'p1', quantity: 2 }),
     )
     expect(repository.updateStatus).toHaveBeenCalledWith(
       activeCart.customerId,
-      activeCart.cartId,
+      activeCart.id,
       CartStatus.ACTIVE,
       expect.any(String),
     )
-    expect(result.cartId).toBe(activeCart.cartId)
+    expect(result.id).toBe(activeCart.id)
   })
 })
 
@@ -181,7 +181,7 @@ describe('UpdateCartItemUseCase', () => {
     const useCase = new UpdateCartItemUseCase(repository)
 
     await expect(
-      useCase.execute(user, activeCart.cartId, 'missing', 3),
+      useCase.execute(user, activeCart.id, 'missing', 3),
     ).rejects.toBeInstanceOf(NotFoundError)
   })
 })
@@ -193,7 +193,7 @@ describe('RemoveCartItemUseCase', () => {
     const useCase = new RemoveCartItemUseCase(repository)
 
     await expect(
-      useCase.execute(user, expiredCart.cartId, 'p1'),
+      useCase.execute(user, expiredCart.id, 'p1'),
     ).rejects.toBeInstanceOf(InvalidInputError)
     expect(repository.removeItem).not.toHaveBeenCalled()
   })
@@ -203,9 +203,9 @@ describe('RemoveCartItemUseCase', () => {
     repository.findOne.mockResolvedValue(activeCart)
     const useCase = new RemoveCartItemUseCase(repository)
 
-    await useCase.execute(user, activeCart.cartId, 'p1')
+    await useCase.execute(user, activeCart.id, 'p1')
 
-    expect(repository.removeItem).toHaveBeenCalledWith(activeCart.cartId, 'p1')
+    expect(repository.removeItem).toHaveBeenCalledWith(activeCart.id, 'p1')
     expect(repository.updateStatus).toHaveBeenCalled()
   })
 })
@@ -228,7 +228,7 @@ describe('MarkCartExpiredUseCase', () => {
 
     expect(repository.updateStatus).toHaveBeenCalledWith(
       activeCart.customerId,
-      activeCart.cartId,
+      activeCart.id,
       CartStatus.EXPIRED,
       expect.any(String),
     )

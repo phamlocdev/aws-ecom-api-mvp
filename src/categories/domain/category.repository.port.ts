@@ -18,7 +18,7 @@ export interface UpdateCategoryChanges {
  * NestJS/AWS SDK type so the application layer can depend on it directly.
  */
 export interface CategoryRepositoryPort {
-  /** Throws ConflictError (see domain-error.ts) if category.categoryId already exists. */
+  /** Throws ConflictError (see domain-error.ts) if category.id already exists. */
   create(category: Category): Promise<void>
 
   /** Returns only ACTIVE categories (soft-deleted records are excluded). */

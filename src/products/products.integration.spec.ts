@@ -129,12 +129,12 @@ describe('products use-cases (post-refactor baseline)', () => {
       expect(transactItems[0].Put?.TableName).toBe('products-test')
       expect(transactItems[1].Put?.TableName).toBe('inventory-test')
       expect(transactItems[1].Put?.Item).toMatchObject({
-        productId: product.productId,
+        productId: product.id,
         availableQuantity: 10,
         reservedQuantity: 0,
       })
       expect(productEventsPublisher.publishProductCreated).toHaveBeenCalledWith({
-        productId: product.productId,
+        productId: product.id,
       })
     })
 

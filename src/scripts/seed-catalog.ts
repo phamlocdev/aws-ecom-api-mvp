@@ -13,7 +13,9 @@ export async function seedCatalog(): Promise<void> {
       new PutCommand({
         TableName: runtimeEnv.CATEGORIES_TABLE,
         Item: {
-          ...category,
+          id: category.categoryId,
+          name: category.name,
+          description: category.description,
           createdAt: timestamp,
           updatedAt: timestamp,
         },
@@ -26,7 +28,7 @@ export async function seedCatalog(): Promise<void> {
       new PutCommand({
         TableName: runtimeEnv.PRODUCTS_TABLE,
         Item: {
-          productId: product.productId,
+          id: product.productId,
           categoryId: product.categoryId,
           name: product.name,
           description: product.description,

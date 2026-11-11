@@ -137,7 +137,7 @@ describe('orders use-cases (integration)', () => {
 
   const activeCart = Cart.fromRecord({
     customerId: customerUser.sub,
-    cartId: 'cart-1',
+    id: 'cart-1',
     status: CartStatus.ACTIVE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -145,7 +145,7 @@ describe('orders use-cases (integration)', () => {
   })
 
   const cartItem: CartItem = {
-    cartId: activeCart.cartId,
+    cartId: activeCart.id,
     customerId: customerUser.sub,
     productId: 'p1',
     quantity: 2,
@@ -154,7 +154,7 @@ describe('orders use-cases (integration)', () => {
   }
 
   const product = Product.fromRecord({
-    productId: 'p1',
+    id: 'p1',
     name: 'Headphones',
     description: 'Wireless headphones',
     categoryId: 'electronics',
@@ -166,11 +166,11 @@ describe('orders use-cases (integration)', () => {
   })
 
   const reservedOrder = Order.fromRecord({
-    orderId: 'order-1',
+    id: 'order-1',
     customerId: customerUser.sub,
     customerEmail: customerUser.email,
     customerName: customerUser.name,
-    cartId: activeCart.cartId,
+    cartId: activeCart.id,
     status: OrderStatus.RESERVED,
     entityType: 'ORDER',
     deduplicationKey: 'dedup-1',
@@ -182,9 +182,9 @@ describe('orders use-cases (integration)', () => {
   })
 
   const reservedOrderItem = OrderItem.fromRecord({
-    orderId: reservedOrder.orderId,
+    orderId: reservedOrder.id,
     lineId: '001-abcdefgh',
-    productId: product.productId,
+    productId: product.id,
     productName: product.name,
     unitPrice: product.price,
     quantity: 2,
@@ -368,7 +368,7 @@ describe('orders use-cases (integration)', () => {
       )
 
       await expect(
-        createOrderRequestUseCase.execute(customerUser, { cartId: activeCart.cartId }),
+        createOrderRequestUseCase.execute(customerUser, { cartId: activeCart.id }),
       ).rejects.toBeInstanceOf(InvalidInputError)
       expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0)
     })
@@ -382,7 +382,7 @@ describe('orders use-cases (integration)', () => {
         .resolves({ Item: { ...reservedOrder, status: OrderStatus.RESERVED } })
 
       const order = await createOrderRequestUseCase.execute(customerUser, {
-        cartId: activeCart.cartId,
+        cartId: activeCart.id,
       })
 
       const putCalls = ddbMock.commandCalls(PutCommand)
@@ -391,7 +391,7 @@ describe('orders use-cases (integration)', () => {
       // Second PutCommand: createOrderItems
       expect(putCalls[1].args[0].input.TableName).toBe('order-items-test')
       expect(putCalls[1].args[0].input.Item).toMatchObject({
-        productId: product.productId,
+        productId: product.id,
         quantity: cartItem.quantity,
         lineTotal: 200000,
       })
@@ -409,7 +409,7 @@ describe('orders use-cases (integration)', () => {
       )
       expect(cartRepository.updateStatus).toHaveBeenCalledWith(
         activeCart.customerId,
-        activeCart.cartId,
+        activeCart.id,
         CartStatus.EXPIRED,
         expect.any(String),
       )
@@ -421,7 +421,7 @@ describe('orders use-cases (integration)', () => {
       ddbMock.on(PutCommand).resolves({})
 
       const order = await createOrderRequestUseCase.execute(customerUser, {
-        cartId: activeCart.cartId,
+        cartId: activeCart.id,
       })
 
       const putCalls = ddbMock.commandCalls(PutCommand)
@@ -443,7 +443,7 @@ describe('orders use-cases (integration)', () => {
       ddbMock.on(TransactWriteCommand).resolves({})
 
       await expect(
-        createOrderRequestUseCase.execute(customerUser, { cartId: activeCart.cartId }),
+        createOrderRequestUseCase.execute(customerUser, { cartId: activeCart.id }),
       ).rejects.toThrow('Insufficient inventory for product p2.')
 
       const transactCalls = ddbMock.commandCalls(TransactWriteCommand)
@@ -491,7 +491,7 @@ describe('orders use-cases (integration)', () => {
         .resolves({ Item: { ...reservedOrder, customerId: 'someone-else' } })
 
       await expect(
-        findOneOrderUseCase.execute(customerUser, reservedOrder.orderId),
+        findOneOrderUseCase.execute(customerUser, reservedOrder.id),
       ).rejects.toBeInstanceOf(ForbiddenDomainError)
     })
 
@@ -499,7 +499,7 @@ describe('orders use-cases (integration)', () => {
       ddbMock.on(GetCommand).resolves({ Item: reservedOrder })
       ddbMock.on(QueryCommand).resolves({ Items: [reservedOrderItem] })
 
-      const details = await findOneOrderUseCase.execute(customerUser, reservedOrder.orderId)
+      const details = await findOneOrderUseCase.execute(customerUser, reservedOrder.id)
 
       expect(details.items).toEqual([reservedOrderItem])
     })
@@ -514,7 +514,7 @@ describe('orders use-cases (integration)', () => {
 
     it('throws InvalidInputError for an unsupported target status', () => {
       expect(() =>
-        updateOrderStatusUseCase.execute(adminUser, reservedOrder.orderId, OrderStatus.CONFIRMED),
+        updateOrderStatusUseCase.execute(adminUser, reservedOrder.id, OrderStatus.CONFIRMED),
       ).toThrow(InvalidInputError)
     })
 
@@ -522,7 +522,7 @@ describe('orders use-cases (integration)', () => {
       ddbMock.on(GetCommand).resolves({ Item: reservedOrder })
 
       await expect(
-        updateOrderStatusUseCase.execute(adminUser, reservedOrder.orderId, OrderStatus.SHIPPED),
+        updateOrderStatusUseCase.execute(adminUser, reservedOrder.id, OrderStatus.SHIPPED),
       ).rejects.toBeInstanceOf(InvalidInputError)
     })
 
@@ -540,7 +540,7 @@ describe('orders use-cases (integration)', () => {
 
       const order = await updateOrderStatusUseCase.execute(
         adminUser,
-        reservedOrder.orderId,
+        reservedOrder.id,
         OrderStatus.SHIPPED,
       )
 
@@ -548,7 +548,7 @@ describe('orders use-cases (integration)', () => {
       expect(putCalls[0].args[0].input.TableName).toBe('orders-test')
       expect(putCalls[0].args[0].input.Item).toMatchObject({ status: OrderStatus.SHIPPED })
       expect(orderEventsPublisher.publishOrderShipped).toHaveBeenCalledWith(
-        expect.objectContaining({ orderId: reservedOrder.orderId }),
+        expect.objectContaining({ orderId: reservedOrder.id }),
       )
       expect(order.status).toBe(OrderStatus.SHIPPED)
     })
@@ -566,7 +566,7 @@ describe('orders use-cases (integration)', () => {
         .rejects(Object.assign(new Error('cancelled'), { name: 'TransactionCanceledException' }))
 
       await expect(
-        updateOrderStatusUseCase.execute(adminUser, reservedOrder.orderId, OrderStatus.CANCELLED),
+        updateOrderStatusUseCase.execute(adminUser, reservedOrder.id, OrderStatus.CANCELLED),
       ).rejects.toBeInstanceOf(ConflictError)
     })
 
@@ -585,7 +585,7 @@ describe('orders use-cases (integration)', () => {
 
       const order = await updateOrderStatusUseCase.execute(
         adminUser,
-        reservedOrder.orderId,
+        reservedOrder.id,
         OrderStatus.CANCELLED,
       )
 
@@ -597,7 +597,7 @@ describe('orders use-cases (integration)', () => {
       expect(transactItems[1].Update?.TableName).toBe('inventory-test')
       expect(transactItems[1].Update?.Key).toEqual({ productId: reservedOrderItem.productId })
       expect(orderEventsPublisher.publishOrderCancelled).toHaveBeenCalledWith(
-        expect.objectContaining({ orderId: reservedOrder.orderId }),
+        expect.objectContaining({ orderId: reservedOrder.id }),
       )
       expect(order.status).toBe(OrderStatus.CANCELLED)
     })
@@ -608,7 +608,7 @@ describe('orders use-cases (integration)', () => {
       ddbMock.on(GetCommand).resolves({ Item: { ...reservedOrder, customerId: 'someone-else' } })
 
       await expect(
-        triggerPaymentUseCase.execute(customerUser, reservedOrder.orderId, '127.0.0.1'),
+        triggerPaymentUseCase.execute(customerUser, reservedOrder.id, '127.0.0.1'),
       ).rejects.toBeInstanceOf(ForbiddenDomainError)
     })
 
@@ -622,7 +622,7 @@ describe('orders use-cases (integration)', () => {
       ddbMock.on(TransactWriteCommand).resolves({})
 
       await expect(
-        triggerPaymentUseCase.execute(customerUser, reservedOrder.orderId, '127.0.0.1'),
+        triggerPaymentUseCase.execute(customerUser, reservedOrder.id, '127.0.0.1'),
       ).rejects.toBeInstanceOf(ConflictError)
       expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1)
     })
@@ -633,7 +633,7 @@ describe('orders use-cases (integration)', () => {
 
       const result = await triggerPaymentUseCase.execute(
         customerUser,
-        reservedOrder.orderId,
+        reservedOrder.id,
         '203.0.113.5',
       )
 
@@ -656,7 +656,7 @@ describe('orders use-cases (integration)', () => {
       isSuccess: true,
       isVerified: true,
       message: 'Success',
-      vnp_TxnRef: reservedOrder.orderId,
+      vnp_TxnRef: reservedOrder.id,
       vnp_Amount: reservedOrder.totalAmount as number,
       vnp_OrderInfo: 'Thanh toan don hang order-1',
       vnp_TransactionNo: 123456,
@@ -757,7 +757,7 @@ describe('orders use-cases (integration)', () => {
       emailTrackingService.findLatestRetryableForRecipient.mockResolvedValue(null as never)
 
       const result = await resendFailedOrderEmailUseCase.execute(
-        reservedOrder.orderId,
+        reservedOrder.id,
         'ORDER_CONFIRMATION',
         'a@example.com',
       )
@@ -774,7 +774,7 @@ describe('orders use-cases (integration)', () => {
       } as never)
 
       const result = await resendFailedOrderEmailUseCase.execute(
-        reservedOrder.orderId,
+        reservedOrder.id,
         'ORDER_CONFIRMATION',
         'a@example.com',
       )
@@ -811,11 +811,11 @@ describe('orders use-cases (integration)', () => {
         isVerified: true,
         isSuccess: true,
         message: 'Success',
-        vnp_TxnRef: reservedOrder.orderId,
+        vnp_TxnRef: reservedOrder.id,
       } as never)
       ddbMock.on(GetCommand).resolves({ Item: undefined })
 
-      const result = await handleVnpayReturnUseCase.execute({ vnp_TxnRef: reservedOrder.orderId })
+      const result = await handleVnpayReturnUseCase.execute({ vnp_TxnRef: reservedOrder.id })
 
       expect(result.redirectUrl).toBe('https://storefront.example/return')
     })

@@ -82,7 +82,7 @@ export class OrdersController {
   ): Promise<PlaceOrderResponseDto> {
     const order = await this.createOrderRequestUseCase.execute(user, dto)
     return {
-      orderId: order.orderId,
+      orderId: order.id,
       status: order.status,
     }
   }

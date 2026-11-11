@@ -21,7 +21,7 @@ export class CreateCategoryUseCase {
   async execute(user: AuthenticatedUser, input: CreateCategoryInput): Promise<Category> {
     const actor = buildUserAuditMutationContext(user, 'Category created')
     const category = Category.create({
-      categoryId: input.categoryId,
+      id: input.categoryId,
       name: input.name,
       description: input.description,
       ...toAuditMutationAttributes(actor),

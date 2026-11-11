@@ -40,7 +40,7 @@ export class DynamoDbInventoryRepository
   implements InventoryRepositoryPort
 {
   protected readonly tableName: string
-  protected readonly primaryKeyName = 'productId'
+  protected readonly primaryKeyName = 'id'
   private readonly productsTableName: string
 
   constructor(
@@ -80,14 +80,14 @@ export class DynamoDbInventoryRepository
     await this.putRecord(
       this.tableName,
       { ...record },
-      'attribute_not_exists(productId)',
+      'attribute_not_exists(id)',
     )
 
     return record
   }
 
   async findOne(productId: string): Promise<InventoryRecord | null> {
-    const item = await this.getItem(this.tableName, { productId })
+    const item = await this.getItem(this.tableName, { id: productId })
     return item ? InventoryRecord.fromRecord(item) : null
   }
 
@@ -101,7 +101,7 @@ export class DynamoDbInventoryRepository
     const dedupedProductIds = [...new Set(productIds)]
     const products = await this.findProductsByIds(dedupedProductIds)
     const inventoryRecords = await this.findOrCreateInventoryRecordsByProductIds(
-      products.map((product) => product.productId),
+      products.map((product) => product.id),
     )
 
     const inventoryMap = new Map(
@@ -110,7 +110,7 @@ export class DynamoDbInventoryRepository
 
     return products
       .map((product) => {
-        const inventory = inventoryMap.get(product.productId)
+        const inventory = inventoryMap.get(product.id)
         return inventory ? toInventorySummary(product, inventory) : null
       })
       .filter((item): item is InventorySummary => item !== null)
@@ -139,7 +139,7 @@ export class DynamoDbInventoryRepository
 
       const products = (response.Items ?? []).map(Product.fromRecord)
       const inventoryRecords = await Promise.all(
-        products.map((product) => this.ensureRecord(product.productId)),
+        products.map((product) => this.ensureRecord(product.id)),
       )
 
       items.push(
@@ -163,10 +163,9 @@ export class DynamoDbInventoryRepository
 
     const attributes = await this.updateItem(
       this.tableName,
-      { productId },
+      { id: productId },
       `SET #availableQuantity = :availableQuantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
       {
-        '#productId': 'productId',
         '#availableQuantity': 'availableQuantity',
         '#updatedAt': 'updatedAt',
         ...AUDIT_ACTOR_ATTRIBUTE_NAMES,
@@ -176,7 +175,7 @@ export class DynamoDbInventoryRepository
         ':updatedAt': updatedAt,
         ...toAuditMutationExpressionValues(audit),
       },
-      'attribute_exists(#productId)',
+      'attribute_exists(id)',
       'ALL_NEW',
     )
 
@@ -189,7 +188,7 @@ export class DynamoDbInventoryRepository
     try {
       await this.updateItem(
         this.tableName,
-        { productId },
+        { id: productId },
         `SET #availableQuantity = #availableQuantity - :quantity, #reservedQuantity = #reservedQuantity + :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
         {
           '#availableQuantity': 'availableQuantity',
@@ -216,7 +215,7 @@ export class DynamoDbInventoryRepository
     for (const item of items) {
       await this.updateItem(
         this.tableName,
-        { productId: item.productId },
+        { id: item.productId },
         `SET #availableQuantity = #availableQuantity + :quantity, #reservedQuantity = #reservedQuantity - :quantity, #updatedAt = :updatedAt, ${AUDIT_ACTOR_FIELDS}`,
         {
           '#availableQuantity': 'availableQuantity',
@@ -235,7 +234,7 @@ export class DynamoDbInventoryRepository
   }
 
   private async findProductOrThrow(productId: string): Promise<Product> {
-    const item = await this.getItem(this.productsTableName, { productId })
+    const item = await this.getItem(this.productsTableName, { id: productId })
     if (!item) {
       throw new NotFoundError(`Product ${productId} was not found.`)
     }
@@ -255,7 +254,7 @@ export class DynamoDbInventoryRepository
         new BatchGetCommand({
           RequestItems: {
             [this.productsTableName]: {
-              Keys: currentChunk.map((productId) => ({ productId })),
+              Keys: currentChunk.map((productId) => ({ id: productId })),
             },
           },
         }),
@@ -264,7 +263,7 @@ export class DynamoDbInventoryRepository
       products.push(...(response.Responses?.[this.productsTableName] ?? []).map(Product.fromRecord))
     }
 
-    const productMap = new Map(products.map((product) => [product.productId, product] as const))
+    const productMap = new Map(products.map((product) => [product.id, product] as const))
     return productIds
       .map((productId) => productMap.get(productId))
       .filter((product): product is Product => Boolean(product))
@@ -285,7 +284,7 @@ export class DynamoDbInventoryRepository
         new BatchGetCommand({
           RequestItems: {
             [this.tableName]: {
-              Keys: currentChunk.map((productId) => ({ productId })),
+              Keys: currentChunk.map((productId) => ({ id: productId })),
             },
           },
         }),
@@ -335,12 +334,12 @@ function buildInventoryProductFilterExpression(
   }
 
   if (filters.q) {
-    names['#productId'] = 'productId'
+    names['#id'] = 'id'
     names['#name'] = 'name'
     names['#description'] = 'description'
     values[':q'] = filters.q
     expressions.push(
-      '(contains(#productId, :q) OR contains(#name, :q) OR contains(#description, :q))',
+      '(contains(#id, :q) OR contains(#name, :q) OR contains(#description, :q))',
     )
   }
 
